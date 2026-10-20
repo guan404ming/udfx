@@ -1,20 +1,22 @@
 # udfx
 
-Compile Python UDFs into native dataframe expressions without changing their results.
-
 [![CI](https://github.com/guan404ming/udfx/actions/workflows/ci.yml/badge.svg)](https://github.com/guan404ming/udfx/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## Why
+udfx compiles Python UDFs into native expressions for Polars, DuckDB, DataFusion, and Spark. It
+traces the function bytecode, keeps Python semantics in the generated expression, and runs the
+original function on any row where it cannot show that the native result is the same. It is for
+data engineers who have row-wise Python functions and want engine speed with Python results.
 
-A Python UDF is slow: every row crosses into the interpreter, and the optimizer cannot see inside.
-Rewriting by hand is error prone. Polars 2.0.0 suggests `pl.col("a") is None` for
-`lambda x: x is None` (a constant `False` in Python) and `cast(pl.Int64)` for `int(x)` (which
-rejects `" 7"` and `"1_2"` that Python accepts).
+## Features
 
-udfx traces the function bytecode, keeps Python semantics in the generated expression, and runs the
-original function on any row it cannot prove identical.
+- One expression per function for Polars, DuckDB, DataFusion, and Spark.
+- Python semantics for truthiness, exceptions, int64 overflow, Unicode case mapping, and literal
+  parsing.
+- Row-level fallback to the original Python function.
+- `udfx.explain` prints the traced program and the native expression.
+- Conformance tests check every op against Python on every backend.
 
 ## Install
 
@@ -56,25 +58,16 @@ compiled). `udfx.explain(function, schema)` prints the traced IR and the native 
 
 ## How it works
 
-```
-Python function
-   | 1. trace bytecode: one symbolic state per path
-Program: IR value + fault predicate
-   | 2. lower each op with a backend rule and an exactness guard
-native expression + exact predicate
-   | 3. when(exact) native else run the Python function
-```
-
 1. [`frontend/`](src/udfx/frontend) runs the bytecode symbolically, forks on branches, inlines
    helpers, and merges the return paths into one decision tree.
 2. [`ops/`](src/udfx/ops) names each Python operation with its exact reference and a fault
    predicate that is true exactly when Python raises.
 3. [`backends/`](src/udfx/backends) lowers each op per engine. A rule may return an `exact`
-   predicate when the engine differs from Python on some rows.
+   predicate that is false on rows where the engine result can differ from Python.
 4. Rows where `exact` is false, or where Python would raise, run the original function through
    the engine's own UDF path. A raising row fails the query.
 
-## Supported
+## Supported Python
 
 | Family | Operations |
 |---|---|
@@ -105,13 +98,15 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 ## Guarantees and limits
 
 - Each row equals the Python result, or the row runs the Python function. Checked by tests, not
-  by proof.
+  by proof. Hand written rewrites can change results on edge cases such as `int(" 7")` or
+  `x is None`; udfx keeps the Python result for them.
 - A raising row fails the query. Polars raises the original exception type. DuckDB, DataFusion,
   and Spark wrap it in their UDF error. To get the original type, run the query through the
   backend object's `execute`, for example `backend.execute(lambda: relation.fetchall())`.
 - Globals and closure constants are read once at compile time.
 - udfx does not validate data against the schema. Declare nullable columns with `.or_none()`.
-- Polars eager mode has no common subexpression elimination; use a `LazyFrame` for the best speed.
+- On Polars, a `LazyFrame` gives the best speed, because eager mode does not share repeated
+  subexpressions.
 - Spark pickles the user function by reference, so executors need the same modules and the same
   udfx version.
 - DuckDB expressions must run on the connection the backend holds. Pass your connection with
@@ -132,4 +127,8 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Apache-2.0, see [LICENSE](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+Apache-2.0, see [LICENSE](LICENSE).
