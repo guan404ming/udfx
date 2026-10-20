@@ -34,43 +34,43 @@ def fits_int64(wide: Expr) -> Expr:
     return wide.between(lit(INT64_MIN), lit(INT64_MAX))
 
 
-def representable(a: Expr) -> Expr:
-    return a.between(lit(-FLOAT_INT_MAX), lit(FLOAT_INT_MAX))
+def representable(value: Expr) -> Expr:
+    return value.between(lit(-FLOAT_INT_MAX), lit(FLOAT_INT_MAX))
 
 
-def floating(a: Expr) -> Expr:
-    return a.cast(pa.float64())
+def floating(value: Expr) -> Expr:
+    return value.cast(pa.float64())
 
 
 def checked(operation: Binary) -> Rule:
-    def rule(a: Expr, b: Expr) -> Lowered[Expr]:
-        wide = operation(a.cast(WIDE), b.cast(WIDE))
-        return Lowered(operation(a, b), fits_int64(wide))
+    def rule(left: Expr, right: Expr) -> Lowered[Expr]:
+        wide = operation(left.cast(WIDE), right.cast(WIDE))
+        return Lowered(operation(left, right), fits_int64(wide))
 
     return rule
 
 
 def mixed(name: str, rule: Rule) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda a, b: rule(floating(a), b))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda a, b: rule(a, floating(b)))
+    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(floating(left), right))
+    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, floating(right)))
 
 
-def is_nan(a: Expr) -> Expr:
-    return functions.coalesce(functions.isnan(a), lit(False))
+def is_nan(value: Expr) -> Expr:
+    return functions.coalesce(functions.isnan(value), lit(False))
 
 
 def comparison(name: str, compare: Binary) -> None:
-    def ordered(a: Expr, b: Expr) -> Expr:
-        return compare(a, b) & ~is_nan(a) & ~is_nan(b)
+    def ordered(left: Expr, right: Expr) -> Expr:
+        return compare(left, right) & ~is_nan(left) & ~is_nan(right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
     RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda a, b: Lowered(ordered(floating(a), b), representable(a))
+        lambda left, right: Lowered(ordered(floating(left), right), representable(left))
     )
     RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda a, b: Lowered(ordered(a, floating(b)), representable(b))
+        lambda left, right: Lowered(ordered(left, floating(right)), representable(right))
     )
 
 
@@ -79,20 +79,20 @@ PRIMITIVES = FloatPrimitives(
 )
 
 
-def float_floordiv(a: Expr, b: Expr) -> Lowered[Expr]:
-    quotient, _, exact = float_divmod(PRIMITIVES, a, b)
+def float_floordiv(left: Expr, right: Expr) -> Lowered[Expr]:
+    quotient, _, exact = float_divmod(PRIMITIVES, left, right)
     return Lowered(quotient, exact)
 
 
-def float_mod(a: Expr, b: Expr) -> Lowered[Expr]:
-    _, remainder, exact = float_divmod(PRIMITIVES, a, b)
+def float_mod(left: Expr, right: Expr) -> Lowered[Expr]:
+    _, remainder, exact = float_divmod(PRIMITIVES, left, right)
     return Lowered(remainder, exact)
 
 
-def int_divmod(a: Expr, b: Expr) -> tuple[Expr, Expr]:
-    unsafe = (b == lit(0)) | ((a == lit(INT64_MIN)) & (b == lit(-1)))
-    divisor = when(unsafe, lit(1), b)
-    quotient, remainder = a / divisor, a % divisor
+def int_divmod(left: Expr, right: Expr) -> tuple[Expr, Expr]:
+    unsafe = (right == lit(0)) | ((left == lit(INT64_MIN)) & (right == lit(-1)))
+    divisor = when(unsafe, lit(1), right)
+    quotient, remainder = left / divisor, left % divisor
     shift = (remainder != lit(0)) & ((remainder < lit(0)) != (divisor < lit(0)))
     return when(shift, quotient - lit(1), quotient), when(shift, remainder + divisor, remainder)
 
@@ -109,8 +109,8 @@ TEXT = TextPrimitives(
 )
 
 
-def finite(a: Expr) -> Expr:
-    return ~functions.isnan(a) & (functions.abs(a) != lit(INFINITY))
+def finite(value: Expr) -> Expr:
+    return ~functions.isnan(value) & (functions.abs(value) != lit(INFINITY))
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -126,82 +126,82 @@ mixed("__mod__", float_mod)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
-def int_truediv(a: Expr, b: Expr) -> Lowered[Expr]:
-    return Lowered(floating(a) / floating(b), representable(a) & representable(b))
+def int_truediv(left: Expr, right: Expr) -> Lowered[Expr]:
+    return Lowered(floating(left) / floating(right), representable(left) & representable(right))
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(a: Expr, b: Expr) -> Lowered[Expr]:
-    return Lowered(int_divmod(a, b)[0], ~((a == lit(INT64_MIN)) & (b == lit(-1))))
+def int_floordiv(left: Expr, right: Expr) -> Lowered[Expr]:
+    return Lowered(int_divmod(left, right)[0], ~((left == lit(INT64_MIN)) & (right == lit(-1))))
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)
-def int_mod(a: Expr, b: Expr) -> Expr:
-    return int_divmod(a, b)[1]
+def int_mod(left: Expr, right: Expr) -> Expr:
+    return int_divmod(left, right)[1]
 
 
 @RULES("__eq__", Kind.INT, Kind.INT)
-def int_eq(a: Expr, b: Expr) -> Expr:
-    return not_distinct(a, b)
+def int_eq(left: Expr, right: Expr) -> Expr:
+    return not_distinct(left, right)
 
 
 @RULES("__ne__", Kind.INT, Kind.INT)
-def int_ne(a: Expr, b: Expr) -> Expr:
-    return ~not_distinct(a, b)
+def int_ne(left: Expr, right: Expr) -> Expr:
+    return ~not_distinct(left, right)
 
 
-def float_eq(a: Expr, b: Expr) -> Expr:
-    return not_distinct(a, b) & ~is_nan(a) & ~is_nan(b)
+def float_eq(left: Expr, right: Expr) -> Expr:
+    return not_distinct(left, right) & ~is_nan(left) & ~is_nan(right)
 
 
 RULES("__eq__", Kind.FLOAT, Kind.FLOAT)(float_eq)
 
 
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
-def float_ne(a: Expr, b: Expr) -> Expr:
-    return ~float_eq(a, b)
+def float_ne(left: Expr, right: Expr) -> Expr:
+    return ~float_eq(left, right)
 
 
 @RULES("__neg__", Kind.INT)
-def int_neg(a: Expr) -> Lowered[Expr]:
-    return Lowered(lit(0) - a, a != lit(INT64_MIN))
+def int_neg(value: Expr) -> Lowered[Expr]:
+    return Lowered(lit(0) - value, value != lit(INT64_MIN))
 
 
 @RULES("__neg__", Kind.FLOAT)
-def float_neg(a: Expr) -> Expr:
-    return a * lit(-1.0)
+def float_neg(value: Expr) -> Expr:
+    return value * lit(-1.0)
 
 
 @RULES("abs", Kind.INT)
-def int_abs(a: Expr) -> Lowered[Expr]:
-    small = a != lit(INT64_MIN)
-    return Lowered(functions.abs(when(small, a, lit(0))), small)
+def int_abs(value: Expr) -> Lowered[Expr]:
+    small = value != lit(INT64_MIN)
+    return Lowered(functions.abs(when(small, value, lit(0))), small)
 
 
 @RULES("abs", Kind.FLOAT)
-def float_abs(a: Expr) -> Expr:
-    return functions.abs(a)
+def float_abs(value: Expr) -> Expr:
+    return functions.abs(value)
 
 
 @RULES("math.isnan", Kind.FLOAT)
-def float_isnan(a: Expr) -> Expr:
-    return functions.isnan(a)
+def float_isnan(value: Expr) -> Expr:
+    return functions.isnan(value)
 
 
 @RULES("math.isinf", Kind.FLOAT)
-def float_isinf(a: Expr) -> Expr:
-    return functions.abs(a) == lit(INFINITY)
+def float_isinf(value: Expr) -> Expr:
+    return functions.abs(value) == lit(INFINITY)
 
 
 @RULES("int", Kind.FLOAT)
-def float_int(a: Expr) -> Lowered[Expr]:
-    whole = a.try_cast(pa.int64())
-    return Lowered(whole, whole.is_not_null() | ~finite(a))
+def float_int(value: Expr) -> Lowered[Expr]:
+    whole = value.try_cast(pa.int64())
+    return Lowered(whole, whole.is_not_null() | ~finite(value))
 
 
 @RULES("float", Kind.INT)
-def int_float(a: Expr) -> Expr:
-    return floating(a)
+def int_float(value: Expr) -> Expr:
+    return floating(value)
 
 
 @RULES("float", Kind.FLOAT)
@@ -210,8 +210,8 @@ def float_float(value: Expr) -> Expr:
 
 
 @RULES("str", Kind.INT)
-def int_str(a: Expr) -> Expr:
-    return a.cast(pa.string())
+def int_str(value: Expr) -> Expr:
+    return value.cast(pa.string())
 
 
 @RULES("int_parses", Kind.STR)
@@ -238,5 +238,5 @@ RULES("math.log10", Kind.FLOAT)(functions.log10)
 
 
 @RULES("math.log10", Kind.INT)
-def int_log10(a: Expr) -> Expr:
-    return functions.log10(floating(a))
+def int_log10(value: Expr) -> Expr:
+    return functions.log10(floating(value))

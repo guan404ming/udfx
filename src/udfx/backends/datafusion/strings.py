@@ -22,7 +22,9 @@ POINT = "udfx point"
 def case_drift(method: str) -> CaseDrift:
     def native(samples: Sequence[str]) -> list[str]:
         expr = getattr(functions, method)(col(POINT))
-        (recased,) = DataFusionBackend().evaluate([expr], {POINT: STR}, [(s,) for s in samples])
+        (recased,) = DataFusionBackend().evaluate(
+            [expr], {POINT: STR}, [(sample,) for sample in samples]
+        )
         return cast("list[str]", recased)
 
     return text.case_drift(method, native)
@@ -49,35 +51,35 @@ def upper(value: Expr) -> Expr | Lowered[Expr]:
 
 
 @RULES(".strip", Kind.STR)
-def strip(a: Expr) -> Expr:
-    return functions.btrim(a, lit(whitespace()))
+def strip(text: Expr) -> Expr:
+    return functions.btrim(text, lit(whitespace()))
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(a: Expr) -> Expr:
-    return functions.ltrim(a, lit(whitespace()))
+def lstrip(text: Expr) -> Expr:
+    return functions.ltrim(text, lit(whitespace()))
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(a: Expr) -> Expr:
-    return functions.rtrim(a, lit(whitespace()))
+def rstrip(text: Expr) -> Expr:
+    return functions.rtrim(text, lit(whitespace()))
 
 
 @RULES(".split", Kind.STR)
-def split_words(a: Expr) -> Expr:
-    spaced = functions.regexp_replace(a, lit(char_class(whitespace()) + "+"), lit(" "), lit("g"))
+def split_words(text: Expr) -> Expr:
+    spaced = functions.regexp_replace(text, lit(char_class(whitespace()) + "+"), lit(" "), lit("g"))
     return functions.string_to_array(functions.btrim(spaced, lit(" ")), lit(" "))
 
 
 @RULES(".split", Kind.STR, Kind.STR)
-def split(a: Expr, b: Expr) -> Expr:
-    return functions.when(a == lit(""), functions.make_array(lit(""))).otherwise(
-        functions.string_to_array(a, b)
+def split(text: Expr, separator: Expr) -> Expr:
+    return functions.when(text == lit(""), functions.make_array(lit(""))).otherwise(
+        functions.string_to_array(text, separator)
     )
 
 
-def find(a: Expr, b: Expr) -> Expr:
-    return functions.strpos(a, b).cast(pa.int64()) - lit(1)
+def find(text: Expr, pattern: Expr) -> Expr:
+    return functions.strpos(text, pattern).cast(pa.int64()) - lit(1)
 
 
 RULES(".find", Kind.STR, Kind.STR)(find)
@@ -100,13 +102,13 @@ def count(text: Expr, pattern: Expr) -> Expr:
 
 
 @RULES(".startswith", Kind.STR, Kind.STR)
-def startswith(a: Expr, b: Expr) -> Expr:
-    return functions.starts_with(a, b)
+def startswith(text: Expr, prefix: Expr) -> Expr:
+    return functions.starts_with(text, prefix)
 
 
 @RULES(".endswith", Kind.STR, Kind.STR)
-def endswith(a: Expr, b: Expr) -> Expr:
-    return functions.ends_with(a, b)
+def endswith(text: Expr, suffix: Expr) -> Expr:
+    return functions.ends_with(text, suffix)
 
 
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
@@ -126,48 +128,48 @@ def join(separator: Expr, words: Expr) -> Expr:
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
-def str_add(a: Expr, b: Expr) -> Expr:
-    return functions.concat(a, b)
+def str_add(left: Expr, right: Expr) -> Expr:
+    return functions.concat(left, right)
 
 
 @RULES("__eq__", Kind.STR, Kind.STR)
-def str_eq(a: Expr, b: Expr) -> Expr:
-    return not_distinct(a, b)
+def str_eq(left: Expr, right: Expr) -> Expr:
+    return not_distinct(left, right)
 
 
 @RULES("__ne__", Kind.STR, Kind.STR)
-def str_ne(a: Expr, b: Expr) -> Expr:
-    return ~not_distinct(a, b)
+def str_ne(left: Expr, right: Expr) -> Expr:
+    return ~not_distinct(left, right)
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)
-def str_contains(a: Expr, b: Expr) -> Expr:
-    return functions.strpos(a, b) > lit(0)
+def str_contains(text: Expr, item: Expr) -> Expr:
+    return functions.strpos(text, item) > lit(0)
 
 
 @RULES("__contains__", Kind.LIST, Kind.STR)
-def list_contains(a: Expr, b: Expr) -> Expr:
-    return functions.array_has(a, b)
+def list_contains(container: Expr, item: Expr) -> Expr:
+    return functions.array_has(container, item)
 
 
 @RULES("len", Kind.STR)
-def str_len(a: Expr) -> Expr:
-    return length(a)
+def str_len(text: Expr) -> Expr:
+    return length(text)
 
 
-def size(a: Expr) -> Expr:
-    return functions.cardinality(a).cast(pa.int64())
+def size(container: Expr) -> Expr:
+    return functions.cardinality(container).cast(pa.int64())
 
 
 RULES("len", Kind.LIST)(size)
 
 
 @RULES("__getitem__", Kind.STR, Kind.INT)
-def str_getitem(a: Expr, b: Expr) -> Expr:
-    total = length(a)
-    position = functions.when(b < lit(0), b + total).otherwise(b)
+def str_getitem(text: Expr, index: Expr) -> Expr:
+    total = length(text)
+    position = functions.when(index < lit(0), index + total).otherwise(index)
     clamped = functions.greatest(functions.least(position, total), lit(-1))
-    return functions.substr(a, clamped + lit(1), lit(1))
+    return functions.substr(text, clamped + lit(1), lit(1))
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
@@ -180,14 +182,14 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(a: Expr, b: Expr, c: Expr) -> Expr:
-    total = length(a)
+def str_slice(text: Expr, start: Expr, stop: Expr) -> Expr:
+    total = length(text)
 
     def clamp(bound: Expr, default: Expr) -> Expr:
         bound = functions.coalesce(bound, default)
         shifted = functions.when(bound < lit(0), bound + total).otherwise(bound)
         return functions.greatest(functions.least(shifted, total), lit(0))
 
-    start = clamp(b, lit(0))
-    stop = clamp(c, total)
-    return functions.substr(a, start + lit(1), functions.greatest(stop - start, lit(0)))
+    begin = clamp(start, lit(0))
+    end = clamp(stop, total)
+    return functions.substr(text, begin + lit(1), functions.greatest(end - begin, lit(0)))

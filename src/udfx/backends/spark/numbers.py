@@ -34,13 +34,13 @@ CHECKED: dict[str, Callable[[Column, Column], Column]] = {
 INFINITY = float("inf")
 
 
-def representable(a: Column) -> Column:
-    return a.between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
+def representable(value: Column) -> Column:
+    return value.between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
 def checked(operation: Callable[[Column, Column], Column]) -> Rule:
-    def rule(a: Column, b: Column) -> Lowered[Column]:
-        result = operation(a, b)
+    def rule(left: Column, right: Column) -> Lowered[Column]:
+        result = operation(left, right)
         return Lowered(result, result.isNotNull())
 
     return rule
@@ -48,25 +48,25 @@ def checked(operation: Callable[[Column, Column], Column]) -> Rule:
 
 def floating(name: str, rule: Rule) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda a, b: rule(a.cast("double"), b))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda a, b: rule(a, b.cast("double")))
+    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(left.cast("double"), right))
+    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, right.cast("double")))
 
 
-def either_nan(a: Column, b: Column) -> Column:
-    return functions.isnan(a) | functions.isnan(b)
+def either_nan(left: Column, right: Column) -> Column:
+    return functions.isnan(left) | functions.isnan(right)
 
 
 def comparison(name: str, compare: Binary) -> None:
-    def ordered(a: Column, b: Column) -> Column:
-        return compare(a, b) & ~either_nan(a, b)
+    def ordered(left: Column, right: Column) -> Column:
+        return compare(left, right) & ~either_nan(left, right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
     RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda a, b: Lowered(ordered(a.cast("double"), b), representable(a))
+        lambda left, right: Lowered(ordered(left.cast("double"), right), representable(left))
     )
     RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda a, b: Lowered(ordered(a, b.cast("double")), representable(b))
+        lambda left, right: Lowered(ordered(left, right.cast("double")), representable(right))
     )
 
 
@@ -84,28 +84,28 @@ PRIMITIVES = FloatPrimitives(
 )
 
 
-def float_floordiv(a: Column, b: Column) -> Lowered[Column]:
-    quotient, _, exact = float_divmod(PRIMITIVES, a, nonzero(b, functions.lit(False)))
+def float_floordiv(left: Column, right: Column) -> Lowered[Column]:
+    quotient, _, exact = float_divmod(PRIMITIVES, left, nonzero(right, functions.lit(False)))
     return Lowered(quotient, exact)
 
 
-def float_mod(a: Column, b: Column) -> Lowered[Column]:
-    _, remainder, exact = float_divmod(PRIMITIVES, a, nonzero(b, functions.lit(False)))
+def float_mod(left: Column, right: Column) -> Lowered[Column]:
+    _, remainder, exact = float_divmod(PRIMITIVES, left, nonzero(right, functions.lit(False)))
     return Lowered(remainder, exact)
 
 
-def int_divmod(a: Column, b: Column) -> tuple[Column, Column]:
-    divisor = nonzero(b, (a == INT64_MIN) & (b == -1))
-    remainder = a % divisor
-    adjust = (remainder != 0) & ((remainder < 0) != (b < 0))
+def int_divmod(left: Column, right: Column) -> tuple[Column, Column]:
+    divisor = nonzero(right, (left == INT64_MIN) & (right == -1))
+    remainder = left % divisor
+    adjust = (remainder != 0) & ((remainder < 0) != (right < 0))
     shift = when(adjust, functions.lit(1), functions.lit(0))
-    quotient = functions.call_function("div", a, divisor) - shift
+    quotient = functions.call_function("div", left, divisor) - shift
     modulo = when(adjust, remainder + divisor, remainder)
     return quotient, modulo
 
 
-def infinite(a: Column) -> Column:
-    return functions.abs(a) == INFINITY
+def infinite(value: Column) -> Column:
+    return functions.abs(value) == INFINITY
 
 
 TEXT = TextPrimitives(
@@ -132,7 +132,7 @@ floating("__floordiv__", float_floordiv)
 floating("__mod__", float_mod)
 
 RULES("__eq__", Kind.INT, Kind.INT)(Column.eqNullSafe)
-RULES("__mod__", Kind.INT, Kind.INT)(lambda a, b: int_divmod(a, b)[1])
+RULES("__mod__", Kind.INT, Kind.INT)(lambda left, right: int_divmod(left, right)[1])
 RULES("__neg__", Kind.FLOAT)(Column.__neg__)
 RULES("abs", Kind.FLOAT)(functions.abs)
 RULES("math.isnan", Kind.FLOAT)(functions.isnan)
@@ -140,49 +140,51 @@ RULES("math.isinf", Kind.FLOAT)(infinite)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
-def int_truediv(a: Column, b: Column) -> Lowered[Column]:
-    return Lowered(functions.try_divide(a, b), representable(a) & representable(b))
+def int_truediv(left: Column, right: Column) -> Lowered[Column]:
+    return Lowered(functions.try_divide(left, right), representable(left) & representable(right))
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(a: Column, b: Column) -> Lowered[Column]:
-    return Lowered(int_divmod(a, b)[0], ~((a == INT64_MIN) & (b == -1)))
+def int_floordiv(left: Column, right: Column) -> Lowered[Column]:
+    return Lowered(int_divmod(left, right)[0], ~((left == INT64_MIN) & (right == -1)))
 
 
 @RULES("__ne__", Kind.INT, Kind.INT)
-def int_ne(a: Column, b: Column) -> Column:
-    return ~a.eqNullSafe(b)
+def int_ne(left: Column, right: Column) -> Column:
+    return ~left.eqNullSafe(right)
 
 
 @RULES("__eq__", Kind.FLOAT, Kind.FLOAT)
-def float_eq(a: Column, b: Column) -> Column:
-    return a.eqNullSafe(b) & ~either_nan(a, b)
+def float_eq(left: Column, right: Column) -> Column:
+    return left.eqNullSafe(right) & ~either_nan(left, right)
 
 
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
-def float_ne(a: Column, b: Column) -> Column:
-    return ~a.eqNullSafe(b) | either_nan(a, b)
+def float_ne(left: Column, right: Column) -> Column:
+    return ~left.eqNullSafe(right) | either_nan(left, right)
 
 
 @RULES("__neg__", Kind.INT)
-def int_neg(a: Column) -> Lowered[Column]:
-    return Lowered(functions.try_subtract(functions.lit(0), a), a != INT64_MIN)
+def int_neg(value: Column) -> Lowered[Column]:
+    return Lowered(functions.try_subtract(functions.lit(0), value), value != INT64_MIN)
 
 
 @RULES("abs", Kind.INT)
-def int_abs(a: Column) -> Lowered[Column]:
-    return Lowered(functions.abs(functions.greatest(a, functions.lit(-INT64_MAX))), a != INT64_MIN)
+def int_abs(value: Column) -> Lowered[Column]:
+    return Lowered(
+        functions.abs(functions.greatest(value, functions.lit(-INT64_MAX))), value != INT64_MIN
+    )
 
 
 @RULES("int", Kind.FLOAT)
-def float_int(a: Column) -> Lowered[Column]:
-    in_range = (a >= float(INT64_MIN)) & (a < float(INT64_MAX))
-    return Lowered(a.try_cast("bigint"), in_range | functions.isnan(a) | infinite(a))
+def float_int(value: Column) -> Lowered[Column]:
+    in_range = (value >= float(INT64_MIN)) & (value < float(INT64_MAX))
+    return Lowered(value.try_cast("bigint"), in_range | functions.isnan(value) | infinite(value))
 
 
 @RULES("float", Kind.INT)
-def int_float(a: Column) -> Column:
-    return a.cast("double")
+def int_float(value: Column) -> Column:
+    return value.cast("double")
 
 
 @RULES("float", Kind.FLOAT)
@@ -191,8 +193,8 @@ def float_float(value: Column) -> Column:
 
 
 @RULES("str", Kind.INT)
-def int_str(a: Column) -> Column:
-    return a.cast("string")
+def int_str(value: Column) -> Column:
+    return value.cast("string")
 
 
 @RULES("int_parses", Kind.STR)
@@ -215,13 +217,13 @@ def str_float(text: Column) -> Lowered[Column]:
     return Lowered(*parse_float(TEXT, text))
 
 
-def log10(a: Column) -> Lowered[Column]:
-    return Lowered(functions.log10(a), functions.lit(False))
+def log10(value: Column) -> Lowered[Column]:
+    return Lowered(functions.log10(value), functions.lit(False))
 
 
 RULES("math.log10", Kind.FLOAT)(log10)
 
 
 @RULES("math.log10", Kind.INT)
-def int_log10(a: Column) -> Lowered[Column]:
-    return log10(a.cast("double"))
+def int_log10(value: Column) -> Lowered[Column]:
+    return log10(value.cast("double"))

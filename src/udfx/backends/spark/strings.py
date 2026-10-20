@@ -40,8 +40,8 @@ def recase(value: Column, method: str) -> Column | Lowered[Column]:
     return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
 
 
-def length(a: Column) -> Column:
-    return functions.char_length(a).cast("bigint")
+def length(text: Column) -> Column:
+    return functions.char_length(text).cast("bigint")
 
 
 def position(index: Column) -> Column:
@@ -51,8 +51,8 @@ def position(index: Column) -> Column:
     return functions.when(bounded >= 0, bounded + 1).otherwise(bounded).cast("int")
 
 
-def characters(a: Column) -> Column:
-    return functions.regexp_extract_all(a, functions.lit("(?s)."), functions.lit(0))
+def characters(text: Column) -> Column:
+    return functions.regexp_extract_all(text, functions.lit("(?s)."), functions.lit(0))
 
 
 def quoted(pattern: Column) -> Column:
@@ -75,67 +75,67 @@ def upper(value: Column) -> Column | Lowered[Column]:
 
 
 @RULES(".strip", Kind.STR)
-def strip(a: Column) -> Column:
-    return functions.btrim(a, functions.lit(whitespace()))
+def strip(text: Column) -> Column:
+    return functions.btrim(text, functions.lit(whitespace()))
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(a: Column) -> Column:
-    return functions.ltrim(a, functions.lit(whitespace()))
+def lstrip(text: Column) -> Column:
+    return functions.ltrim(text, functions.lit(whitespace()))
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(a: Column) -> Column:
-    return functions.rtrim(a, functions.lit(whitespace()))
+def rstrip(text: Column) -> Column:
+    return functions.rtrim(text, functions.lit(whitespace()))
 
 
 @RULES(".split", Kind.STR)
-def split_words(a: Column) -> Column:
-    return functions.regexp_extract_all(a, functions.lit(word()), functions.lit(0))
+def split_words(text: Column) -> Column:
+    return functions.regexp_extract_all(text, functions.lit(word()), functions.lit(0))
 
 
 @RULES(".split", Kind.STR, Kind.STR)
-def split(a: Column, b: Column) -> Column:
-    return functions.split(a, quoted(b), -1)
+def split(text: Column, separator: Column) -> Column:
+    return functions.split(text, quoted(separator), -1)
 
 
-def find(a: Column, b: Column) -> Column:
-    return (functions.instr(a, b) - 1).cast("bigint")
+def find(text: Column, pattern: Column) -> Column:
+    return (functions.instr(text, pattern) - 1).cast("bigint")
 
 
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
 @RULES(".rfind", Kind.STR, Kind.STR)
-def rfind(a: Column, b: Column) -> Column:
-    found = find(functions.reverse(a), functions.reverse(b))
-    return functions.when(found < 0, -1).otherwise(length(a) - length(b) - found)
+def rfind(text: Column, pattern: Column) -> Column:
+    found = find(functions.reverse(text), functions.reverse(pattern))
+    return functions.when(found < 0, -1).otherwise(length(text) - length(pattern) - found)
 
 
 @RULES(".count", Kind.STR, Kind.STR)
-def count(a: Column, b: Column) -> Column:
-    removed = length(a) - length(functions.replace(a, b, functions.lit("")))
+def count(text: Column, pattern: Column) -> Column:
+    removed = length(text) - length(functions.replace(text, pattern, functions.lit("")))
     occurrences = functions.call_function(
-        "div", removed, functions.greatest(length(b), functions.lit(1))
+        "div", removed, functions.greatest(length(pattern), functions.lit(1))
     )
-    return functions.when(length(b) == 0, length(a) + 1).otherwise(occurrences)
+    return functions.when(length(pattern) == 0, length(text) + 1).otherwise(occurrences)
 
 
 @RULES(".startswith", Kind.STR, Kind.STR)
-def startswith(a: Column, b: Column) -> Column:
-    return functions.startswith(a, b)
+def startswith(text: Column, prefix: Column) -> Column:
+    return functions.startswith(text, prefix)
 
 
 @RULES(".endswith", Kind.STR, Kind.STR)
-def endswith(a: Column, b: Column) -> Column:
-    return functions.endswith(a, b)
+def endswith(text: Column, suffix: Column) -> Column:
+    return functions.endswith(text, suffix)
 
 
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
-def replace(a: Column, old: Column, new: Column) -> Column:
+def replace(text: Column, old: Column, new: Column) -> Column:
     empty = functions.array(functions.lit(""))
-    spread = join(functions.concat(empty, characters(a), empty), new)
-    return functions.when(old == "", spread).otherwise(functions.replace(a, old, new))
+    spread = join(functions.concat(empty, characters(text), empty), new)
+    return functions.when(old == "", spread).otherwise(functions.replace(text, old, new))
 
 
 @RULES(".join", Kind.STR, Kind.LIST)
@@ -144,43 +144,43 @@ def join_words(separator: Column, words: Column) -> Column:
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
-def str_add(a: Column, b: Column) -> Column:
-    return functions.concat(a, b)
+def str_add(left: Column, right: Column) -> Column:
+    return functions.concat(left, right)
 
 
 @RULES("__eq__", Kind.STR, Kind.STR)
-def str_eq(a: Column, b: Column) -> Column:
-    return a.eqNullSafe(b)
+def str_eq(left: Column, right: Column) -> Column:
+    return left.eqNullSafe(right)
 
 
 @RULES("__ne__", Kind.STR, Kind.STR)
-def str_ne(a: Column, b: Column) -> Column:
-    return ~a.eqNullSafe(b)
+def str_ne(left: Column, right: Column) -> Column:
+    return ~left.eqNullSafe(right)
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)
-def str_contains(a: Column, b: Column) -> Column:
-    return a.contains(b)
+def str_contains(text: Column, item: Column) -> Column:
+    return text.contains(item)
 
 
 @RULES("__contains__", Kind.LIST, Kind.STR)
-def list_contains(a: Column, b: Column) -> Column:
-    return functions.array_contains(a, b)
+def list_contains(container: Column, item: Column) -> Column:
+    return functions.array_contains(container, item)
 
 
 @RULES("len", Kind.STR)
-def str_len(a: Column) -> Column:
-    return length(a)
+def str_len(text: Column) -> Column:
+    return length(text)
 
 
 @RULES("len", Kind.LIST)
-def list_len(a: Column) -> Column:
-    return functions.size(a).cast("bigint")
+def list_len(container: Column) -> Column:
+    return functions.size(container).cast("bigint")
 
 
 @RULES("__getitem__", Kind.STR, Kind.INT)
-def str_getitem(a: Column, b: Column) -> Column:
-    return functions.substring(a, position(b), functions.lit(1))
+def str_getitem(text: Column, index: Column) -> Column:
+    return functions.substring(text, position(index), functions.lit(1))
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
@@ -189,15 +189,15 @@ def list_getitem(container: Column, index: Column) -> Column:
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(a: Column, b: Column, c: Column) -> Column:
-    size = length(a)
+def str_slice(text: Column, start: Column, stop: Column) -> Column:
+    size = length(text)
 
     def clamp(bound: Column, default: Column) -> Column:
         bound = functions.coalesce(bound, default)
         shifted = functions.when(bound < 0, bound + size).otherwise(bound)
         return functions.least(functions.greatest(shifted, functions.lit(0)), size)
 
-    start = clamp(b, functions.lit(0))
-    stop = clamp(c, size)
-    span = functions.greatest(stop - start, functions.lit(0))
-    return functions.substring(a, (start + 1).cast("int"), span.cast("int"))
+    begin = clamp(start, functions.lit(0))
+    end = clamp(stop, size)
+    span = functions.greatest(end - begin, functions.lit(0))
+    return functions.substring(text, (begin + 1).cast("int"), span.cast("int"))

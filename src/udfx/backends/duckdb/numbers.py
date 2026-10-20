@@ -41,8 +41,8 @@ Rule = Callable[[Expression, Expression], Expression | Lowered[Expression]]
 INT64_LIMIT = 2.0**63
 
 
-def wide(a: Expression) -> Expression:
-    return a.cast(sqltypes.HUGEINT)
+def wide(value: Expression) -> Expression:
+    return value.cast(sqltypes.HUGEINT)
 
 
 def narrow(value: Expression) -> Lowered[Expression]:
@@ -50,67 +50,67 @@ def narrow(value: Expression) -> Lowered[Expression]:
     return Lowered(when(fits, value, constant(0)).cast(sqltypes.BIGINT), fits)
 
 
-def representable(a: Expression) -> Expression:
-    return a.between(constant(-FLOAT_INT_MAX), constant(FLOAT_INT_MAX))
+def representable(value: Expression) -> Expression:
+    return value.between(constant(-FLOAT_INT_MAX), constant(FLOAT_INT_MAX))
 
 
-def floating(a: Expression) -> Expression:
-    return a.cast(sqltypes.DOUBLE)
+def floating(value: Expression) -> Expression:
+    return value.cast(sqltypes.DOUBLE)
 
 
 def checked(operation: Binary) -> Rule:
-    def rule(a: Expression, b: Expression) -> Lowered[Expression]:
-        return narrow(operation(wide(a), wide(b)))
+    def rule(left: Expression, right: Expression) -> Lowered[Expression]:
+        return narrow(operation(wide(left), wide(right)))
 
     return rule
 
 
 def mixed(name: str, rule: Rule) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda a, b: rule(floating(a), b))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda a, b: rule(a, floating(b)))
+    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(floating(left), right))
+    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, floating(right)))
 
 
-def is_nan(a: Expression) -> Expression:
-    return function("isnan", a)
+def is_nan(value: Expression) -> Expression:
+    return function("isnan", value)
 
 
-def either_nan(a: Expression, b: Expression) -> Expression:
-    return duckdb.CoalesceOperator(is_nan(a), constant(False)) | duckdb.CoalesceOperator(
-        is_nan(b), constant(False)
+def either_nan(left: Expression, right: Expression) -> Expression:
+    return duckdb.CoalesceOperator(is_nan(left), constant(False)) | duckdb.CoalesceOperator(
+        is_nan(right), constant(False)
     )
 
 
 def comparison(name: str, compare: Binary) -> None:
-    def ordered(a: Expression, b: Expression) -> Expression:
-        return compare(a, b) & ~is_nan(a) & ~is_nan(b)
+    def ordered(left: Expression, right: Expression) -> Expression:
+        return compare(left, right) & ~is_nan(left) & ~is_nan(right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
     RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda a, b: Lowered(ordered(floating(a), b), representable(a))
+        lambda left, right: Lowered(ordered(floating(left), right), representable(left))
     )
     RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda a, b: Lowered(ordered(a, floating(b)), representable(b))
+        lambda left, right: Lowered(ordered(left, floating(right)), representable(right))
     )
 
 
-def whole(a: Expression) -> Expression:
-    fits = (a >= constant(-INT64_LIMIT)) & (a < constant(INT64_LIMIT))
-    return when(fits, function("trunc", a).cast(sqltypes.BIGINT), NULL)
+def whole(value: Expression) -> Expression:
+    fits = (value >= constant(-INT64_LIMIT)) & (value < constant(INT64_LIMIT))
+    return when(fits, function("trunc", value).cast(sqltypes.BIGINT), NULL)
 
 
-def safe_divisor(a: Expression, b: Expression) -> Expression:
-    return when((a == constant(INT64_MIN)) & (b == constant(-1)), constant(1), b)
+def safe_divisor(left: Expression, right: Expression) -> Expression:
+    return when((left == constant(INT64_MIN)) & (right == constant(-1)), constant(1), right)
 
 
-def truncated_remainder(a: Expression, b: Expression) -> tuple[Expression, Expression]:
-    whole_a, whole_b = whole(a), whole(b)
-    truncated = whole_a % safe_divisor(whole_a, whole_b)
-    undefined = ~function("isfinite", a) | is_nan(b)
-    small = function("abs", a) < function("abs", b)
-    exact = (floating(whole_a) == a) & (floating(whole_b) == b)
-    expr = when(undefined, NAN, when(small, a, floating(truncated)))
+def truncated_remainder(left: Expression, right: Expression) -> tuple[Expression, Expression]:
+    whole_left, whole_right = whole(left), whole(right)
+    truncated = whole_left % safe_divisor(whole_left, whole_right)
+    undefined = ~function("isfinite", left) | is_nan(right)
+    small = function("abs", left) < function("abs", right)
+    exact = (floating(whole_left) == left) & (floating(whole_right) == right)
+    expr = when(undefined, NAN, when(small, left, floating(truncated)))
     return expr, undefined | small | duckdb.CoalesceOperator(exact, constant(False))
 
 
@@ -122,24 +122,24 @@ PRIMITIVES = FloatPrimitives(
 )
 
 
-def float_floordiv(a: Expression, b: Expression) -> Lowered[Expression]:
-    quotient, _, exact = float_divmod(PRIMITIVES, a, b)
+def float_floordiv(left: Expression, right: Expression) -> Lowered[Expression]:
+    quotient, _, exact = float_divmod(PRIMITIVES, left, right)
     return Lowered(quotient, exact)
 
 
-def float_mod(a: Expression, b: Expression) -> Lowered[Expression]:
-    _, remainder, exact = float_divmod(PRIMITIVES, a, b)
+def float_mod(left: Expression, right: Expression) -> Lowered[Expression]:
+    _, remainder, exact = float_divmod(PRIMITIVES, left, right)
     return Lowered(remainder, exact)
 
 
-def int_divmod(a: Expression, b: Expression) -> tuple[Expression, Expression, Expression]:
-    divisor = safe_divisor(a, b)
-    quotient, remainder = a // divisor, a % divisor
-    adjust = (remainder != constant(0)) & ((remainder < constant(0)) != (b < constant(0)))
-    exact = ~((a == constant(INT64_MIN)) & (b == constant(-1)))
+def int_divmod(left: Expression, right: Expression) -> tuple[Expression, Expression, Expression]:
+    divisor = safe_divisor(left, right)
+    quotient, remainder = left // divisor, left % divisor
+    adjust = (remainder != constant(0)) & ((remainder < constant(0)) != (right < constant(0)))
+    exact = ~((left == constant(INT64_MIN)) & (right == constant(-1)))
     return (
         when(adjust, quotient - constant(1), quotient),
-        when(adjust, remainder + b, remainder),
+        when(adjust, remainder + right, remainder),
         exact,
     )
 
@@ -184,57 +184,57 @@ mixed("__mod__", float_mod)
 
 RULES("__eq__", Kind.INT, Kind.INT)(nullable_equal)
 RULES("__neg__", Kind.FLOAT)(Expression.__neg__)
-RULES("abs", Kind.FLOAT)(lambda a: function("abs", a))
+RULES("abs", Kind.FLOAT)(lambda value: function("abs", value))
 RULES("math.isnan", Kind.FLOAT)(is_nan)
-RULES("math.isinf", Kind.FLOAT)(lambda a: function("isinf", a))
+RULES("math.isinf", Kind.FLOAT)(lambda value: function("isinf", value))
 
 
 @RULES("__ne__", Kind.INT, Kind.INT)
-def int_ne(a: Expression, b: Expression) -> Expression:
-    return ~nullable_equal(a, b)
+def int_ne(left: Expression, right: Expression) -> Expression:
+    return ~nullable_equal(left, right)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
-def int_truediv(a: Expression, b: Expression) -> Lowered[Expression]:
-    return Lowered(floating(a) / floating(b), representable(a) & representable(b))
+def int_truediv(left: Expression, right: Expression) -> Lowered[Expression]:
+    return Lowered(floating(left) / floating(right), representable(left) & representable(right))
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(a: Expression, b: Expression) -> Lowered[Expression]:
-    quotient, _, exact = int_divmod(a, b)
+def int_floordiv(left: Expression, right: Expression) -> Lowered[Expression]:
+    quotient, _, exact = int_divmod(left, right)
     return Lowered(quotient, exact)
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)
-def int_mod(a: Expression, b: Expression) -> Lowered[Expression]:
-    _, remainder, exact = int_divmod(a, b)
+def int_mod(left: Expression, right: Expression) -> Lowered[Expression]:
+    _, remainder, exact = int_divmod(left, right)
     return Lowered(remainder, exact)
 
 
 @RULES("__eq__", Kind.FLOAT, Kind.FLOAT)
-def float_eq(a: Expression, b: Expression) -> Expression:
-    return nullable_equal(a, b) & ~either_nan(a, b)
+def float_eq(left: Expression, right: Expression) -> Expression:
+    return nullable_equal(left, right) & ~either_nan(left, right)
 
 
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
-def float_ne(a: Expression, b: Expression) -> Expression:
-    return ~nullable_equal(a, b) | either_nan(a, b)
+def float_ne(left: Expression, right: Expression) -> Expression:
+    return ~nullable_equal(left, right) | either_nan(left, right)
 
 
 @RULES("__neg__", Kind.INT)
-def int_neg(a: Expression) -> Lowered[Expression]:
-    return narrow(-wide(a))
+def int_neg(value: Expression) -> Lowered[Expression]:
+    return narrow(-wide(value))
 
 
 @RULES("abs", Kind.INT)
-def int_abs(a: Expression) -> Lowered[Expression]:
-    return narrow(function("abs", wide(a)))
+def int_abs(value: Expression) -> Lowered[Expression]:
+    return narrow(function("abs", wide(value)))
 
 
 @RULES("int", Kind.FLOAT)
-def float_int(a: Expression) -> Lowered[Expression]:
-    value = whole(a)
-    return Lowered(value, value.isnotnull() | ~function("isfinite", a))
+def float_int(value: Expression) -> Lowered[Expression]:
+    value = whole(value)
+    return Lowered(value, value.isnotnull() | ~function("isfinite", value))
 
 
 RULES("float", Kind.INT)(floating)
@@ -246,8 +246,8 @@ def float_float(value: Expression) -> Expression:
 
 
 @RULES("str", Kind.INT)
-def int_str(a: Expression) -> Expression:
-    return a.cast(sqltypes.VARCHAR)
+def int_str(value: Expression) -> Expression:
+    return value.cast(sqltypes.VARCHAR)
 
 
 @RULES("int_parses", Kind.STR)
@@ -270,13 +270,13 @@ def str_float(text: Expression) -> Lowered[Expression]:
     return Lowered(*parse_float(TEXT, text))
 
 
-def log10(a: Expression) -> Expression:
-    return function("log10", when(a > constant(0.0), a, constant(1.0)))
+def log10(value: Expression) -> Expression:
+    return function("log10", when(value > constant(0.0), value, constant(1.0)))
 
 
 RULES("math.log10", Kind.FLOAT)(log10)
 
 
 @RULES("math.log10", Kind.INT)
-def int_log10(a: Expression) -> Expression:
-    return log10(floating(a))
+def int_log10(value: Expression) -> Expression:
+    return log10(floating(value))

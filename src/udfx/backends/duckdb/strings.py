@@ -58,32 +58,32 @@ def upper(value: Expression) -> Expression | Lowered[Expression]:
 
 
 @RULES(".strip", Kind.STR)
-def strip(a: Expression) -> Expression:
-    return function("trim", a, constant(whitespace()))
+def strip(text: Expression) -> Expression:
+    return function("trim", text, constant(whitespace()))
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(a: Expression) -> Expression:
-    return function("ltrim", a, constant(whitespace()))
+def lstrip(text: Expression) -> Expression:
+    return function("ltrim", text, constant(whitespace()))
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(a: Expression) -> Expression:
-    return function("rtrim", a, constant(whitespace()))
+def rstrip(text: Expression) -> Expression:
+    return function("rtrim", text, constant(whitespace()))
 
 
 @RULES(".split", Kind.STR)
-def split_words(a: Expression) -> Expression:
-    return function("regexp_extract_all", a, constant(word()))
+def split_words(text: Expression) -> Expression:
+    return function("regexp_extract_all", text, constant(word()))
 
 
 @RULES(".split", Kind.STR, Kind.STR)
-def split(a: Expression, b: Expression) -> Expression:
-    return function("string_split", a, b)
+def split(text: Expression, separator: Expression) -> Expression:
+    return function("string_split", text, separator)
 
 
-def find(a: Expression, b: Expression) -> Expression:
-    return function("instr", a, b) - constant(1)
+def find(text: Expression, pattern: Expression) -> Expression:
+    return function("instr", text, pattern) - constant(1)
 
 
 RULES(".find", Kind.STR, Kind.STR)(find)
@@ -107,13 +107,13 @@ def count(text: Expression, pattern: Expression) -> Expression:
 
 
 @RULES(".startswith", Kind.STR, Kind.STR)
-def startswith(a: Expression, b: Expression) -> Expression:
-    return function("starts_with", a, b)
+def startswith(text: Expression, prefix: Expression) -> Expression:
+    return function("starts_with", text, prefix)
 
 
 @RULES(".endswith", Kind.STR, Kind.STR)
-def endswith(a: Expression, b: Expression) -> Expression:
-    return function("ends_with", a, b)
+def endswith(text: Expression, suffix: Expression) -> Expression:
+    return function("ends_with", text, suffix)
 
 
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
@@ -132,26 +132,26 @@ def join(separator: Expression, words: Expression) -> Expression:
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
-def str_add(a: Expression, b: Expression) -> Expression:
-    return function("concat", a, b)
+def str_add(left: Expression, right: Expression) -> Expression:
+    return function("concat", left, right)
 
 
 RULES("__eq__", Kind.STR, Kind.STR)(nullable_equal)
 
 
 @RULES("__ne__", Kind.STR, Kind.STR)
-def str_ne(a: Expression, b: Expression) -> Expression:
-    return ~nullable_equal(a, b)
+def str_ne(left: Expression, right: Expression) -> Expression:
+    return ~nullable_equal(left, right)
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)
-def str_contains(a: Expression, b: Expression) -> Expression:
-    return function("contains", a, b)
+def str_contains(text: Expression, item: Expression) -> Expression:
+    return function("contains", text, item)
 
 
 @RULES("__contains__", Kind.LIST, Kind.STR)
-def list_contains(a: Expression, b: Expression) -> Expression:
-    return function("list_contains", a, b)
+def list_contains(container: Expression, item: Expression) -> Expression:
+    return function("list_contains", container, item)
 
 
 RULES("len", Kind.STR)(length)
@@ -165,8 +165,8 @@ def position(container: Expression, index: Expression) -> Expression:
 
 
 @RULES("__getitem__", Kind.STR, Kind.INT)
-def str_getitem(a: Expression, b: Expression) -> Expression:
-    return function("array_extract", a, position(a, b))
+def str_getitem(text: Expression, index: Expression) -> Expression:
+    return function("array_extract", text, position(text, index))
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
@@ -175,15 +175,15 @@ def list_getitem(container: Expression, index: Expression) -> Expression:
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(a: Expression, b: Expression, c: Expression) -> Expression:
-    size = length(a)
+def str_slice(text: Expression, start: Expression, stop: Expression) -> Expression:
+    size = length(text)
 
     def clamp(bound: Expression, default: Expression) -> Expression:
         bound = duckdb.CoalesceOperator(bound, default)
         shifted = when(bound < constant(0), bound + size, bound)
         return function("least", function("greatest", shifted, constant(0)), size)
 
-    start = clamp(b, constant(0))
-    stop = clamp(c, size)
-    width = function("greatest", stop - start, constant(0))
-    return function("substring", a, start + constant(1), width)
+    begin = clamp(start, constant(0))
+    end = clamp(stop, size)
+    width = function("greatest", end - begin, constant(0))
+    return function("substring", text, begin + constant(1), width)

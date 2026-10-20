@@ -25,9 +25,9 @@ def when(condition: Expression, then: Expression, orelse: Expression) -> Express
     return duckdb.CaseExpression(condition, then).otherwise(orelse)
 
 
-def nullable_equal(a: Expression, b: Expression) -> Expression:
-    return duckdb.CoalesceOperator(a == b, a.isnull() & b.isnull())
+def nullable_equal(left: Expression, right: Expression) -> Expression:
+    return duckdb.CoalesceOperator(left == right, left.isnull() & right.isnull())
 
 
-def length(a: Expression) -> Expression:
-    return function("len", a)
+def length(value: Expression) -> Expression:
+    return function("len", value)
