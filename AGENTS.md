@@ -16,7 +16,7 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/types.py` | IR types (`Kind`, `Type`), int64 bounds, `fits` |
 | `src/udfx/ir.py` | IR nodes: `Col`, `Lit`, `Call`, `If` |
 | `src/udfx/program.py` | `Program`: the traced function, its schema, value, fault, and `run` for fallback rows |
-| `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py` |
+| `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py` |
 | `src/udfx/semantics/` | Facts about Python that every backend needs: whitespace, literal grammars, operator tables, Unicode drift |
 | `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
 | `src/udfx/backends/base.py` | Generic lowering and fallback composition. Backends never reimplement it |
@@ -37,7 +37,7 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 
 ## Op contract
 
-An op is an `Op(name, params, result, reference, faults)` in `src/udfx/ops/<family>.py`.
+An op is an `Op(name, parameters, result, reference, faults)` in `src/udfx/ops/<family>.py`.
 
 - `reference` is the exact Python behaviour. Use the real builtin or method when possible.
 - A param with `nullable=True` accepts `None`. The frontend adds `TypeError` or `AttributeError` faults for `None` on other params.
@@ -75,7 +75,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `backend.py`: the `Backend` subclass. `column`, `literal`, `select`, `both`, `negate` build expressions. `fallback(native, exact, program)` runs `program.run` on rows where `exact` is false and keeps `native` elsewhere. `evaluate(expr, schema, rows)` runs an expression on in-memory rows for tests.
 - `rules.py`: `RULES = RuleSet()` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type.
-- `core.py`, `strings.py`, `numbers.py`: rules, one file per op family.
+- `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`: rules, one file per op family.
 - Internal column names contain a space, for example `"udfx exact"`, so they cannot collide with user columns.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
 - `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception. Spark carries the type through the error message.
