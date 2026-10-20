@@ -72,6 +72,7 @@ FLOAT_TRAPS = (
     float("-inf"),
     1e308,
     5e-324,
+    -float("nan"),
 )
 
 
