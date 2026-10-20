@@ -5,7 +5,7 @@ import operator
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.numbers import divide, either_nan, float_int
+from udfx.backends.polars.numbers import either_nan, float_int
 from udfx.backends.polars.rules import RULES, broadcast
 from udfx.ops.math import EXACT_POWERS_OF_TEN, HALF_INTEGER_LIMIT, ROUND_OVERFLOW_LIMIT
 from udfx.semantics.numbers import Binary
@@ -74,7 +74,7 @@ def round_digits(a: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
         & (scaled.abs() < HALF_INTEGER_LIMIT)
         & ((digits == 0) | ~tie)
     )
-    return Lowered(divide(half_even(scaled), scale), exact)
+    return Lowered(broadcast(half_even(scaled)) / broadcast(scale), exact)
 
 
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
