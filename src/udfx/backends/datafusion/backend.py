@@ -7,6 +7,7 @@ from typing import ClassVar, cast
 import pyarrow as pa
 from datafusion import Expr, SessionContext, col, functions, udf
 
+from udfx.backends import arrow
 from udfx.backends.arrow import dtype
 from udfx.backends.base import Backend, Row, RuleSet
 from udfx.backends.datafusion.rules import RULES, typed
@@ -45,8 +46,8 @@ class DataFusionBackend(Backend[Expr]):
         result = dtype(program.result)
 
         def run(flags: pa.Array, *columns: pa.Array) -> pa.Array:
-            arguments = [column.to_pylist() for column in columns]
-            values = self.fallback_values(program, flags.to_pylist(), arguments)
+            pending = arrow.pending(flags)
+            values = self.fallback_values(program, len(flags), pending, arrow.gather(columns))
             return pa.array(values, type=result)
 
         slow = udf(

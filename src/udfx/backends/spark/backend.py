@@ -79,8 +79,9 @@ class SparkBackend(Backend[Column]):
 
         def patch(batch: pa.Array) -> pa.Array:
             packed = cast(pa.StructArray, batch)
-            columns = [packed.field(name).to_pylist() for name in names]
-            values = self.fallback_values(program, packed.field(EXACT).to_pylist(), columns)
+            columns = [packed.field(name) for name in names]
+            pending = arrow.pending(packed.field(EXACT))
+            values = self.fallback_values(program, len(packed), pending, arrow.gather(columns))
             return pa.array(values, type=arrow_type)
 
         flag = functions.coalesce(exact, functions.lit(False))

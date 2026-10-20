@@ -12,6 +12,7 @@ from udfx.program import Program
 from udfx.types import Kind, Type, fits
 
 Row = tuple[object, ...]
+Gather = Callable[[list[int]], Sequence[Sequence[object]]]
 
 
 @dataclass(frozen=True)
@@ -56,13 +57,18 @@ class Backend[E](ABC):
             self.raised = error
             raise
 
+    def patches(self, program: Program, pending: list[int], gather: Gather) -> list[object]:
+        if not pending:
+            return []
+        columns = gather(pending)
+        rows = [tuple(column[position] for column in columns) for position in range(len(pending))]
+        return self.patch(program, rows)
+
     def fallback_values(
-        self, program: Program, flags: Sequence[object], columns: Sequence[Sequence[object]]
+        self, program: Program, length: int, pending: list[int], gather: Gather
     ) -> list[object]:
-        pending = [index for index, flag in enumerate(flags) if not flag]
-        rows = [tuple(column[index] for column in columns) for index in pending]
-        values: list[object] = [None] * len(flags)
-        for index, value in zip(pending, self.patch(program, rows), strict=True):
+        values: list[object] = [None] * length
+        for index, value in zip(pending, self.patches(program, pending, gather), strict=True):
             values[index] = value
         return values
 
