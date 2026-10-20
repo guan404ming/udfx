@@ -21,7 +21,8 @@ def lower(code: CodeType, instructions: Iterable[dis.Instruction]) -> tuple[dis.
     for instruction in (part for whole in instructions for part in split(whole)):
         match instruction.opname:
             case "TO_BOOL":
-                lowered.append(instruction._replace(opname="NOP"))
+                negate = instruction._replace(opname="UNARY_NOT", arg=None, argval=None, argrepr="")
+                lowered.extend((negate, negate._replace(offset=instruction.offset + 1)))
             case "PUSH_NULL":
                 swap = instruction._replace(
                     opname="SWAP", arg=2, argval=2, argrepr="2", offset=instruction.offset + 1

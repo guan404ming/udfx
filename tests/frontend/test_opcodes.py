@@ -66,6 +66,10 @@ def unpack(a: int, b: int) -> int:
     return x + y
 
 
+def truth(s: str | None) -> bool:
+    return not not s  # noqa: SIM208
+
+
 CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
     (
         branch,
@@ -80,6 +84,7 @@ CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
     (first, {"t": STR}, apply("__getitem__", T, ZERO), fold(OUT_OF_RANGE.when)),
     (has_colons, {"t": STR}, apply("__contains__", T, Lit("::", STR)), FALSE),
     (unpack, {"a": INT, "b": INT}, apply("__add__", A, B), FALSE),
+    (truth, {"s": S.type}, apply("bool", S), FALSE),
 ]
 
 
