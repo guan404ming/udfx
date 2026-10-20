@@ -6,6 +6,8 @@ from typing import Any
 
 from udfx.backends.base import Backend
 
+__all__ = ["installed", "named"]
+
 
 def known() -> list[str]:
     return sorted(module.name for module in pkgutil.iter_modules(__path__) if module.ispkg)
