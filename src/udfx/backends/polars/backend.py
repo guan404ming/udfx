@@ -39,7 +39,10 @@ class PolarsBackend(Backend[pl.Expr]):
         result = dtype(program.result)
 
         def patch(series: Sequence[pl.Series]) -> pl.Series:
-            flags, values, *columns = series
+            length = max(len(item) for item in series)
+            flags, values, *columns = (
+                item.new_from_index(0, length) if len(item) == 1 else item for item in series
+            )
             arguments = [column.to_list() for column in columns]
             patched = self.fallback_values(program, flags.to_list(), arguments)
             return values.zip_with(flags.fill_null(False), pl.Series(patched, dtype=result))
