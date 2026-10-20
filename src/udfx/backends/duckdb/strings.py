@@ -19,6 +19,7 @@ from udfx.backends.duckdb.rules import (
 )
 from udfx.semantics import text
 from udfx.semantics.text import (
+    CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
     SlicePrimitives,
@@ -99,15 +100,15 @@ def find(text: Expression, pattern: Expression) -> Expression:
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
-def reverse(text: Expression) -> Expression:
-    parts = function("list_reverse", function("string_split", text, constant("")))
-    return function("array_to_string", parts, constant(""))
+def single_code_point_clusters(text: Expression) -> Expression:
+    return ~function("regexp_matches", text, constant(CLUSTER_JOINERS))
 
 
 @RULES(".rfind", Kind.STR, Kind.STR)
-def rfind(text: Expression, pattern: Expression) -> Expression:
-    position = find(reverse(text), reverse(pattern))
-    return when(position < constant(0), constant(-1), length(text) - length(pattern) - position)
+def rfind(text: Expression, pattern: Expression) -> Lowered[Expression]:
+    position = find(function("reverse", text), function("reverse", pattern))
+    found = when(position < constant(0), constant(-1), length(text) - length(pattern) - position)
+    return Lowered(found, single_code_point_clusters(text) & single_code_point_clusters(pattern))
 
 
 @RULES(".count", Kind.STR, Kind.STR)
