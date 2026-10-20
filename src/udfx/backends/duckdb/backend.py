@@ -3,13 +3,14 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from itertools import count
-from typing import ClassVar
+from typing import ClassVar, cast
 
 import duckdb
 import pyarrow as pa
 from duckdb import Expression, sqltypes
-from duckdb.func import SPECIAL
+from duckdb.func import ARROW, SPECIAL
 
+from udfx.backends import arrow
 from udfx.backends.base import Backend, Row, RuleSet
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import NAN, RULES, column, constant, function, when
@@ -30,6 +31,7 @@ class DuckDBBackend(Backend[Expression]):
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self.connection = connection or duckdb.connect()
+        self.raised: BaseException | None = None
 
     def column(self, node: Col) -> Expression:
         return column(node.name)
@@ -55,12 +57,31 @@ class DuckDBBackend(Backend[Expression]):
             **{field: dtype(type) for field, type in program.schema.items()},
         }
 
-        def run(packed: dict[str, object]) -> object:
-            flag, *row = packed.values()
-            return None if flag else program.run([row])[0]
+        result = arrow.dtype(program.result)
+
+        def patch(packed: pa.ChunkedArray) -> pa.Array:
+            batch = cast(pa.StructArray, packed.combine_chunks())
+            flags = batch.field(EXACT).fill_null(False).to_pylist()
+            pending = [index for index, flag in enumerate(flags) if not flag]
+            values: list[object] = [None] * len(batch)
+            if pending:
+                columns = [batch.field(field).take(pending).to_pylist() for field in program.schema]
+                try:
+                    patched = program.run(zip(*columns, strict=True))
+                except Exception as error:
+                    self.raised = error
+                    raise
+                for index, value in zip(pending, patched, strict=True):
+                    values[index] = value
+            return pa.array(values, result)
 
         self.connection.create_function(
-            name, run, [duckdb.struct_type(fields)], dtype(program.result), null_handling=SPECIAL
+            name,
+            patch,
+            [duckdb.struct_type(fields)],
+            dtype(program.result),
+            type=ARROW,
+            null_handling=SPECIAL,
         )
         packed = function(
             "struct_pack",
@@ -87,7 +108,12 @@ class DuckDBBackend(Backend[Expression]):
             *(column(name).cast(dtype(type)).alias(name) for name, type in schema.items()),
         )
         names = [f"{OUT} {index}" for index in range(len(exprs))]
-        outputs = typed.select(
+        selected = typed.select(
             *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
-        ).fetchall()
+        )
+        self.raised = None
+        try:
+            outputs = selected.fetchall()
+        except duckdb.Error as wrapped:
+            raise self.raised or wrapped from None
         return [list(values) for values in zip(*outputs, strict=True)] or [[] for _ in exprs]

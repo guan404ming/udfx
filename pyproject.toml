@@ -42,6 +42,7 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.7",
     "pyright>=1.1.390",
+    "pyarrow-stubs>=20.0.0.20260819",
 ]
 
 [build-system]
@@ -66,6 +67,8 @@ reportUnknownMemberType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownVariableType = "none"
 reportUnknownLambdaType = "none"
+reportMissingTypeArgument = "none"
+reportUnknownParameterType = "none"
 include = ["src", "tests"]
 reportMissingTypeStubs = false
 
