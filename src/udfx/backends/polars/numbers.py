@@ -6,7 +6,7 @@ from collections.abc import Callable
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.rules import RULES, when
+from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -63,12 +63,8 @@ def comparison(name: str, compare: Binary) -> None:
     )
 
 
-def dense(value: pl.Expr) -> pl.Expr:
-    return pl.int_range(pl.len()).cast(pl.Float64) * -0.0 + value
-
-
-def divide(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return a / dense(b)
+def materialized(operation: Binary) -> Binary:
+    return lambda left, right: operation(broadcast(left), broadcast(right))
 
 
 def either_nan(a: pl.Expr, b: pl.Expr) -> pl.Expr:
@@ -90,12 +86,12 @@ PRIMITIVES = FloatPrimitives(when, pl.Expr.floor, pl.Expr.sign, truncated_remain
 
 
 def float_floordiv(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
-    quotient, _, exact = float_divmod(PRIMITIVES, a, dense(b))
+    quotient, _, exact = float_divmod(PRIMITIVES, a, broadcast(b))
     return Lowered(quotient, exact)
 
 
 def float_mod(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
-    _, remainder, exact = float_divmod(PRIMITIVES, a, dense(b))
+    _, remainder, exact = float_divmod(PRIMITIVES, a, broadcast(b))
     return Lowered(remainder, exact)
 
 
@@ -113,12 +109,12 @@ TEXT = TextPrimitives(
 
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT)(checked(_operation))
-    floating(_name, _operation)
+    floating(_name, materialized(_operation))
 
 for _name, _compare in COMPARISONS.items():
     comparison(_name, _compare)
 
-floating("__truediv__", divide)
+floating("__truediv__", materialized(operator.truediv))
 floating("__floordiv__", float_floordiv)
 floating("__mod__", float_mod)
 
@@ -133,7 +129,7 @@ RULES("math.isinf", Kind.FLOAT)(pl.Expr.is_infinite)
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(divide(a, b), representable(a) & representable(b))
+    return Lowered(broadcast(a) / broadcast(b), representable(a) & representable(b))
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
