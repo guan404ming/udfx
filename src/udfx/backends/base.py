@@ -10,7 +10,14 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
 from udfx.ops.registry import OpKey
 from udfx.program import Program
-from udfx.semantics.numbers import Binary
+from udfx.semantics.numbers import (
+    Binary,
+    OrderPrimitives,
+    extremum,
+    float_compare,
+    float_extremum,
+    widened_exact,
+)
 from udfx.types import Kind, Type, fits
 
 RESERVED = "udfx "
@@ -69,36 +76,39 @@ def register_float_variants[E](
 
 
 def register_widened_variants[E](
-    rules: RuleSet[E],
-    name: str,
-    rule: Binary,
-    *,
-    to_float: Callable[[E], E],
-    exact: Callable[[E], E],
+    rules: RuleSet[E], name: str, rule: Binary, to_float: Callable[[E], E], order: OrderPrimitives
 ) -> None:
     rules(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(to_float(left), right), exact(left))
+        lambda left, right: Lowered(rule(to_float(left), right), widened_exact(order, left))
     )
     rules(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, to_float(right)), exact(right))
+        lambda left, right: Lowered(rule(left, to_float(right)), widened_exact(order, right))
     )
 
 
 def register_comparison[E](
     rules: RuleSet[E],
     name: str,
-    compare: Callable[[E, E], E],
-    ordered: Callable[[E, E], E],
-    *,
+    compare: Binary,
     to_float: Callable[[E], E],
-    exact: Callable[[E], E],
+    order: OrderPrimitives,
 ) -> None:
-    def float_compare(left: E, right: E) -> E:
-        return cast("Any", compare(left, right)) & ordered(left, right)
+    def ordered(left: E, right: E) -> E:
+        return float_compare(order, compare, left, right)
 
     rules(name, Kind.INT, Kind.INT)(compare)
-    rules(name, Kind.FLOAT, Kind.FLOAT)(float_compare)
-    register_widened_variants(rules, name, float_compare, to_float=to_float, exact=exact)
+    rules(name, Kind.FLOAT, Kind.FLOAT)(ordered)
+    register_widened_variants(rules, name, ordered, to_float, order)
+
+
+def register_extremum[E](
+    rules: RuleSet[E], name: str, compare: Binary, order: OrderPrimitives
+) -> None:
+    rules(name, Kind.FLOAT, Kind.FLOAT)(
+        lambda left, right: float_extremum(order, compare, left, right)
+    )
+    for kind in (Kind.INT, Kind.STR):
+        rules(name, kind, kind)(lambda left, right: extremum(order, compare, left, right))
 
 
 class Backend[E](ABC):

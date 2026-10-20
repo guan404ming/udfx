@@ -18,6 +18,8 @@ from udfx.semantics.numbers import (
     FLOAT_INT_MAX,
     Binary,
     FloatPrimitives,
+    OrderPrimitives,
+    division_overflows,
     float_divmod,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
@@ -41,14 +43,6 @@ def overflow_checked(operation: Binary) -> BinaryRule[pl.Expr]:
         return Lowered(operation(left, right), fits_int64(wide))
 
     return rule
-
-
-def widened_exact(value: pl.Expr) -> pl.Expr:
-    return value.is_null() | within_exact_float_range(value)
-
-
-def ordered(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-    return left.is_not_nan() & right.is_not_nan()
 
 
 def broadcast_arguments(operation: Binary) -> Binary:
@@ -85,12 +79,15 @@ def float_mod(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(remainder, exact)
 
 
+ORDER = OrderPrimitives(when, either_nan, pl.Expr.is_null, within_exact_float_range)
+
+
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
     register_float_variants(RULES, _name, broadcast_arguments(_operation), cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
+    register_comparison(RULES, _name, _compare, cast_float64, ORDER)
 
 register_float_variants(RULES, "__truediv__", broadcast_arguments(operator.truediv), cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
@@ -115,7 +112,7 @@ def int_truediv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
 def int_floordiv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(left // right, ~((left == INT64_MIN) & (right == -1)))
+    return Lowered(left // right, ~division_overflows(pl.lit, left, right))
 
 
 @RULES("__eq__", Kind.FLOAT, Kind.FLOAT)
@@ -128,8 +125,8 @@ def float_ne(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left.ne_missing(right) | either_nan(left, right)
 
 
-register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
-register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
+register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)

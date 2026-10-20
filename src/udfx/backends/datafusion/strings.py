@@ -15,9 +15,12 @@ from udfx.semantics import text
 from udfx.semantics.text import (
     SIGMA,
     CaseDrift,
+    SearchPrimitives,
     SlicePrimitives,
     case_guard,
     char_class,
+    count_occurrences,
+    reverse_find,
     slice_bounds,
     whitespace,
 )
@@ -96,20 +99,19 @@ def find(text: Expr, pattern: Expr) -> Expr:
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
+SEARCH = SearchPrimitives(lit, when, length, functions.reverse, find)
+
+
 @RULES(".rfind", Kind.STR, Kind.STR)
 def rfind(text: Expr, pattern: Expr) -> Expr:
-    position = find(functions.reverse(text), functions.reverse(pattern))
-    return functions.when(position < lit(0), lit(-1)).otherwise(
-        length(text) - length(pattern) - position
-    )
+    return reverse_find(SEARCH, text, pattern)
 
 
 @RULES(".count", Kind.STR, Kind.STR)
 def count(text: Expr, pattern: Expr) -> Expr:
     removed = length(text) - length(functions.replace(text, pattern, lit("")))
-    return functions.when(pattern == lit(""), length(text) + lit(1)).otherwise(
-        removed / functions.greatest(length(pattern), lit(1))
-    )
+    occurrences = removed / functions.greatest(length(pattern), lit(1))
+    return count_occurrences(SEARCH, text, pattern, occurrences)
 
 
 @RULES(".startswith", Kind.STR, Kind.STR)

@@ -22,9 +22,12 @@ from udfx.semantics.text import (
     CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
+    SearchPrimitives,
     SlicePrimitives,
     case_guard,
+    count_occurrences,
     non_whitespace_pattern,
+    reverse_find,
     slice_bounds,
     whitespace,
 )
@@ -104,17 +107,19 @@ def single_code_point_clusters(text: Expression) -> Expression:
     return ~function("regexp_matches", text, constant(CLUSTER_JOINERS))
 
 
+SEARCH = SearchPrimitives(constant, when, length, lambda text: function("reverse", text), find)
+
+
 @RULES(".rfind", Kind.STR, Kind.STR)
 def rfind(text: Expression, pattern: Expression) -> Lowered[Expression]:
-    position = find(function("reverse", text), function("reverse", pattern))
-    found = when(position < constant(0), constant(-1), length(text) - length(pattern) - position)
+    found = reverse_find(SEARCH, text, pattern)
     return Lowered(found, single_code_point_clusters(text) & single_code_point_clusters(pattern))
 
 
 @RULES(".count", Kind.STR, Kind.STR)
 def count(text: Expression, pattern: Expression) -> Expression:
     pieces = length(function("string_split", text, pattern)) - constant(1)
-    return when(pattern == constant(""), length(text) + constant(1), pieces)
+    return count_occurrences(SEARCH, text, pattern, pieces)
 
 
 @RULES(".startswith", Kind.STR, Kind.STR)

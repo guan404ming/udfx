@@ -4,16 +4,11 @@ import operator
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered, register_float_variants
+from udfx.backends.base import Lowered, register_extremum, register_float_variants
 from udfx.backends.spark.conversions import float_int
-from udfx.backends.spark.numbers import cast_float64, either_nan, floor
+from udfx.backends.spark.numbers import ORDER, cast_float64, floor
 from udfx.backends.spark.rules import RULES
-from udfx.semantics.numbers import (
-    EXACT_POWERS_OF_TEN,
-    HALF_INTEGER_LIMIT,
-    ROUND_OVERFLOW_LIMIT,
-    Binary,
-)
+from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
 
 
@@ -21,26 +16,15 @@ def identity(value: Column) -> Column:
     return value
 
 
+ROUND = RoundPrimitives(functions.lit, functions.pow, floor, functions.abs, cast_float64)
+
+
 def power(base: Column, exponent: Column) -> Lowered[Column]:
     return Lowered(functions.pow(base, exponent), functions.lit(False))
 
 
-def register_extremum(name: str, compare: Binary) -> None:
-    def ordered(left: Column, right: Column) -> Column:
-        return functions.when(compare(right, left) & ~either_nan(left, right), right).otherwise(
-            left
-        )
-
-    def total(left: Column, right: Column) -> Column:
-        return functions.when(compare(right, left), right).otherwise(left)
-
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    RULES(name, Kind.INT, Kind.INT)(total)
-    RULES(name, Kind.STR, Kind.STR)(total)
-
-
-register_extremum("max", operator.gt)
-register_extremum("min", operator.lt)
+register_extremum(RULES, "max", operator.gt, ORDER)
+register_extremum(RULES, "min", operator.lt, ORDER)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(functions.sqrt)
@@ -59,18 +43,11 @@ def pow_overflows(base: Column, exponent: Column) -> Lowered[Column]:
 
 @RULES("round", Kind.FLOAT, Kind.INT)
 def round_digits(value: Column, digits: Column) -> Lowered[Column]:
-    scale = functions.pow(functions.lit(10.0), cast_float64(digits))
-    scaled = value * scale
-    tie = scaled - floor(scaled) == 0.5
-    exact = (
-        digits.between(0, EXACT_POWERS_OF_TEN)
-        & (functions.abs(scaled) < HALF_INTEGER_LIMIT)
-        & ((digits == 0) | ~tie)
-    )
-    return Lowered(functions.try_divide(functions.rint(scaled), scale), exact)
+    rounding = scaled_round(ROUND, value, digits)
+    rounded = functions.try_divide(functions.rint(rounding.scaled), rounding.scale)
+    return Lowered(rounded, rounding.exact)
 
 
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
 def round_overflows(value: Column, digits: Column) -> Lowered[Column]:
-    safe = (digits >= 0) | (functions.abs(value) < ROUND_OVERFLOW_LIMIT)
-    return Lowered(functions.lit(False), safe)
+    return Lowered(functions.lit(False), round_overflow_safe(ROUND, value, digits))

@@ -56,3 +56,21 @@ def _parse(
     value = cast(cleaned)
     literal = primitives.matches(text, pattern)
     return value, is_ascii(primitives, text) & (primitives.not_null(value) | ~literal)
+
+
+@dataclass(frozen=True)
+class SpellingPrimitives:
+    literal: Callable[[object], Any]
+    when: Callable[[Any, Any, Any], Any]
+    is_null: Callable[[Any], Any]
+    coalesce: Callable[[Any, Any], Any]
+
+
+def show_none(primitives: SpellingPrimitives, text: Any) -> Any:
+    return primitives.coalesce(text, primitives.literal("None"))
+
+
+def bool_text(primitives: SpellingPrimitives, value: Any) -> Any:
+    literal = primitives.literal
+    named = primitives.when(value, literal("True"), literal("False"))
+    return primitives.when(primitives.is_null(value), literal("None"), named)

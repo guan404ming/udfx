@@ -7,11 +7,14 @@ from udfx.backends.base import Lowered
 from udfx.backends.datafusion.numbers import cast_float64, finite
 from udfx.backends.datafusion.rules import RULES, length, when
 from udfx.semantics.literals import (
+    SpellingPrimitives,
     TextPrimitives,
+    bool_text,
     float_parses,
     int_parses,
     parse_float,
     parse_int,
+    show_none,
 )
 from udfx.semantics.numbers import (
     REPR_FIXED_MAX,
@@ -30,6 +33,8 @@ TEXT = TextPrimitives(
     try_float=lambda text: text.try_cast(pa.float64()),
 )
 
+SPELLING = SpellingPrimitives(lit, when, Expr.is_null, functions.coalesce)
+
 
 @RULES("int", Kind.FLOAT)
 def float_int(value: Expr) -> Lowered[Expr]:
@@ -47,13 +52,9 @@ def float_float(value: Expr) -> Expr:
     return value
 
 
-def show_none(text: Expr) -> Expr:
-    return functions.coalesce(text, lit("None"))
-
-
 @RULES("str", Kind.INT)
 def int_str(value: Expr) -> Expr:
-    return show_none(value.cast(pa.string()))
+    return show_none(SPELLING, value.cast(pa.string()))
 
 
 @RULES("str", Kind.FLOAT)
@@ -61,15 +62,15 @@ def float_str(value: Expr) -> Lowered[Expr]:
     size = functions.abs(value)
     fixed = (size >= lit(REPR_FIXED_MIN)) & (size < lit(REPR_FIXED_MAX))
     exact = value.is_null() | (value == lit(0.0)) | fixed
-    return Lowered(show_none(value.cast(pa.string())), exact)
+    return Lowered(show_none(SPELLING, value.cast(pa.string())), exact)
 
 
 @RULES("str", Kind.BOOL)
 def bool_str(value: Expr) -> Expr:
-    return when(value.is_null(), lit("None"), when(value, lit("True"), lit("False")))
+    return bool_text(SPELLING, value)
 
 
-RULES("str", Kind.STR)(show_none)
+RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 
 @RULES("int_parses", Kind.STR)

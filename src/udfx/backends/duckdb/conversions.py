@@ -16,11 +16,14 @@ from udfx.backends.duckdb.rules import (
 from udfx.semantics.literals import (
     FLOAT_LITERAL,
     INT_LITERAL,
+    SpellingPrimitives,
     TextPrimitives,
+    bool_text,
     float_parses,
     int_parses,
     parse_float,
     parse_int,
+    show_none,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -51,6 +54,8 @@ TEXT = TextPrimitives(
     try_float=try_float,
 )
 
+SPELLING = SpellingPrimitives(constant, when, Expression.isnull, duckdb.CoalesceOperator)
+
 
 @RULES("int", Kind.FLOAT)
 def float_int(value: Expression) -> Lowered[Expression]:
@@ -66,30 +71,25 @@ def float_float(value: Expression) -> Expression:
     return value
 
 
-def show_none(text: Expression) -> Expression:
-    return duckdb.CoalesceOperator(text, constant("None"))
-
-
 @RULES("str", Kind.INT)
 def int_str(value: Expression) -> Expression:
-    return show_none(value.cast(sqltypes.VARCHAR))
+    return show_none(SPELLING, value.cast(sqltypes.VARCHAR))
 
 
 @RULES("str", Kind.FLOAT)
 def float_str(value: Expression) -> Lowered[Expression]:
     return Lowered(
-        show_none(value.cast(sqltypes.VARCHAR)),
+        show_none(SPELLING, value.cast(sqltypes.VARCHAR)),
         ~duckdb.CoalesceOperator(is_nan(value), constant(False)),
     )
 
 
 @RULES("str", Kind.BOOL)
 def bool_str(value: Expression) -> Expression:
-    named = when(value, constant("True"), constant("False"))
-    return when(value.isnull(), constant("None"), named)
+    return bool_text(SPELLING, value)
 
 
-RULES("str", Kind.STR)(show_none)
+RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 
 @RULES("int_parses", Kind.STR)

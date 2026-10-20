@@ -27,7 +27,11 @@ from udfx.semantics.numbers import (
     FLOAT_INT_MAX,
     Binary,
     FloatPrimitives,
+    IntegerPrimitives,
+    OrderPrimitives,
+    division_overflows,
     float_divmod,
+    int_divmod,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -68,21 +72,13 @@ def either_nan(left: Expression, right: Expression) -> Expression:
     )
 
 
-def widened_exact(value: Expression) -> Expression:
-    return value.isnull() | within_exact_float_range(value)
-
-
-def ordered(left: Expression, right: Expression) -> Expression:
-    return ~is_nan(left) & ~is_nan(right)
-
-
 def try_truncate_int64(value: Expression) -> Expression:
     fits = (value >= constant(-INT64_LIMIT)) & (value < constant(INT64_LIMIT))
     return when(fits, function("trunc", value).cast(sqltypes.BIGINT), NULL)
 
 
 def safe_divisor(left: Expression, right: Expression) -> Expression:
-    return when((left == constant(INT64_MIN)) & (right == constant(-1)), constant(1), right)
+    return when(division_overflows(constant, left, right), constant(1), right)
 
 
 def truncated_remainder(left: Expression, right: Expression) -> tuple[Expression, Expression]:
@@ -113,16 +109,10 @@ def float_mod(left: Expression, right: Expression) -> Lowered[Expression]:
     return Lowered(remainder, exact)
 
 
-def int_divmod(left: Expression, right: Expression) -> tuple[Expression, Expression, Expression]:
-    divisor = safe_divisor(left, right)
-    quotient, remainder = left // divisor, left % divisor
-    adjust = (remainder != constant(0)) & ((remainder < constant(0)) != (right < constant(0)))
-    exact = ~((left == constant(INT64_MIN)) & (right == constant(-1)))
-    return (
-        when(adjust, quotient - constant(1), quotient),
-        when(adjust, remainder + right, remainder),
-        exact,
-    )
+INTEGERS = IntegerPrimitives(constant, when, operator.floordiv)
+
+
+ORDER = OrderPrimitives(when, either_nan, Expression.isnull, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -130,7 +120,7 @@ for _name, _operation in ARITHMETIC.items():
     register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
+    register_comparison(RULES, _name, _compare, cast_float64, ORDER)
 
 register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
@@ -162,13 +152,13 @@ def int_truediv(left: Expression, right: Expression) -> Lowered[Expression]:
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
 def int_floordiv(left: Expression, right: Expression) -> Lowered[Expression]:
-    quotient, _, exact = int_divmod(left, right)
+    quotient, _, exact = int_divmod(INTEGERS, left, right)
     return Lowered(quotient, exact)
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)
 def int_mod(left: Expression, right: Expression) -> Lowered[Expression]:
-    _, remainder, exact = int_divmod(left, right)
+    _, remainder, exact = int_divmod(INTEGERS, left, right)
     return Lowered(remainder, exact)
 
 
@@ -182,8 +172,8 @@ def float_ne(left: Expression, right: Expression) -> Expression:
     return ~null_safe_equal(left, right) | either_nan(left, right)
 
 
-register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
-register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
+register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)

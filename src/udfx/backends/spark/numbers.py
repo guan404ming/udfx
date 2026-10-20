@@ -17,7 +17,10 @@ from udfx.semantics.numbers import (
     COMPARISONS,
     FLOAT_INT_MAX,
     FloatPrimitives,
+    IntegerPrimitives,
+    OrderPrimitives,
     float_divmod,
+    int_divmod,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -50,16 +53,8 @@ def either_nan(left: Column, right: Column) -> Column:
     return functions.isnan(left) | functions.isnan(right)
 
 
-def widened_exact(value: Column) -> Column:
-    return value.isNull() | within_exact_float_range(value)
-
-
-def ordered(left: Column, right: Column) -> Column:
-    return ~either_nan(left, right)
-
-
-def nonzero(divisor: Column, undefined: Column) -> Column:
-    return when((divisor == 0) | undefined, functions.lit(1), divisor)
+def nonzero(divisor: Column) -> Column:
+    return when(divisor == 0, functions.lit(1), divisor)
 
 
 def floor(value: Column) -> Column:
@@ -73,27 +68,25 @@ PRIMITIVES = FloatPrimitives(
 
 
 def float_floordiv(left: Column, right: Column) -> Lowered[Column]:
-    quotient, _, exact = float_divmod(PRIMITIVES, left, nonzero(right, functions.lit(False)))
+    quotient, _, exact = float_divmod(PRIMITIVES, left, nonzero(right))
     return Lowered(quotient, exact)
 
 
 def float_mod(left: Column, right: Column) -> Lowered[Column]:
-    _, remainder, exact = float_divmod(PRIMITIVES, left, nonzero(right, functions.lit(False)))
+    _, remainder, exact = float_divmod(PRIMITIVES, left, nonzero(right))
     return Lowered(remainder, exact)
 
 
-def int_divmod(left: Column, right: Column) -> tuple[Column, Column]:
-    divisor = nonzero(right, (left == INT64_MIN) & (right == -1))
-    remainder = left % divisor
-    adjust = (remainder != 0) & ((remainder < 0) != (right < 0))
-    shift = when(adjust, functions.lit(1), functions.lit(0))
-    quotient = functions.call_function("div", left, divisor) - shift
-    modulo = when(adjust, remainder + divisor, remainder)
-    return quotient, modulo
+INTEGERS = IntegerPrimitives(
+    functions.lit, when, lambda left, right: functions.call_function("div", left, right)
+)
 
 
 def float_isinf(value: Column) -> Column:
     return functions.abs(value) == INFINITY
+
+
+ORDER = OrderPrimitives(when, either_nan, Column.isNull, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -101,14 +94,14 @@ for _name, _operation in ARITHMETIC.items():
     register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
+    register_comparison(RULES, _name, _compare, cast_float64, ORDER)
 
 register_float_variants(RULES, "__truediv__", functions.try_divide, cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
 register_float_variants(RULES, "__mod__", float_mod, cast_float64)
 
 RULES("__eq__", Kind.INT, Kind.INT)(Column.eqNullSafe)
-RULES("__mod__", Kind.INT, Kind.INT)(lambda left, right: int_divmod(left, right)[1])
+RULES("__mod__", Kind.INT, Kind.INT)(lambda left, right: int_divmod(INTEGERS, left, right)[1])
 RULES("__neg__", Kind.FLOAT)(Column.__neg__)
 RULES("abs", Kind.FLOAT)(functions.abs)
 RULES("math.isnan", Kind.FLOAT)(functions.isnan)
@@ -125,7 +118,8 @@ def int_truediv(left: Column, right: Column) -> Lowered[Column]:
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
 def int_floordiv(left: Column, right: Column) -> Lowered[Column]:
-    return Lowered(int_divmod(left, right)[0], ~((left == INT64_MIN) & (right == -1)))
+    quotient, _, exact = int_divmod(INTEGERS, left, right)
+    return Lowered(quotient, exact)
 
 
 @RULES("__ne__", Kind.INT, Kind.INT)
@@ -143,8 +137,8 @@ def float_ne(left: Column, right: Column) -> Column:
     return ~left.eqNullSafe(right) | either_nan(left, right)
 
 
-register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
-register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
+register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)

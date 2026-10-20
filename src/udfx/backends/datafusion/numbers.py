@@ -19,7 +19,10 @@ from udfx.semantics.numbers import (
     FLOAT_INT_MAX,
     Binary,
     FloatPrimitives,
+    IntegerPrimitives,
+    OrderPrimitives,
     float_divmod,
+    int_divmod,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -55,14 +58,6 @@ def either_nan(left: Expr, right: Expr) -> Expr:
     return is_nan(left) | is_nan(right)
 
 
-def widened_exact(value: Expr) -> Expr:
-    return value.is_null() | within_exact_float_range(value)
-
-
-def ordered(left: Expr, right: Expr) -> Expr:
-    return ~either_nan(left, right)
-
-
 PRIMITIVES = FloatPrimitives(
     when, functions.floor, functions.signum, lambda left, right: (left % right, None)
 )
@@ -78,16 +73,14 @@ def float_mod(left: Expr, right: Expr) -> Lowered[Expr]:
     return Lowered(remainder, exact)
 
 
-def int_divmod(left: Expr, right: Expr) -> tuple[Expr, Expr]:
-    unsafe = (right == lit(0)) | ((left == lit(INT64_MIN)) & (right == lit(-1)))
-    divisor = when(unsafe, lit(1), right)
-    quotient, remainder = left / divisor, left % divisor
-    shift = (remainder != lit(0)) & ((remainder < lit(0)) != (divisor < lit(0)))
-    return when(shift, quotient - lit(1), quotient), when(shift, remainder + divisor, remainder)
+INTEGERS = IntegerPrimitives(lit, when, operator.truediv)
 
 
 def finite(value: Expr) -> Expr:
     return ~functions.isnan(value) & (functions.abs(value) != lit(INFINITY))
+
+
+ORDER = OrderPrimitives(when, either_nan, Expr.is_null, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -95,7 +88,7 @@ for _name, _operation in ARITHMETIC.items():
     register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
+    register_comparison(RULES, _name, _compare, cast_float64, ORDER)
 
 register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
@@ -112,12 +105,13 @@ def int_truediv(left: Expr, right: Expr) -> Lowered[Expr]:
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
 def int_floordiv(left: Expr, right: Expr) -> Lowered[Expr]:
-    return Lowered(int_divmod(left, right)[0], ~((left == lit(INT64_MIN)) & (right == lit(-1))))
+    quotient, _, exact = int_divmod(INTEGERS, left, right)
+    return Lowered(quotient, exact)
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)
 def int_mod(left: Expr, right: Expr) -> Expr:
-    return int_divmod(left, right)[1]
+    return int_divmod(INTEGERS, left, right)[1]
 
 
 @RULES("__eq__", Kind.INT, Kind.INT)
@@ -142,8 +136,8 @@ def float_ne(left: Expr, right: Expr) -> Expr:
     return ~float_eq(left, right)
 
 
-register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
-register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
+register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)

@@ -3,7 +3,9 @@ from __future__ import annotations
 import operator
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
+
+from udfx.types import INT64_MIN
 
 FLOAT_INT_MAX = 2**53
 EXACT_POWERS_OF_TEN = 22
@@ -50,3 +52,86 @@ def float_divmod(primitives: FloatPrimitives, left: Any, right: Any) -> tuple[An
     snapped = primitives.when(quotient - floored > 0.5, floored + 1.0, floored)
     quotient = primitives.when(quotient != 0.0, snapped, left / right * 0.0)
     return quotient, remainder, exact
+
+
+@dataclass(frozen=True)
+class OrderPrimitives:
+    when: Callable[[Any, Any, Any], Any]
+    either_nan: Callable[[Any, Any], Any]
+    is_null: Callable[[Any], Any]
+    within_exact_float_range: Callable[[Any], Any]
+
+
+def float_compare(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any) -> Any:
+    return compare(left, right) & ~primitives.either_nan(left, right)
+
+
+def widened_exact(primitives: OrderPrimitives, value: Any) -> Any:
+    return primitives.is_null(value) | primitives.within_exact_float_range(value)
+
+
+def extremum(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any) -> Any:
+    return primitives.when(compare(right, left), right, left)
+
+
+def float_extremum(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any) -> Any:
+    replace = compare(right, left) & ~primitives.either_nan(left, right)
+    return primitives.when(replace, right, left)
+
+
+@dataclass(frozen=True)
+class RoundPrimitives:
+    literal: Callable[[object], Any]
+    power: Callable[[Any, Any], Any]
+    floor: Callable[[Any], Any]
+    abs: Callable[[Any], Any]
+    to_float: Callable[[Any], Any]
+
+
+class ScaledRound(NamedTuple):
+    scale: Any
+    scaled: Any
+    exact: Any
+
+
+def scaled_round(primitives: RoundPrimitives, value: Any, digits: Any) -> ScaledRound:
+    literal = primitives.literal
+    scale = primitives.power(literal(10.0), primitives.to_float(digits))
+    scaled = value * scale
+    tie = scaled - primitives.floor(scaled) == literal(0.5)
+    exact = (
+        (digits >= literal(0))
+        & (digits <= literal(EXACT_POWERS_OF_TEN))
+        & (primitives.abs(scaled) < literal(HALF_INTEGER_LIMIT))
+        & ((digits == literal(0)) | ~tie)
+    )
+    return ScaledRound(scale, scaled, exact)
+
+
+def round_overflow_safe(primitives: RoundPrimitives, value: Any, digits: Any) -> Any:
+    literal = primitives.literal
+    return (digits >= literal(0)) | (primitives.abs(value) < literal(ROUND_OVERFLOW_LIMIT))
+
+
+@dataclass(frozen=True)
+class IntegerPrimitives:
+    literal: Callable[[object], Any]
+    when: Callable[[Any, Any, Any], Any]
+    truncated_divide: Callable[[Any, Any], Any]
+
+
+def division_overflows(literal: Callable[[object], Any], left: Any, right: Any) -> Any:
+    return (left == literal(INT64_MIN)) & (right == literal(-1))
+
+
+def int_divmod(primitives: IntegerPrimitives, left: Any, right: Any) -> tuple[Any, Any, Any]:
+    literal, when = primitives.literal, primitives.when
+    overflow = division_overflows(literal, left, right)
+    divisor = when((right == literal(0)) | overflow, literal(1), right)
+    quotient, remainder = primitives.truncated_divide(left, divisor), left % divisor
+    adjust = (remainder != literal(0)) & ((remainder < literal(0)) != (divisor < literal(0)))
+    return (
+        when(adjust, quotient - literal(1), quotient),
+        when(adjust, remainder + divisor, remainder),
+        ~overflow,
+    )

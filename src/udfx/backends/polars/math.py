@@ -4,16 +4,11 @@ import operator
 
 import polars as pl
 
-from udfx.backends.base import Lowered, register_float_variants
+from udfx.backends.base import Lowered, register_extremum, register_float_variants
 from udfx.backends.polars.conversions import float_int
-from udfx.backends.polars.numbers import cast_float64, either_nan
+from udfx.backends.polars.numbers import ORDER, cast_float64
 from udfx.backends.polars.rules import RULES, broadcast
-from udfx.semantics.numbers import (
-    EXACT_POWERS_OF_TEN,
-    HALF_INTEGER_LIMIT,
-    ROUND_OVERFLOW_LIMIT,
-    Binary,
-)
+from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
 
 
@@ -25,26 +20,17 @@ def identity(value: pl.Expr) -> pl.Expr:
     return value
 
 
+ROUND = RoundPrimitives(pl.lit, pl.Expr.pow, pl.Expr.floor, pl.Expr.abs, cast_float64)
+
+
 def power(base: pl.Expr, exponent: pl.Expr) -> Lowered[pl.Expr]:
     base, exponent = broadcast(base), broadcast(exponent)
     complex_result = (base < 0.0) & (exponent.floor() != exponent)
     return Lowered(base.pow(exponent), (pl.len() > 1) & ~complex_result)
 
 
-def register_extremum(name: str, compare: Binary) -> None:
-    def ordered(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-        return pl.when(compare(right, left) & ~either_nan(left, right)).then(right).otherwise(left)
-
-    def total(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-        return pl.when(compare(right, left)).then(right).otherwise(left)
-
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    RULES(name, Kind.INT, Kind.INT)(total)
-    RULES(name, Kind.STR, Kind.STR)(total)
-
-
-register_extremum("max", operator.gt)
-register_extremum("min", operator.lt)
+register_extremum(RULES, "max", operator.gt, ORDER)
+register_extremum(RULES, "min", operator.lt, ORDER)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(pl.Expr.sqrt)
@@ -65,17 +51,11 @@ def pow_overflows(base: pl.Expr, exponent: pl.Expr) -> Lowered[pl.Expr]:
 
 @RULES("round", Kind.FLOAT, Kind.INT)
 def round_digits(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
-    scale = pl.lit(10.0).pow(cast_float64(digits))
-    scaled = value * scale
-    tie = scaled - scaled.floor() == 0.5
-    exact = (
-        digits.is_between(0, EXACT_POWERS_OF_TEN)
-        & (scaled.abs() < HALF_INTEGER_LIMIT)
-        & ((digits == 0) | ~tie)
-    )
-    return Lowered(broadcast(half_even(scaled)) / broadcast(scale), exact)
+    rounding = scaled_round(ROUND, value, digits)
+    rounded = broadcast(half_even(rounding.scaled)) / broadcast(rounding.scale)
+    return Lowered(rounded, rounding.exact)
 
 
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
 def round_overflows(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(pl.lit(False), (digits >= 0) | (value.abs() < ROUND_OVERFLOW_LIMIT))
+    return Lowered(pl.lit(False), round_overflow_safe(ROUND, value, digits))

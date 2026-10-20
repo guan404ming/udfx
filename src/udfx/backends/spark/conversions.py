@@ -6,11 +6,14 @@ from udfx.backends.base import Lowered
 from udfx.backends.spark.numbers import cast_float64, float_isinf
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import (
+    SpellingPrimitives,
     TextPrimitives,
+    bool_text,
     float_parses,
     int_parses,
     parse_float,
     parse_int,
+    show_none,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -29,6 +32,8 @@ TEXT = TextPrimitives(
     try_float=lambda text: text.try_cast("double"),
 )
 
+SPELLING = SpellingPrimitives(functions.lit, when, Column.isNull, functions.coalesce)
+
 
 @RULES("int", Kind.FLOAT)
 def float_int(value: Column) -> Lowered[Column]:
@@ -46,29 +51,26 @@ def float_float(value: Column) -> Column:
     return value
 
 
-def show_none(text: Column) -> Column:
-    return functions.coalesce(text, functions.lit("None"))
-
-
 @RULES("str", Kind.INT)
 def int_str(value: Column) -> Column:
-    return show_none(value.cast("string"))
+    return show_none(SPELLING, value.cast("string"))
 
 
 @RULES("str", Kind.FLOAT)
 def float_str(value: Column) -> Lowered[Column]:
     size = functions.abs(value)
     fixed = (size >= JAVA_FIXED_MIN) & (size < JAVA_FIXED_MAX)
-    return Lowered(show_none(value.cast("string")), value.isNull() | (value == 0.0) | fixed)
+    return Lowered(
+        show_none(SPELLING, value.cast("string")), value.isNull() | (value == 0.0) | fixed
+    )
 
 
 @RULES("str", Kind.BOOL)
 def bool_str(value: Column) -> Column:
-    named = when(value, functions.lit("True"), functions.lit("False"))
-    return when(value.isNull(), functions.lit("None"), named)
+    return bool_text(SPELLING, value)
 
 
-RULES("str", Kind.STR)(show_none)
+RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 
 @RULES("int_parses", Kind.STR)

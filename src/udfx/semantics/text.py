@@ -142,3 +142,25 @@ def slice_bounds(
     begin = clamp(start, zero)
     end = clamp(stop, text_length)
     return SliceBounds(begin, primitives.clip(end - begin, zero, text_length))
+
+
+@dataclass(frozen=True)
+class SearchPrimitives:
+    literal: Callable[[object], Any]
+    when: Callable[[Any, Any, Any], Any]
+    length: Callable[[Any], Any]
+    reverse: Callable[[Any], Any]
+    find: Callable[[Any, Any], Any]
+
+
+def reverse_find(primitives: SearchPrimitives, text: Any, pattern: Any) -> Any:
+    position = primitives.find(primitives.reverse(text), primitives.reverse(pattern))
+    offset = primitives.length(text) - primitives.length(pattern) - position
+    return primitives.when(position < primitives.literal(0), primitives.literal(-1), offset)
+
+
+def count_occurrences(
+    primitives: SearchPrimitives, text: Any, pattern: Any, occurrences: Any
+) -> Any:
+    empty = pattern == primitives.literal("")
+    return primitives.when(empty, primitives.length(text) + primitives.literal(1), occurrences)

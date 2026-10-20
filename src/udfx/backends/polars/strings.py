@@ -12,10 +12,12 @@ from udfx.semantics.text import (
     CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
+    SearchPrimitives,
     SlicePrimitives,
     case_guard,
     has_prefix_suffix_overlap,
     non_whitespace_pattern,
+    reverse_find,
     slice_bounds,
     whitespace,
 )
@@ -96,6 +98,9 @@ def single_code_point_clusters(text: pl.Expr) -> pl.Expr:
     return ~text.str.contains(CLUSTER_JOINERS)
 
 
+SEARCH = SearchPrimitives(pl.lit, when, length, lambda text: text.str.reverse(), find)
+
+
 @RULES(".rfind", Kind.STR, Kind.STR)
 def rfind(text: pl.Expr, pattern: pl.Expr) -> RuleResult[pl.Expr]:
     known = literal_value(pattern)
@@ -103,8 +108,7 @@ def rfind(text: pl.Expr, pattern: pl.Expr) -> RuleResult[pl.Expr]:
         suffix = length(text.str.split(pattern).list.last())
         found = length(text) - length(pattern) - suffix
         return when(text.str.contains(pattern, literal=True), found, pl.lit(-1))
-    position = find(text.str.reverse(), pattern.str.reverse())
-    found = when(position < 0, pl.lit(-1), length(text) - length(pattern) - position)
+    found = reverse_find(SEARCH, text, pattern)
     return Lowered(found, single_code_point_clusters(text) & single_code_point_clusters(pattern))
 
 
