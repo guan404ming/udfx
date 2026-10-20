@@ -71,7 +71,10 @@ def explore(context: Context, start: State) -> list[Outcome]:
     while pending:
         steps += 1
         if steps > MAX_STEPS:
-            raise Unsupported("path explosion")
+            raise Unsupported(
+                f"more than {MAX_STEPS} execution paths; "
+                "the function has too many independent branches for one expression"
+            )
         state = pending.pop()
         instruction = context.instructions[state.index]
         handler = HANDLERS.get(instruction.opname)

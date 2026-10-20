@@ -4,6 +4,7 @@ from hypothesis import given
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
+from udfx.frontend.machine import MAX_STEPS
 from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
@@ -97,3 +98,42 @@ def test_truthiness_matches_python(rows: list[tuple[object, ...]]) -> None:
 @given(batches({"a": INT, "b": INT}))
 def test_comparison_branch_matches_python(rows: list[tuple[object, ...]]) -> None:
     assert check_function(larger, {"a": INT, "b": INT}, POLARS, rows) == []
+
+
+def many_branches(a: int) -> int:
+    total = 0
+    if a > 1:
+        total += 1
+    if a > 2:
+        total += 2
+    if a > 3:
+        total += 3
+    if a > 4:
+        total += 4
+    if a > 5:
+        total += 5
+    if a > 6:
+        total += 6
+    if a > 7:
+        total += 7
+    if a > 8:
+        total += 8
+    if a > 9:
+        total += 9
+    if a > 10:
+        total += 10
+    if a > 11:
+        total += 11
+    if a > 12:
+        total += 12
+    return total
+
+
+def test_too_many_paths_names_the_cause() -> None:
+    message = (
+        f"more than {MAX_STEPS} execution paths; "
+        "the function has too many independent branches for one expression"
+    )
+    with pytest.raises(Unsupported) as error:
+        trace(many_branches, {"a": INT})
+    assert str(error.value) == message
