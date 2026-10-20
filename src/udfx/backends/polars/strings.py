@@ -76,14 +76,12 @@ def find(a: pl.Expr, b: pl.Expr) -> pl.Expr:
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
-def reverse(text: pl.Expr) -> pl.Expr:
-    return text.str.split("").list.reverse().list.join("")
-
-
 @RULES(".rfind", Kind.STR, Kind.STR)
 def rfind(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
-    position = find(reverse(text), reverse(pattern))
-    return pl.when(position < 0).then(-1).otherwise(length(text) - length(pattern) - position)
+    suffix = length(text.str.split(pattern).list.last())
+    found = text.str.contains(pattern, literal=True)
+    position = length(text) - length(pattern) - suffix
+    return pl.when(pattern == "").then(length(text)).when(found).then(position).otherwise(-1)
 
 
 @RULES(".count", Kind.STR, Kind.STR)
