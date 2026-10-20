@@ -49,12 +49,14 @@ def check_translation(
         for (row, out), value in zip(returned, actual, strict=True)
         if not same(out.value, value)
     ]
-    for row, out in zip(rows, expected, strict=True):
-        if isinstance(out, Raised):
-            got = _attempt(backend, expr, schema, [row])
-            if not (isinstance(got, Raised) and got.kind is out.kind):
-                mismatches.append(Mismatch(row, out, repr(got)))
-    if len(returned) < len(rows) and not isinstance(_attempt(backend, expr, schema, rows), Raised):
+    raising = {
+        out.kind: row for row, out in zip(rows, expected, strict=True) if isinstance(out, Raised)
+    }
+    for kind, row in raising.items():
+        got = _attempt(backend, expr, schema, [row])
+        if not (isinstance(got, Raised) and got.kind is kind):
+            mismatches.append(Mismatch(row, Raised(kind), repr(got)))
+    if raising and not isinstance(_attempt(backend, expr, schema, rows), Raised):
         mismatches.append(Mismatch(rows[0], Raised(Exception), "batch did not raise"))
     return mismatches
 
