@@ -9,7 +9,8 @@ from udfx.frontend.logic import neg
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Value
-from udfx.ir import Lit
+from udfx.ir import Lit, Node
+from udfx.types import INT, Kind
 
 BINARY_OPS: dict[str, str] = {
     "+": "__add__",
@@ -83,6 +84,25 @@ def contains_op(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]
     (item, container), rest = state.pop(2)
     node, faults = invoke("__contains__", [node_of(container), node_of(item)], TypeError)
     return emit(ctx, rest, Value(neg(node) if inst.arg else node), faults)
+
+
+@handles("BINARY_SUBSCR")
+def binary_subscr(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+    (container, index), rest = state.pop(2)
+    node, faults = invoke("__getitem__", [node_of(container), node_of(index)], TypeError)
+    return emit(ctx, rest, Value(node), faults)
+
+
+@handles("BINARY_SLICE")
+def binary_slice(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+    (container, start, stop), rest = state.pop(3)
+    node, faults = invoke("slice", [node_of(container), bound(start), bound(stop)], TypeError)
+    return emit(ctx, rest, Value(node), faults)
+
+
+def bound(item: Item) -> Node:
+    node = node_of(item)
+    return Lit(None, INT.or_none()) if node.type.kind is Kind.NONE else node
 
 
 def is_none_constant(item: Item) -> bool:
