@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, ClassVar, cast
+
+from udfx.errors import Unsupported
+from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
+from udfx.ops.registry import OpKey
+from udfx.program import Program
+from udfx.types import Kind, Type
+
+Row = tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class Lowered[E]:
+    expr: E
+    exact: E | None = None
+
+
+class RuleSet[E]:
+    def __init__(self) -> None:
+        self._rules: dict[OpKey, Callable[..., E | Lowered[E]]] = {}
+
+    def __call__(
+        self, name: str, *kinds: Kind
+    ) -> Callable[[Callable[..., E | Lowered[E]]], Callable[..., E | Lowered[E]]]:
+        key = OpKey(name, kinds)
+
+        def decorate(rule: Callable[..., E | Lowered[E]]) -> Callable[..., E | Lowered[E]]:
+            if key in self._rules:
+                raise ValueError(f"duplicate rule {key}")
+            self._rules[key] = rule
+            return rule
+
+        return decorate
+
+    def get(self, key: OpKey) -> Callable[..., E | Lowered[E]] | None:
+        return self._rules.get(key)
+
+    def keys(self) -> frozenset[OpKey]:
+        return frozenset(self._rules)
+
+
+class Backend[E](ABC):
+    name: ClassVar[str]
+    rules: ClassVar[RuleSet[Any]]
+
+    @abstractmethod
+    def column(self, col: Col) -> E: ...
+
+    @abstractmethod
+    def literal(self, lit: Lit) -> E: ...
+
+    @abstractmethod
+    def select(self, cond: E, then: E, orelse: E) -> E: ...
+
+    @abstractmethod
+    def both(self, a: E, b: E) -> E: ...
+
+    @abstractmethod
+    def negate(self, a: E) -> E: ...
+
+    @abstractmethod
+    def fallback(self, native: E, exact: E, program: Program) -> E: ...
+
+    @abstractmethod
+    def evaluate(
+        self, expr: E, schema: Mapping[str, Type], rows: Sequence[Row]
+    ) -> list[object]: ...
+
+    def lower(self, node: Node) -> Lowered[E]:
+        match node:
+            case Col():
+                return Lowered(self.column(node))
+            case Lit():
+                return Lowered(self.literal(node))
+            case If():
+                return self._lower_if(node)
+            case Call():
+                return self._lower_call(node)
+
+    def build(self, program: Program) -> E:
+        value = self.lower(program.value)
+        exact = value.exact
+        if program.fault != FALSE:
+            fault = self.lower(program.fault)
+            exact = self._all(exact, fault.exact, self.negate(fault.expr))
+        if exact is None:
+            return value.expr
+        return self.fallback(value.expr, exact, program)
+
+    def _lower_if(self, node: If) -> Lowered[E]:
+        cond, then, orelse = self.lower(node.cond), self.lower(node.then), self.lower(node.orelse)
+        expr = self.select(cond.expr, then.expr, orelse.expr)
+        if then.exact is None and orelse.exact is None:
+            return Lowered(expr, cond.exact)
+        branch = self.select(cond.expr, self._exact(then), self._exact(orelse))
+        return Lowered(expr, self._all(cond.exact, branch))
+
+    def _lower_call(self, node: Call) -> Lowered[E]:
+        rule = self.rules.get(node.op.key)
+        if rule is None:
+            raise Unsupported(f"{self.name} has no rule for {node.op.key}")
+        args = [self.lower(arg) for arg in node.args]
+        result: E | Lowered[E] = rule(*(arg.expr for arg in args))
+        lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
+        return Lowered(lowered.expr, self._all(*(arg.exact for arg in args), lowered.exact))
+
+    def _exact(self, lowered: Lowered[E]) -> E:
+        return lowered.exact if lowered.exact is not None else self.literal(TRUE)
+
+    def _all(self, *parts: E | None) -> E | None:
+        present = [part for part in parts if part is not None]
+        if not present:
+            return None
+        combined = present[0]
+        for part in present[1:]:
+            combined = self.both(combined, part)
+        return combined

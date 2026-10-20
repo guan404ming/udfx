@@ -1,0 +1,50 @@
+[project]
+name = "udfx"
+version = "0.0.1"
+description = "Turn Python UDFs into native dataframe expressions"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+polars = ["polars>=2.0"]
+testing = ["hypothesis>=6.100"]
+
+[dependency-groups]
+dev = [
+    "polars>=2.0",
+    "hypothesis>=6.100",
+    "pytest>=8.3",
+    "ruff>=0.7",
+    "pyright>=1.1.390",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "PL", "N"]
+ignore = ["PLR2004", "PLR0911", "PLR0913", "N818"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/udfx/testing/strategies.py" = ["RUF001"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownVariableType = "none"
+reportUnknownLambdaType = "none"
+include = ["src", "tests"]
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
