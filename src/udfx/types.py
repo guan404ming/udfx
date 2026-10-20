@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
-__all__ = ["BOOL", "FLOAT", "INT", "NONE", "STR", "Kind", "Type", "list_of"]
+__all__ = ["BOOL", "FLOAT", "INT", "STR", "Type", "list_of"]
 
 INT64_MIN = -(2**63)
 INT64_MAX = 2**63 - 1
