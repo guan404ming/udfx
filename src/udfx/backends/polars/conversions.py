@@ -46,17 +46,19 @@ def float_float(value: pl.Expr) -> pl.Expr:
     return value
 
 
+def show_none(text: pl.Expr) -> pl.Expr:
+    return text.fill_null("None")
+
+
 @RULES("str", Kind.INT)
 def int_str(value: pl.Expr) -> pl.Expr:
-    return value.cast(pl.String).fill_null("None")
+    return show_none(value.cast(pl.String))
 
 
 @RULES("str", Kind.FLOAT)
 def float_str(value: pl.Expr) -> Lowered[pl.Expr]:
     fixed = value.abs().is_between(REPR_FIXED_MIN, REPR_FIXED_MAX, closed="left")
-    return Lowered(
-        value.cast(pl.String).fill_null("None"), value.is_null() | (value == 0.0) | fixed
-    )
+    return Lowered(show_none(value.cast(pl.String)), value.is_null() | (value == 0.0) | fixed)
 
 
 @RULES("str", Kind.BOOL)
@@ -65,9 +67,7 @@ def bool_str(value: pl.Expr) -> pl.Expr:
     return when(value.is_null(), pl.lit("None"), named)
 
 
-@RULES("str", Kind.STR)
-def str_str(value: pl.Expr) -> pl.Expr:
-    return value.fill_null("None")
+RULES("str", Kind.STR)(show_none)
 
 
 @RULES("int_parses", Kind.STR)

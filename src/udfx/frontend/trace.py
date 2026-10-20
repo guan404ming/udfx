@@ -31,7 +31,9 @@ def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Progra
     names = parameters(function.__code__)
     if list(schema) != names:
         raise Unsupported(f"schema {list(schema)} does not match parameters {names}")
-    context = Context.of(function.__code__, function.__globals__, function.__builtins__, None)
+    context = Context.from_code(
+        function.__code__, function.__globals__, function.__builtins__, None
+    )
     columns = {name: Value(Col(name, type)) for name, type in schema.items()}
     start = State(0, (), {**columns, **_closure(function)}, TRUE)
     return _merge(function, schema, explore(context, start))

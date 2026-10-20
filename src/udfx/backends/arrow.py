@@ -27,7 +27,7 @@ def dtype(type: Type) -> pa.DataType:
     return _SCALARS[type.kind]
 
 
-def gather(columns: Sequence[pa.Array]) -> Gather:
+def make_gather(columns: Sequence[pa.Array]) -> Gather:
     return lambda pending: [column.take(pending).to_pylist() for column in columns]
 
 
@@ -44,5 +44,5 @@ def fallback(
     columns: Sequence[pa.Array],
     result: pa.DataType,
 ) -> pa.Array:
-    values = backend.fallback_values(program, len(flags), pending(flags), gather(columns))
+    values = backend.fallback_values(program, len(flags), pending(flags), make_gather(columns))
     return pa.array(values, type=result)

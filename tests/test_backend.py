@@ -78,7 +78,7 @@ def test_fallback_raises_the_python_exception(backend: Backend[Any]) -> None:
 @pytest.mark.parametrize("backend", backend_params())
 def test_evaluate_forgets_earlier_python_exception(backend: Backend[Any]) -> None:
     with pytest.raises((ZeroDivisionError, RuntimeError)):
-        backend.patch(Program(inverse, {"x": INT}, Col("x", INT)), [(0,)])
+        backend.run_fallback_rows(Program(inverse, {"x": INT}, Col("x", INT)), [(0,)])
     with pytest.raises(Exception) as error:
         backend.evaluate([backend.column(Col("missing", INT))], {"x": INT}, [(1,)])
     assert not isinstance(error.value, ZeroDivisionError)

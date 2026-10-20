@@ -48,7 +48,7 @@ class PolarsBackend(Backend[pl.Expr]):
             def gather(rows: list[int]) -> list[list[object]]:
                 return [column.gather(rows).to_list() for column in columns]
 
-            patched = self.patches(program, pending, gather)
+            patched = self.evaluate_pending_rows(program, pending, gather)
             return values.scatter(pending, pl.Series(patched, dtype=result)) if pending else values
 
         inputs = [exact, native, *(pl.col(name) for name in program.schema)]

@@ -25,7 +25,7 @@ def fits_int64(wide: Expr) -> Expr:
     return wide.between(lit(INT64_MIN), lit(INT64_MAX))
 
 
-def representable(value: Expr) -> Expr:
+def within_exact_float_range(value: Expr) -> Expr:
     return value.between(lit(-FLOAT_INT_MAX), lit(FLOAT_INT_MAX))
 
 
@@ -57,7 +57,7 @@ def either_nan(left: Expr, right: Expr) -> Expr:
 
 def register_widened_variants(name: str, rule: Binary) -> None:
     def exact(value: Expr) -> Expr:
-        return value.is_null() | representable(value)
+        return value.is_null() | within_exact_float_range(value)
 
     RULES(name, Kind.INT, Kind.FLOAT)(
         lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
@@ -118,7 +118,8 @@ register_float_variants("__mod__", float_mod)
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(left: Expr, right: Expr) -> Lowered[Expr]:
     return Lowered(
-        cast_float64(left) / cast_float64(right), representable(left) & representable(right)
+        cast_float64(left) / cast_float64(right),
+        within_exact_float_range(left) & within_exact_float_range(right),
     )
 
 

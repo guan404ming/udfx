@@ -44,7 +44,7 @@ class Context:
     caller: tuple[Context, State] | None
 
     @classmethod
-    def of(
+    def from_code(
         cls,
         code: CodeType,
         scope: Mapping[str, object],
@@ -60,7 +60,7 @@ class Context:
         return cls(code, scope, builtins, instructions, index_of, protected, caller)
 
     def nested(self, code: CodeType, state: State) -> Context:
-        return Context.of(code, self.scope, self.builtins, (self, state))
+        return Context.from_code(code, self.scope, self.builtins, (self, state))
 
     def encloses(self, code: CodeType) -> bool:
         return self.code is code or (self.caller is not None and self.caller[0].encloses(code))

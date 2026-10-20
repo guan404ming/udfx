@@ -36,7 +36,7 @@ def constant(value: object) -> Item:
     return Opaque(value)
 
 
-def literal(item: Item) -> object:
+def constant_value(item: Item) -> object:
     match item:
         case Value(node=Lit(value=value)):
             return value
@@ -53,7 +53,7 @@ def is_annotation(value: object) -> bool:
 
 
 def annotation(operation: Callable[..., object], *items: Item) -> Opaque:
-    values = [literal(item) for item in items]
+    values = [constant_value(item) for item in items]
     if not all(is_annotation(value) for value in values):
         raise Unsupported(f"static {operation.__name__} of {values!r}")
     try:

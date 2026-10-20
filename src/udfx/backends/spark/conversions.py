@@ -3,7 +3,7 @@ from __future__ import annotations
 from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered
-from udfx.backends.spark.numbers import cast_float64, infinite
+from udfx.backends.spark.numbers import cast_float64, float_isinf
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import (
     TextPrimitives,
@@ -33,7 +33,7 @@ TEXT = TextPrimitives(
 @RULES("int", Kind.FLOAT)
 def float_int(value: Column) -> Lowered[Column]:
     in_range = (value >= float(INT64_MIN)) & (value < float(INT64_MAX))
-    return Lowered(value.try_cast("bigint"), in_range | functions.isnan(value) | infinite(value))
+    return Lowered(value.try_cast("bigint"), in_range | functions.isnan(value) | float_isinf(value))
 
 
 @RULES("float", Kind.INT)

@@ -4,7 +4,7 @@ import duckdb
 from duckdb import Expression, sqltypes
 
 from udfx.backends.base import Lowered
-from udfx.backends.duckdb.numbers import cast_float64, is_nan, whole, wide
+from udfx.backends.duckdb.numbers import cast_float64, cast_int128, is_nan, try_truncate_int64
 from udfx.backends.duckdb.rules import (
     NULL,
     RULES,
@@ -31,7 +31,7 @@ def matches(text: Expression, pattern: str) -> Expression:
 
 def try_int(digits: Expression) -> Expression:
     parsable = matches(digits, INT_LITERAL) & (length(digits) <= constant(38))
-    value = when(parsable, wide(digits), NULL)
+    value = when(parsable, cast_int128(digits), NULL)
     fits = value.between(constant(INT64_MIN), constant(INT64_MAX))
     return when(fits, value, NULL).cast(sqltypes.BIGINT)
 
@@ -54,7 +54,7 @@ TEXT = TextPrimitives(
 
 @RULES("int", Kind.FLOAT)
 def float_int(value: Expression) -> Lowered[Expression]:
-    value = whole(value)
+    value = try_truncate_int64(value)
     return Lowered(value, value.isnotnull() | ~function("isfinite", value))
 
 

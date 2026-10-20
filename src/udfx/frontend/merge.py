@@ -13,12 +13,12 @@ Case = tuple[tuple[Node, ...], Node | None]
 
 def merge(returns: Sequence[Return], faults: Sequence[Node]) -> Node:
     result = unified([outcome.value for outcome in returns])
-    cases: list[Case] = [(_literals(outcome.path), outcome.value) for outcome in returns]
-    cases += [(_literals(path), None) for path in faults]
+    cases: list[Case] = [(_path_predicates(outcome.path), outcome.value) for outcome in returns]
+    cases += [(_path_predicates(path), None) for path in faults]
     return _build(cases, result)
 
 
-def _literals(path: Node) -> tuple[Node, ...]:
+def _path_predicates(path: Node) -> tuple[Node, ...]:
     return tuple(part for part in conjuncts(path) if part != TRUE)
 
 

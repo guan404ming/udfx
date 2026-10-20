@@ -10,7 +10,7 @@ from datafusion import Expr, SessionContext, functions, udf
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
 from udfx.backends.base import RESERVED, Backend, Row, RuleSet
-from udfx.backends.datafusion.rules import RULES, column, typed
+from udfx.backends.datafusion.rules import RULES, column, typed_literal
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import BOOL, Type
@@ -37,7 +37,7 @@ class DataFusionBackend(Backend[Expr]):
         return column(node.name)
 
     def literal(self, node: Lit) -> Expr:
-        return typed(node.value, node.type)
+        return typed_literal(node.value, node.type)
 
     def select(self, condition: Expr, then: Expr, orelse: Expr) -> Expr:
         return functions.when(condition, then).otherwise(orelse)

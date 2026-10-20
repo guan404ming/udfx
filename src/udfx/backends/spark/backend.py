@@ -21,7 +21,7 @@ OUT = f"{RESERVED}out"
 RAISED = "udfx raised "
 
 
-def raised(text: str) -> Exception | None:
+def decode_fallback_exception(text: str) -> Exception | None:
     _, found, detail = text.partition(RAISED)
     name, _, message = detail.partition(": ")
     kind = getattr(builtins, name.strip(), None)
@@ -48,14 +48,14 @@ class SparkBackend(Backend[Column]):
         except Exception as error:
             raise RuntimeError("udfx needs a SparkSession to build Spark columns") from error
 
-    def patch(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+    def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
             return program.run(rows)
         except Exception as error:
             raise RuntimeError(f"{RAISED}{type(error).__name__}: {error}") from error
 
     def unwrap(self, error: BaseException) -> BaseException:
-        return raised(str(error)) or error
+        return decode_fallback_exception(str(error)) or error
 
     def fold_name(self, name: str) -> str:
         if self.session().conf.get("spark.sql.caseSensitive") == "true":

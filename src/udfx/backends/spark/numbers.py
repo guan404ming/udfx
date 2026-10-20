@@ -29,7 +29,7 @@ def cast_float64(value: Column) -> Column:
     return value.cast("double")
 
 
-def representable(value: Column) -> Column:
+def within_exact_float_range(value: Column) -> Column:
     return value.between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
@@ -53,7 +53,7 @@ def either_nan(left: Column, right: Column) -> Column:
 
 def register_widened_variants(name: str, rule: Binary) -> None:
     def exact(value: Column) -> Column:
-        return value.isNull() | representable(value)
+        return value.isNull() | within_exact_float_range(value)
 
     RULES(name, Kind.INT, Kind.FLOAT)(
         lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
@@ -106,7 +106,7 @@ def int_divmod(left: Column, right: Column) -> tuple[Column, Column]:
     return quotient, modulo
 
 
-def infinite(value: Column) -> Column:
+def float_isinf(value: Column) -> Column:
     return functions.abs(value) == INFINITY
 
 
@@ -126,12 +126,15 @@ RULES("__mod__", Kind.INT, Kind.INT)(lambda left, right: int_divmod(left, right)
 RULES("__neg__", Kind.FLOAT)(Column.__neg__)
 RULES("abs", Kind.FLOAT)(functions.abs)
 RULES("math.isnan", Kind.FLOAT)(functions.isnan)
-RULES("math.isinf", Kind.FLOAT)(infinite)
+RULES("math.isinf", Kind.FLOAT)(float_isinf)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(left: Column, right: Column) -> Lowered[Column]:
-    return Lowered(functions.try_divide(left, right), representable(left) & representable(right))
+    return Lowered(
+        functions.try_divide(left, right),
+        within_exact_float_range(left) & within_exact_float_range(right),
+    )
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)

@@ -39,7 +39,7 @@ def char_class(chars: Iterable[str], negate: bool = False) -> str:
 
 
 @cache
-def word() -> str:
+def non_whitespace_pattern() -> str:
     return char_class(whitespace(), negate=True) + "+"
 
 
@@ -112,7 +112,7 @@ def write_cache(key: str, value: dict[str, str | None]) -> None:
         return
 
 
-def has_border(pattern: str) -> bool:
+def has_prefix_suffix_overlap(pattern: str) -> bool:
     return any(pattern[:size] == pattern[-size:] for size in range(1, len(pattern)))
 
 

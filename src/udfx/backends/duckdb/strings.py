@@ -24,9 +24,9 @@ from udfx.semantics.text import (
     CaseDrift,
     SlicePrimitives,
     case_guard,
+    non_whitespace_pattern,
     slice_bounds,
     whitespace,
-    word,
 )
 from udfx.types import Kind
 
@@ -82,7 +82,7 @@ def rstrip(text: Expression) -> Expression:
 
 
 def split_words(text: Expression) -> Expression:
-    return function("regexp_extract_all", text, constant(word()))
+    return function("regexp_extract_all", text, constant(non_whitespace_pattern()))
 
 
 RULES(".split", Kind.STR)(split_words)
@@ -169,7 +169,7 @@ RULES("len", Kind.STR)(length)
 RULES("len", Kind.LIST)(length)
 
 
-def position(container: Expression, index: Expression) -> Expression:
+def bounded_native_index(container: Expression, index: Expression) -> Expression:
     size = length(container)
     bounded = function("greatest", function("least", index, size), -size - constant(1))
     return when(bounded < constant(0), bounded, bounded + constant(1))
@@ -177,12 +177,12 @@ def position(container: Expression, index: Expression) -> Expression:
 
 @RULES("__getitem__", Kind.STR, Kind.INT)
 def str_getitem(text: Expression, index: Expression) -> Expression:
-    return function("array_extract", text, position(text, index))
+    return function("array_extract", text, bounded_native_index(text, index))
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
 def list_getitem(container: Expression, index: Expression) -> Expression:
-    return function("list_extract", container, position(container, index))
+    return function("list_extract", container, bounded_native_index(container, index))
 
 
 SLICE = SlicePrimitives(

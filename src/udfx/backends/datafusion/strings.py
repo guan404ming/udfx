@@ -10,7 +10,7 @@ from datafusion import Expr, col, functions, lit
 
 from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.datafusion.backend import DataFusionBackend
-from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed, when
+from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
 from udfx.semantics import text
 from udfx.semantics.text import (
     SIGMA,
@@ -124,7 +124,7 @@ def endswith(text: Expr, suffix: Expr) -> Expr:
 
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
 def replace(text: Expr, old: Expr, new: Expr) -> Expr:
-    characters = functions.string_to_array(text, typed(None, STR.or_none()))
+    characters = functions.string_to_array(text, typed_literal(None, STR.or_none()))
     padded = functions.concat(new, functions.array_to_string(characters, new), new)
     return (
         functions.when((old == lit("")) & (text == lit("")), new)

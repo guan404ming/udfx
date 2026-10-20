@@ -24,9 +24,6 @@ class State:
         cut = len(self.stack) - count
         return self.stack[cut:], replace(self, stack=self.stack[:cut])
 
-    def top(self) -> Item:
-        return self.stack[-1]
-
     def store(self, name: str, item: Item) -> State:
         return replace(self, names={**self.names, name: item})
 

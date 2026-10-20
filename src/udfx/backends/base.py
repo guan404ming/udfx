@@ -56,25 +56,29 @@ class Backend[E](ABC):
     rules: ClassVar[RuleSet[Any]]
     raised: BaseException | None = None
 
-    def patch(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+    def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
             return program.run(rows)
         except Exception as error:
             self.raised = error
             raise
 
-    def patches(self, program: Program, pending: list[int], gather: Gather) -> list[object]:
+    def evaluate_pending_rows(
+        self, program: Program, pending: list[int], gather: Gather
+    ) -> list[object]:
         if not pending:
             return []
         columns = gather(pending)
         rows = [tuple(column[position] for column in columns) for position in range(len(pending))]
-        return self.patch(program, rows)
+        return self.run_fallback_rows(program, rows)
 
     def fallback_values(
         self, program: Program, length: int, pending: list[int], gather: Gather
     ) -> list[object]:
         values: list[object] = [None] * length
-        for index, value in zip(pending, self.patches(program, pending, gather), strict=True):
+        for index, value in zip(
+            pending, self.evaluate_pending_rows(program, pending, gather), strict=True
+        ):
             values[index] = value
         return values
 

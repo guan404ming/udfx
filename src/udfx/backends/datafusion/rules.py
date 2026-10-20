@@ -14,7 +14,7 @@ def column(name: str) -> Expr:
     return col('"' + name.replace('"', '""') + '"')
 
 
-def typed(value: object, type: Type) -> Expr:
+def typed_literal(value: object, type: Type) -> Expr:
     if value is None:
         return lit(None).cast(dtype(type))
     return lit(pa.scalar(value, type=dtype(type)))

@@ -14,10 +14,10 @@ from udfx.semantics.text import (
     CaseDrift,
     SlicePrimitives,
     case_guard,
-    has_border,
+    has_prefix_suffix_overlap,
+    non_whitespace_pattern,
     slice_bounds,
     whitespace,
-    word,
 )
 from udfx.types import Kind
 
@@ -63,7 +63,7 @@ def rstrip(text: pl.Expr) -> pl.Expr:
 
 
 def split_words(text: pl.Expr) -> pl.Expr:
-    return text.str.extract_all(word())
+    return text.str.extract_all(non_whitespace_pattern())
 
 
 RULES(".split", Kind.STR)(split_words)
@@ -99,7 +99,7 @@ def single_code_point_clusters(text: pl.Expr) -> pl.Expr:
 @RULES(".rfind", Kind.STR, Kind.STR)
 def rfind(text: pl.Expr, pattern: pl.Expr) -> RuleResult[pl.Expr]:
     known = literal_value(pattern)
-    if isinstance(known, str) and known and not has_border(known):
+    if isinstance(known, str) and known and not has_prefix_suffix_overlap(known):
         suffix = length(text.str.split(pattern).list.last())
         found = length(text) - length(pattern) - suffix
         return when(text.str.contains(pattern, literal=True), found, pl.lit(-1))

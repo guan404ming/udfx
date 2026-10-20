@@ -25,7 +25,7 @@ def fits_int64(wide: pl.Expr) -> pl.Expr:
     return wide.is_between(INT64_MIN, INT64_MAX)
 
 
-def representable(value: pl.Expr) -> pl.Expr:
+def within_exact_float_range(value: pl.Expr) -> pl.Expr:
     return value.is_between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
@@ -45,7 +45,7 @@ def register_float_variants(name: str, rule: BinaryRule[pl.Expr]) -> None:
 
 def register_widened_variants(name: str, rule: Binary) -> None:
     def exact(value: pl.Expr) -> pl.Expr:
-        return value.is_null() | representable(value)
+        return value.is_null() | within_exact_float_range(value)
 
     RULES(name, Kind.INT, Kind.FLOAT)(
         lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
@@ -64,7 +64,7 @@ def register_comparison(name: str, compare: Binary) -> None:
     register_widened_variants(name, ordered)
 
 
-def materialize(operation: Binary) -> Binary:
+def broadcast_arguments(operation: Binary) -> Binary:
     return lambda left, right: operation(broadcast(left), broadcast(right))
 
 
@@ -100,12 +100,12 @@ def float_mod(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
 
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
-    register_float_variants(_name, materialize(_operation))
+    register_float_variants(_name, broadcast_arguments(_operation))
 
 for _name, _compare in COMPARISONS.items():
     register_comparison(_name, _compare)
 
-register_float_variants("__truediv__", materialize(operator.truediv))
+register_float_variants("__truediv__", broadcast_arguments(operator.truediv))
 register_float_variants("__floordiv__", float_floordiv)
 register_float_variants("__mod__", float_mod)
 
@@ -120,7 +120,10 @@ RULES("math.isinf", Kind.FLOAT)(pl.Expr.is_infinite)
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(broadcast(left) / broadcast(right), representable(left) & representable(right))
+    return Lowered(
+        broadcast(left) / broadcast(right),
+        within_exact_float_range(left) & within_exact_float_range(right),
+    )
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)

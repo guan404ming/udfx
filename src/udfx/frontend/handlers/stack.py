@@ -3,7 +3,7 @@ from __future__ import annotations
 import dis
 
 from udfx.errors import Unsupported
-from udfx.frontend.constants import constant, literal, scalar_map
+from udfx.frontend.constants import constant, constant_value, scalar_map
 from udfx.frontend.context import Context
 from udfx.frontend.machine import handles
 from udfx.frontend.state import State, Step
@@ -51,17 +51,17 @@ def swap(context: Context, state: State, instruction: dis.Instruction) -> list[S
 def build_const_key_map(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     items, rest = state.pop(instruction.argval + 1)
     *values, keys = items
-    names = literal(keys)
+    names = constant_value(keys)
     if not isinstance(names, tuple):
         raise Unsupported(f"dict keys {names!r}", context.where(state))
-    entries = scalar_map(zip(names, map(literal, values), strict=True))
+    entries = scalar_map(zip(names, map(constant_value, values), strict=True))
     return [rest.push(Opaque(entries)).advance()]
 
 
 @handles("BUILD_MAP")
 def build_map(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     items, rest = state.pop(2 * instruction.argval)
-    constants = [literal(item) for item in items]
+    constants = [constant_value(item) for item in items]
     entries = scalar_map(zip(constants[::2], constants[1::2], strict=True))
     return [rest.push(Opaque(entries)).advance()]
 
@@ -74,4 +74,4 @@ def delete_fast(context: Context, state: State, instruction: dis.Instruction) ->
 @handles("BUILD_TUPLE")
 def build_tuple(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     items, rest = state.pop(instruction.argval)
-    return [rest.push(constant(tuple(literal(item) for item in items))).advance()]
+    return [rest.push(constant(tuple(constant_value(item) for item in items))).advance()]
