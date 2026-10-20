@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from udfx.ir import Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.types import BOOL, FLOAT, INT, Kind
+from udfx.types import BOOL, FLOAT, INT, STR, Kind
 
 
 def overflows(function: Callable[..., object]) -> Callable[..., bool]:
@@ -39,3 +39,7 @@ register(Op("pow_overflows", (FLOAT, FLOAT), BOOL, overflows(operator.pow)))
 
 for a, b in ((FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT)):
     register(Op("__pow__", (a, b), FLOAT, operator.pow, power_faults))
+
+for scalar in (INT, FLOAT, STR):
+    register(Op("max", (scalar, scalar), scalar, max))
+    register(Op("min", (scalar, scalar), scalar, min))

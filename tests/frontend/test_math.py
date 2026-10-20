@@ -6,7 +6,7 @@ from udfx.backends.polars import PolarsBackend
 from udfx.frontend import trace
 from udfx.ir import Call
 from udfx.testing import check_function
-from udfx.types import FLOAT, INT, Type
+from udfx.types import FLOAT, INT, STR, Type
 
 POLARS = PolarsBackend()
 
@@ -15,10 +15,20 @@ def power(a: float, b: float) -> float:
     return a**b
 
 
+def larger(a: int, b: int) -> int:
+    return max(a, b)
+
+
+def smaller(a: str, b: str) -> str:
+    return min(a, b)
+
+
 CASES: list[tuple[Callable[..., object], dict[str, Type], str]] = [
     (power, {"a": FLOAT, "b": FLOAT}, "__pow__"),
     (power, {"a": INT, "b": FLOAT}, "__pow__"),
     (power, {"a": FLOAT, "b": INT}, "__pow__"),
+    (larger, {"a": INT, "b": INT}, "max"),
+    (smaller, {"a": STR, "b": STR}, "min"),
 ]
 
 

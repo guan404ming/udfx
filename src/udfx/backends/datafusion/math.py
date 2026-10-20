@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import operator
+
 from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered
 from udfx.backends.datafusion.numbers import INFINITY, finite, floating, is_nan
 from udfx.backends.datafusion.rules import RULES
+from udfx.semantics.numbers import Binary
 from udfx.types import Kind
 
 
@@ -19,6 +22,21 @@ def power(a: Expr, b: Expr) -> Lowered[Expr]:
     complex_result = below_zero(a) & (functions.floor(b) != b)
     return Lowered(value, ~complex_result)
 
+
+def pick(name: str, compare: Binary) -> None:
+    def ordered(a: Expr, b: Expr) -> Expr:
+        return functions.when(compare(b, a) & ~is_nan(a) & ~is_nan(b), b).otherwise(a)
+
+    def total(a: Expr, b: Expr) -> Expr:
+        return functions.when(compare(b, a), b).otherwise(a)
+
+    RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
+    RULES(name, Kind.INT, Kind.INT)(total)
+    RULES(name, Kind.STR, Kind.STR)(total)
+
+
+pick("max", operator.gt)
+pick("min", operator.lt)
 
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
 RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda a, b: power(floating(a), b))
