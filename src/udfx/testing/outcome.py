@@ -5,6 +5,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
+from udfx.types import Type, fits
+
 
 @dataclass(frozen=True)
 class Returned:
@@ -19,11 +21,16 @@ class Raised:
 Outcome = Returned | Raised
 
 
-def run(function: Callable[..., object], args: Sequence[object]) -> Outcome:
+def run(
+    function: Callable[..., object], args: Sequence[object], result: Type | None = None
+) -> Outcome:
     try:
-        return Returned(function(*args))
+        value = function(*args)
     except Exception as error:
         return Raised(type(error))
+    if result is not None and not fits(value, result):
+        return Raised(OverflowError)
+    return Returned(value)
 
 
 def same(a: object, b: object) -> bool:

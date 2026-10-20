@@ -8,10 +8,8 @@ import polars as pl
 
 from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES
-from udfx.types import Kind
+from udfx.types import INT64_MAX, INT64_MIN, Kind
 
-INT64_MIN = -(2**63)
-INT64_MAX = 2**63 - 1
 FLOAT_INT_MAX = 2**53
 SPACE = "\t\n\x0b\x0c\r "
 DIGITS = "[0-9](_?[0-9])*"
@@ -198,6 +196,11 @@ def float_int(a: pl.Expr) -> Lowered[pl.Expr]:
 @RULES("float", Kind.INT)
 def int_float(a: pl.Expr) -> pl.Expr:
     return a.cast(pl.Float64)
+
+
+@RULES("float", Kind.FLOAT)
+def float_float(value: pl.Expr) -> pl.Expr:
+    return value
 
 
 @RULES("str", Kind.INT)

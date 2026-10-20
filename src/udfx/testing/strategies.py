@@ -4,10 +4,7 @@ from collections.abc import Mapping
 
 from hypothesis import strategies as st
 
-from udfx.types import Kind, Type
-
-INT64_MIN = -(2**63)
-INT64_MAX = 2**63 - 1
+from udfx.types import INT64_MAX, INT64_MIN, Kind, Type
 
 STRING_TRAPS = (
     "",

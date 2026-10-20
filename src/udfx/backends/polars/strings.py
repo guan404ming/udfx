@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from functools import cache
+
 import polars as pl
 
+from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES
 from udfx.ops.strings import WHITESPACE
 from udfx.types import Kind
@@ -9,14 +12,32 @@ from udfx.types import Kind
 WORDS = "[^" + "".join(f"\\x{{{ord(char):x}}}" for char in WHITESPACE) + "]+"
 
 
+@cache
+def case_drift(method: str) -> str | None:
+    points = [chr(point) for point in range(0x110000) if not 0xD800 <= point <= 0xDFFF]
+    native = getattr(pl.Series(points).str, f"to_{method}case")().to_list()
+    drift = [
+        point
+        for point, mapped in zip(points, native, strict=True)
+        if getattr(point, method)() != mapped
+    ]
+    return "[" + "".join(f"\\x{{{ord(point):X}}}" for point in drift) + "]" if drift else None
+
+
+def recase(value: pl.Expr, method: str) -> pl.Expr | Lowered[pl.Expr]:
+    expr = getattr(value.str, f"to_{method}case")()
+    drift = case_drift(method)
+    return expr if drift is None else Lowered(expr, ~value.str.contains(drift))
+
+
 @RULES(".lower", Kind.STR)
-def lower(a: pl.Expr) -> pl.Expr:
-    return a.str.to_lowercase()
+def lower(value: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
+    return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(a: pl.Expr) -> pl.Expr:
-    return a.str.to_uppercase()
+def upper(value: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
+    return recase(value, "upper")
 
 
 @RULES(".strip", Kind.STR)

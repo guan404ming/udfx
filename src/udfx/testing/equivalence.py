@@ -30,7 +30,8 @@ def check_function(
     if translation.unsupported is not None:
         raise translation.unsupported
     expr = translation.expr
-    expected = [run(function, row) for row in rows]
+    result = translation.program.result if translation.program else None
+    expected = [run(function, row, result) for row in rows]
     returned = [
         (row, out) for row, out in zip(rows, expected, strict=True) if isinstance(out, Returned)
     ]

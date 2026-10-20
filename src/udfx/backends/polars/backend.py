@@ -10,7 +10,7 @@ from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES
 from udfx.ir import Col, Lit
 from udfx.program import Program
-from udfx.types import Type
+from udfx.types import Type, fits
 
 EXACT = "udfx exact"
 OUT = "udfx out"
@@ -46,7 +46,10 @@ class PolarsBackend(Backend[pl.Expr]):
             columns = [batch.struct.field(name).to_list() for name in names]
             values: list[object] = [None] * len(batch)
             for index in (~mask).arg_true():
-                values[index] = function(*(column[index] for column in columns))
+                value = function(*(column[index] for column in columns))
+                if not fits(value, program.result):
+                    raise OverflowError(f"udfx result {value!r} does not fit {program.result}")
+                values[index] = value
             return pl.Series(values, dtype=result)
 
         packed = pl.struct(exact.alias(EXACT), *(pl.col(name) for name in names))
