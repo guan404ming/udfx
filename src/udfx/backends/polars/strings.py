@@ -1,32 +1,33 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Sequence
+from functools import cache, reduce
 
 import polars as pl
 
 from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES, broadcast
-from udfx.semantics.text import char_class, drift, whitespace, word
+from udfx.semantics import text
+from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
 from udfx.types import Kind
 
-CASE_DRIFT: dict[str, str | None] = {}
 
+@cache
+def case_drift(method: str) -> CaseDrift:
+    def native(samples: Sequence[str]) -> list[str]:
+        return getattr(pl.Series(samples).str, f"to_{method}case")().to_list()
 
-def case_drift(method: str) -> str | None:
-    if method not in CASE_DRIFT:
-
-        def native(points: Sequence[str]) -> list[str]:
-            return getattr(pl.Series(points).str, f"to_{method}case")().to_list()
-
-        drifted = drift(getattr(str, method), native)
-        CASE_DRIFT[method] = char_class(drifted) if drifted else None
-    return CASE_DRIFT[method]
+    return text.case_drift(method, native)
 
 
 def recase(value: pl.Expr, method: str) -> pl.Expr | Lowered[pl.Expr]:
     expr = getattr(value.str, f"to_{method}case")()
-    drift = case_drift(method)
-    return expr if drift is None else Lowered(expr, ~value.str.contains(drift))
+    found = case_drift(method)
+    guards = [~value.str.contains(found.alone)] if found.alone else []
+    if found.nearby:
+        guards.append(~(value.str.contains(SIGMA, literal=True) & value.str.contains(found.nearby)))
+    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
 
 
 @RULES(".lower", Kind.STR)

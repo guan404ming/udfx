@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, cast
 
@@ -47,6 +47,18 @@ class RuleSet[E]:
 class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
+    raised: BaseException | None = None
+
+    def patch(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+        try:
+            return program.run(rows)
+        except Exception as error:
+            self.raised = error
+            raise
+
+    def unwrap(self, error: BaseException) -> BaseException:
+        raised, self.raised = self.raised, None
+        return raised or error
 
     @abstractmethod
     def column(self, node: Col) -> E: ...

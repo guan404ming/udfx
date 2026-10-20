@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Sequence
+from functools import cache, reduce
 
 import duckdb
 import pyarrow as pa
@@ -16,34 +18,33 @@ from udfx.backends.duckdb.rules import (
     nullable_equal,
     when,
 )
-from udfx.semantics.text import char_class, drift, whitespace, word
+from udfx.semantics import text
+from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
 from udfx.types import Kind
 
-CASE_DRIFT: dict[str, str | None] = {}
 POINT = "udfx point"
 ITEM = "udfx item"
 INDEX = "udfx index"
 
 
-def case_drift(method: str) -> str | None:
-    if method not in CASE_DRIFT:
+@cache
+def case_drift(method: str) -> CaseDrift:
+    def native(samples: Sequence[str]) -> list[str]:
+        table = pa.table({POINT: pa.array(list(samples))})
+        rows = duckdb.from_arrow(table).select(function(method, column(POINT))).fetchall()
+        return [row[0] for row in rows]
 
-        def native(points: Sequence[str]) -> list[str]:
-            table = pa.table({POINT: pa.array(list(points))})
-            rows = duckdb.from_arrow(table).select(function(method, column(POINT))).fetchall()
-            return [row[0] for row in rows]
-
-        drifted = drift(getattr(str, method), native)
-        CASE_DRIFT[method] = char_class(drifted) if drifted else None
-    return CASE_DRIFT[method]
+    return text.case_drift(method, native)
 
 
 def recase(value: Expression, method: str) -> Expression | Lowered[Expression]:
     expr = function(method, value)
-    drift = case_drift(method)
-    if drift is None:
-        return expr
-    return Lowered(expr, ~function("regexp_matches", value, constant(drift)))
+    found = case_drift(method)
+    guards = [~function("regexp_matches", value, constant(found.alone))] if found.alone else []
+    if found.nearby:
+        sigma = function("contains", value, constant(SIGMA))
+        guards.append(~(sigma & function("regexp_matches", value, constant(found.nearby))))
+    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
 
 
 @RULES(".lower", Kind.STR)

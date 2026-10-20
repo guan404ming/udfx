@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Sequence
-from functools import cache
+from functools import cache, reduce
 from typing import cast
 
 import pyarrow as pa
@@ -10,55 +11,40 @@ from datafusion import Expr, col, functions, lit
 from udfx.backends.base import Lowered
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.rules import RULES, length, not_distinct, typed
-from udfx.semantics.text import char_class, drift, whitespace
+from udfx.semantics import text
+from udfx.semantics.text import SIGMA, CaseDrift, char_class, whitespace
 from udfx.types import STR, Kind
 
 POINT = "udfx point"
-SIGMA = "Σ"
-SIGMA_CONTEXTS = (f"A{SIGMA}{{}}b", f"A{{}}{SIGMA}", f"{{}}{SIGMA}", f"A{SIGMA}{{}}")
-
-
-def drifted(method: str, context: str) -> frozenset[str]:
-    def reference(point: str) -> str:
-        return getattr(context.format(point), method)()
-
-    def native(points: Sequence[str]) -> list[str]:
-        expr = getattr(functions, method)(col(POINT))
-        (recased,) = DataFusionBackend().evaluate(
-            [expr], {POINT: STR}, [(context.format(point),) for point in points]
-        )
-        return cast("list[str]", recased)
-
-    return frozenset(drift(reference, native))
 
 
 @cache
-def case_drift(method: str) -> tuple[str | None, str | None]:
-    alone = drifted(method, "{}")
-    nearby = frozenset[str]().union(*(drifted(method, context) for context in SIGMA_CONTEXTS))
-    nearby -= alone
-    return (char_class(alone) if alone else None, char_class(nearby) if nearby else None)
+def case_drift(method: str) -> CaseDrift:
+    def native(samples: Sequence[str]) -> list[str]:
+        expr = getattr(functions, method)(col(POINT))
+        (recased,) = DataFusionBackend().evaluate([expr], {POINT: STR}, [(s,) for s in samples])
+        return cast("list[str]", recased)
+
+    return text.case_drift(method, native)
 
 
-def recase(value: Expr, method: str) -> Lowered[Expr]:
+def recase(value: Expr, method: str) -> Expr | Lowered[Expr]:
     expr = getattr(functions, method)(value)
-    alone, nearby = case_drift(method)
-    exact = lit(True)
-    if alone is not None:
-        exact = exact & ~functions.regexp_like(value, lit(alone))
-    if nearby is not None:
+    found = case_drift(method)
+    guards = [~functions.regexp_like(value, lit(found.alone))] if found.alone else []
+    if found.nearby:
         sigma = functions.strpos(value, lit(SIGMA)) > lit(0)
-        exact = exact & ~(sigma & functions.regexp_like(value, lit(nearby)))
-    return Lowered(expr, exact)
+        guards.append(~(sigma & functions.regexp_like(value, lit(found.nearby))))
+    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
 
 
 @RULES(".lower", Kind.STR)
-def lower(value: Expr) -> Lowered[Expr]:
+def lower(value: Expr) -> Expr | Lowered[Expr]:
     return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(value: Expr) -> Lowered[Expr]:
+def upper(value: Expr) -> Expr | Lowered[Expr]:
     return recase(value, "upper")
 
 

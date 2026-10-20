@@ -3,8 +3,8 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
+from udfx.backends.arrow import dtype
 from udfx.backends.base import RuleSet
-from udfx.backends.datafusion.dtypes import dtype
 from udfx.types import Type
 
 RULES: RuleSet[Expr] = RuleSet()

@@ -1,15 +1,14 @@
-# pyright: reportUnknownParameterType=false
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from itertools import count
-from typing import ClassVar
+from typing import ClassVar, cast
 
 import pyarrow as pa
 from datafusion import Expr, SessionContext, col, functions, udf
 
+from udfx.backends.arrow import dtype
 from udfx.backends.base import Backend, Row, RuleSet
-from udfx.backends.datafusion.dtypes import dtype
 from udfx.backends.datafusion.rules import RULES, typed
 from udfx.ir import Col, Lit
 from udfx.program import Program
@@ -50,7 +49,7 @@ class DataFusionBackend(Backend[Expr]):
             arguments = [column.to_pylist() for column in columns]
             rows = [tuple(values[index] for values in arguments) for index in pending]
             values: list[object] = [None] * len(flags)
-            for index, value in zip(pending, program.run(rows), strict=True):
+            for index, value in zip(pending, self.patch(program, rows), strict=True):
                 values[index] = value
             return pa.array(values, type=result)
 
@@ -82,5 +81,8 @@ class DataFusionBackend(Backend[Expr]):
         frame = self.context.from_arrow(table).select(
             col(ROW), *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
         )
-        outputs = frame.sort(col(ROW)).to_arrow_table()
-        return [outputs.column(name).to_pylist() for name in names]
+        try:
+            outputs = frame.sort(col(ROW)).to_arrow_table()
+        except Exception as wrapped:
+            raise self.unwrap(wrapped) from None
+        return [cast("list[object]", outputs.column(name).to_pylist()) for name in names]

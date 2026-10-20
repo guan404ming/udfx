@@ -31,7 +31,6 @@ class DuckDBBackend(Backend[Expression]):
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self.connection = connection or duckdb.connect()
-        self.raised: BaseException | None = None
 
     def column(self, node: Col) -> Expression:
         return column(node.name)
@@ -66,11 +65,7 @@ class DuckDBBackend(Backend[Expression]):
             values: list[object] = [None] * len(batch)
             if pending:
                 columns = [batch.field(field).take(pending).to_pylist() for field in program.schema]
-                try:
-                    patched = program.run(zip(*columns, strict=True))
-                except Exception as error:
-                    self.raised = error
-                    raise
+                patched = self.patch(program, zip(*columns, strict=True))
                 for index, value in zip(pending, patched, strict=True):
                     values[index] = value
             return pa.array(values, result)
@@ -111,9 +106,8 @@ class DuckDBBackend(Backend[Expression]):
         selected = typed.select(
             *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
         )
-        self.raised = None
         try:
             outputs = selected.fetchall()
-        except duckdb.Error as wrapped:
-            raise self.raised or wrapped from None
+        except Exception as wrapped:
+            raise self.unwrap(wrapped) from None
         return [list(values) for values in zip(*outputs, strict=True)] or [[] for _ in exprs]
