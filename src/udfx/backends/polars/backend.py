@@ -32,9 +32,9 @@ class PolarsBackend(Backend[pl.Expr]):
         result = dtype(program.result)
 
         def patch(series: Sequence[pl.Series]) -> pl.Series:
-            length = max(len(item) for item in series)
+            length = len(series[2] if len(series) > 2 else series[0])
             flags, values, *columns = (
-                item.new_from_index(0, length) if len(item) == 1 else item for item in series
+                item if len(item) == length else item.new_from_index(0, length) for item in series
             )
             pending = (~flags.fill_null(False)).arg_true().to_list()
 

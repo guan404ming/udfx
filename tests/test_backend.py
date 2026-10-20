@@ -62,8 +62,20 @@ def constant_branch(value: int) -> int:
     return 2
 
 
+def literal_after_division(x: int) -> int:
+    _ = 1 // x
+    return 7
+
+
 def split(s: str | None) -> list[str] | None:
     return s.split(",") if s else None
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_fallback_with_literal_branch_on_no_rows(backend: Backend[Any]) -> None:
+    translation = compile(literal_after_division, {"x": INT}, backend)
+    assert backend.evaluate([translation.expr], {"x": INT}, []) == [[]]
+    assert check_function(literal_after_division, {"x": INT}, backend, [(1,), (0,)]) == []
 
 
 @pytest.mark.parametrize("backend", backend_params())
