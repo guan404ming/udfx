@@ -31,3 +31,14 @@ def load_const(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
 @handles("POP_TOP")
 def pop_top(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
     return [state.pop()[1].advance()]
+
+
+@handles("COPY")
+def copy(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+    return [state.push(state.stack[-inst.argval]).advance()]
+
+
+@handles("SWAP")
+def swap(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+    items, rest = state.pop(inst.argval)
+    return [rest.push(items[-1], *items[1:-1], items[0]).advance()]
