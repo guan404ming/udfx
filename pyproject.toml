@@ -1,6 +1,6 @@
 [project]
 name = "udfx"
-version = "0.0.1"
+version = "0.1.0"
 description = "Turn Python UDFs into native dataframe expressions"
 readme = "README.md"
 license = "Apache-2.0"
@@ -49,6 +49,18 @@ dev = [
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".github",
+    ".hypothesis",
+    ".python-version",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "bench",
+    "tests",
+    "uv.lock",
+]
 
 [tool.ruff]
 line-length = 100
