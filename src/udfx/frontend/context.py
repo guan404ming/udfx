@@ -7,19 +7,14 @@ from dataclasses import dataclass
 from types import CodeType
 
 from udfx.errors import Unsupported
+from udfx.frontend.constants import constant
 from udfx.frontend.logic import conj, neg
 from udfx.frontend.state import Raise, State, Step
-from udfx.frontend.values import Item, Opaque, Value
-from udfx.ir import FALSE, lit
+from udfx.frontend.values import Item, Opaque
+from udfx.ir import FALSE
 from udfx.ops import Fault
 
 JUMPS = frozenset(dis.hasjrel) | frozenset(dis.hasjabs)
-
-SCALARS = (str, int, float, bool)
-
-
-def constant(value: object) -> Item:
-    return Value(lit(value)) if value is None or type(value) in SCALARS else Opaque(value)
 
 
 def parameters(code: CodeType) -> list[str]:

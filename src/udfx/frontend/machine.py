@@ -47,9 +47,7 @@ def explore(context: Context, start: State) -> list[Outcome]:
         handler = HANDLERS.get(instruction.opname)
         if handler is None:
             raise Unsupported(f"opcode {instruction.opname}", context.where(state))
-        for step in reversed(handler(context, state, instruction)):
-            if isinstance(step, State):
-                pending.append(step)
-            else:
-                outcomes.append(step)
+        produced = handler(context, state, instruction)
+        outcomes.extend(step for step in produced if not isinstance(step, State))
+        pending.extend(reversed([step for step in produced if isinstance(step, State)]))
     return outcomes

@@ -7,7 +7,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.values import Item, Method, Opaque, Value
 from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, apply, resolve
-from udfx.types import BOOL
+from udfx.types import BOOL, Kind
 
 CALLABLES: tuple[tuple[object, str], ...] = (
     (abs, "abs"),
@@ -29,6 +29,8 @@ CALLABLES: tuple[tuple[object, str], ...] = (
 def node_of(item: Item) -> Node:
     if not isinstance(item, Value):
         raise Unsupported(f"expected a value, got {item}")
+    if isinstance(item.node, Lit) and item.node.type.kind is Kind.LIST:
+        raise Unsupported(f"constant container {item.node.value!r} outside an in test")
     return item.node
 
 

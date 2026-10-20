@@ -4,11 +4,12 @@ import dis
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, node_of, none_test, truth
+from udfx.frontend.constants import lookup
 from udfx.frontend.context import Context
 from udfx.frontend.logic import neg
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Item, Value
+from udfx.frontend.values import Item, Opaque, Value
 from udfx.ir import Lit, Node
 from udfx.types import INT, Kind
 
@@ -82,14 +83,18 @@ def is_op(context: Context, state: State, instruction: dis.Instruction) -> list[
 @handles("CONTAINS_OP")
 def contains_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item, container), rest = state.pop(2)
-    node, faults = invoke("__contains__", [node_of(container), node_of(item)], TypeError)
+    members = container.node if isinstance(container, Value) else node_of(container)
+    node, faults = invoke("__contains__", [members, node_of(item)], TypeError)
     return emit(context, rest, Value(neg(node) if instruction.arg else node), faults)
 
 
 @handles("BINARY_SUBSCR")
 def binary_subscr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, index), rest = state.pop(2)
-    node, faults = invoke("__getitem__", [node_of(container), node_of(index)], TypeError)
+    if isinstance(container, Opaque):
+        node, faults = lookup(container.obj, node_of(index))
+    else:
+        node, faults = invoke("__getitem__", [node_of(container), node_of(index)], TypeError)
     return emit(context, rest, Value(node), faults)
 
 

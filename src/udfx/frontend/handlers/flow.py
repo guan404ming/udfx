@@ -4,7 +4,8 @@ import dis
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import node_of, none_test, truth
-from udfx.frontend.context import Context, constant
+from udfx.frontend.constants import constant
+from udfx.frontend.context import Context
 from udfx.frontend.logic import conj, neg
 from udfx.frontend.machine import handles
 from udfx.frontend.state import Return, State, Step

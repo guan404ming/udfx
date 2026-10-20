@@ -5,11 +5,15 @@ import pytest
 
 from udfx.ops import Op, register, resolve
 from udfx.ops.registry import scoped
-from udfx.types import BOOL, INT, STR
+from udfx.types import BOOL, INT, STR, list_of
 
 STAND_INS = (
     Op("__neg__", (INT,), INT, operator.neg),
     Op("__contains__", (STR, STR), BOOL, operator.contains),
+    Op("__contains__", (list_of(STR), STR), BOOL, operator.contains),
+    Op("__contains__", (list_of(INT), INT), BOOL, operator.contains),
+    Op("__eq__", (STR, STR), BOOL, operator.eq),
+    Op("__eq__", (INT, INT), BOOL, operator.eq),
     Op(".find", (STR, STR), INT, str.find),
     Op("__getitem__", (STR, INT), STR, operator.getitem),
     Op("slice", (STR, INT.or_none(), INT.or_none()), STR, lambda s, a, b: s[a:b]),
