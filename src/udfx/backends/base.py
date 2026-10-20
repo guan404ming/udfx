@@ -112,6 +112,21 @@ def register_comparison[E](
     register_widened_variants(rules, name, ordered, to_float, order)
 
 
+def register_equality[E](
+    rules: RuleSet[E], equal: Binary, to_float: Callable[[E], E], order: OrderPrimitives
+) -> None:
+    def unequal(left: Any, right: Any) -> Any:
+        return ~equal(left, right)
+
+    def float_unequal(left: Any, right: Any) -> Any:
+        return ~float_compare(order, equal, left, right)
+
+    register_comparison(rules, "__eq__", equal, to_float, order)
+    rules("__ne__", Kind.INT, Kind.INT)(unequal)
+    rules("__ne__", Kind.FLOAT, Kind.FLOAT)(float_unequal)
+    register_widened_variants(rules, "__ne__", float_unequal, to_float, order)
+
+
 def register_extremum[E](
     rules: RuleSet[E], name: str, compare: Binary, order: OrderPrimitives
 ) -> None:

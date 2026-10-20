@@ -69,7 +69,7 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 - Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
 - Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
 - For a Python policy, fill the primitives record from `semantics/` with engine calls and call its function. The records are `FloatPrimitives`, `OrderPrimitives`, `RoundPrimitives`, and `IntegerPrimitives` in `numbers.py`, `TextPrimitives` and `SpellingPrimitives` in `literals.py`, and `SlicePrimitives` and `SearchPrimitives` in `text.py`.
-- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, and `register_extremum` from `base.py`. Give them the engine cast to float and the `OrderPrimitives` record.
+- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, `register_equality`, and `register_extremum` from `base.py`. Give them the engine cast to float and the `OrderPrimitives` record.
 
 ## Backend contract
 

@@ -9,8 +9,8 @@ from udfx.backends.base import (
     BinaryRule,
     Lowered,
     register_comparison,
+    register_equality,
     register_float_variants,
-    register_widened_variants,
 )
 from udfx.backends.duckdb.rules import (
     NAN,
@@ -125,8 +125,8 @@ for _name, _compare in COMPARISONS.items():
 register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
 register_float_variants(RULES, "__mod__", float_mod, cast_float64)
+register_equality(RULES, null_safe_equal, cast_float64, ORDER)
 
-RULES("__eq__", Kind.INT, Kind.INT)(null_safe_equal)
 RULES("__neg__", Kind.FLOAT)(Expression.__neg__)
 RULES("abs", Kind.FLOAT)(lambda value: function("abs", value))
 RULES("math.isnan", Kind.FLOAT)(is_nan)
@@ -135,11 +135,6 @@ RULES("math.isnan", Kind.FLOAT)(is_nan)
 @RULES("math.isinf", Kind.FLOAT)
 def float_isinf(value: Expression) -> Expression:
     return function("isinf", value)
-
-
-@RULES("__ne__", Kind.INT, Kind.INT)
-def int_ne(left: Expression, right: Expression) -> Expression:
-    return ~null_safe_equal(left, right)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
@@ -160,20 +155,6 @@ def int_floordiv(left: Expression, right: Expression) -> Lowered[Expression]:
 def int_mod(left: Expression, right: Expression) -> Lowered[Expression]:
     _, remainder, exact = int_divmod(INTEGERS, left, right)
     return Lowered(remainder, exact)
-
-
-@RULES("__eq__", Kind.FLOAT, Kind.FLOAT)
-def float_eq(left: Expression, right: Expression) -> Expression:
-    return null_safe_equal(left, right) & ~either_nan(left, right)
-
-
-@RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
-def float_ne(left: Expression, right: Expression) -> Expression:
-    return ~null_safe_equal(left, right) | either_nan(left, right)
-
-
-register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
-register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)

@@ -9,8 +9,8 @@ from udfx.backends.base import (
     BinaryRule,
     Lowered,
     register_comparison,
+    register_equality,
     register_float_variants,
-    register_widened_variants,
 )
 from udfx.backends.datafusion.rules import RULES, null_safe_equal, when
 from udfx.semantics.numbers import (
@@ -93,6 +93,7 @@ for _name, _compare in COMPARISONS.items():
 register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
 register_float_variants(RULES, "__mod__", float_mod, cast_float64)
+register_equality(RULES, null_safe_equal, cast_float64, ORDER)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
@@ -112,32 +113,6 @@ def int_floordiv(left: Expr, right: Expr) -> Lowered[Expr]:
 @RULES("__mod__", Kind.INT, Kind.INT)
 def int_mod(left: Expr, right: Expr) -> Expr:
     return int_divmod(INTEGERS, left, right)[1]
-
-
-@RULES("__eq__", Kind.INT, Kind.INT)
-def int_eq(left: Expr, right: Expr) -> Expr:
-    return null_safe_equal(left, right)
-
-
-@RULES("__ne__", Kind.INT, Kind.INT)
-def int_ne(left: Expr, right: Expr) -> Expr:
-    return ~null_safe_equal(left, right)
-
-
-def float_eq(left: Expr, right: Expr) -> Expr:
-    return null_safe_equal(left, right) & ~either_nan(left, right)
-
-
-RULES("__eq__", Kind.FLOAT, Kind.FLOAT)(float_eq)
-
-
-@RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
-def float_ne(left: Expr, right: Expr) -> Expr:
-    return ~float_eq(left, right)
-
-
-register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
-register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)

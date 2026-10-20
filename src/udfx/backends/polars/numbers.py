@@ -8,8 +8,8 @@ from udfx.backends.base import (
     BinaryRule,
     Lowered,
     register_comparison,
+    register_equality,
     register_float_variants,
-    register_widened_variants,
 )
 from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.semantics.numbers import (
@@ -92,9 +92,8 @@ for _name, _compare in COMPARISONS.items():
 register_float_variants(RULES, "__truediv__", broadcast_arguments(operator.truediv), cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
 register_float_variants(RULES, "__mod__", float_mod, cast_float64)
+register_equality(RULES, pl.Expr.eq_missing, cast_float64, ORDER)
 
-RULES("__eq__", Kind.INT, Kind.INT)(pl.Expr.eq_missing)
-RULES("__ne__", Kind.INT, Kind.INT)(pl.Expr.ne_missing)
 RULES("__mod__", Kind.INT, Kind.INT)(pl.Expr.__mod__)
 RULES("__neg__", Kind.FLOAT)(pl.Expr.__neg__)
 RULES("abs", Kind.FLOAT)(pl.Expr.abs)
@@ -113,20 +112,6 @@ def int_truediv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
 @RULES("__floordiv__", Kind.INT, Kind.INT)
 def int_floordiv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(left // right, ~division_overflows(pl.lit, left, right))
-
-
-@RULES("__eq__", Kind.FLOAT, Kind.FLOAT)
-def float_eq(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-    return left.eq_missing(right) & ~either_nan(left, right)
-
-
-@RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
-def float_ne(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-    return left.ne_missing(right) | either_nan(left, right)
-
-
-register_widened_variants(RULES, "__eq__", float_eq, cast_float64, ORDER)
-register_widened_variants(RULES, "__ne__", float_ne, cast_float64, ORDER)
 
 
 @RULES("__neg__", Kind.INT)
