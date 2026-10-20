@@ -13,14 +13,17 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 
 | Path | Owns |
 |---|---|
-| `src/udfx/types.py` | IR types (`Kind`, `Type`) |
+| `src/udfx/types.py` | IR types (`Kind`, `Type`), int64 bounds, `fits` |
 | `src/udfx/ir.py` | IR nodes: `Col`, `Lit`, `Call`, `If` |
+| `src/udfx/program.py` | `Program`: the traced function, its schema, value, fault, and `run` for fallback rows |
 | `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py` |
-| `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends |
-| `src/udfx/backends/base.py` | Generic lowering. Backends never reimplement it |
-| `src/udfx/backends/polars/` | Polars rules. One file per op family, same names as `ops/` |
+| `src/udfx/semantics/` | Facts about Python that every backend needs: whitespace, literal grammars, operator tables, Unicode drift |
+| `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
+| `src/udfx/backends/base.py` | Generic lowering and fallback composition. Backends never reimplement it |
+| `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, `dtypes.py`, and one rule file per op family with the same names as `ops/` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
-| `tests/conformance/` | Checks every op against Python on every backend |
+| `tests/conformance/` | Checks every op against Python on every installed backend |
+| `tests/corpus/` | End to end acceptance cases, run with `uv run pytest -m corpus` |
 
 ## Rules
 
@@ -58,11 +61,22 @@ Op names:
 
 ## Backend rule contract
 
-A rule is `@RULES(name, *kinds)` in `src/udfx/backends/polars/<family>.py`.
+A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 
-- A rule must never raise for any input. Where the op faults, any value is fine.
+- A rule must never raise or panic for any input, including literal arguments. Where the op faults, any value is fine.
 - If the rule matches Python only on some rows, return `Lowered(expr, exact)`. `exact` is true only on rows where `expr` equals Python. Other rows fall back to Python.
-- Every op needs a rule. `tests/conformance/test_ops.py` enforces this.
+- Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
+- Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
+
+## Backend contract
+
+A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `BACKEND`, a `Backend` subclass. `udfx.backends.installed()` discovers it when its engine imports.
+
+- `backend.py`: the `Backend` subclass. `column`, `literal`, `select`, `both`, `negate` build expressions. `fallback(native, exact, program)` runs `program.run` on rows where `exact` is false and keeps `native` elsewhere. `evaluate(expr, schema, rows)` runs an expression on in-memory rows for tests.
+- `rules.py`: `RULES = RuleSet()` and engine helpers shared by rule files.
+- `dtypes.py`: `Type` to engine type.
+- `core.py`, `strings.py`, `numbers.py`: rules, one file per op family.
+- Internal column names contain a space, for example `"udfx exact"`, so they cannot collide with user columns.
 
 ## Tests
 

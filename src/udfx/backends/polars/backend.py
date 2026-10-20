@@ -10,7 +10,7 @@ from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES
 from udfx.ir import Col, Lit
 from udfx.program import Program
-from udfx.types import Type, fits
+from udfx.types import Type
 
 EXACT = "udfx exact"
 OUT = "udfx out"
@@ -39,16 +39,12 @@ class PolarsBackend(Backend[pl.Expr]):
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         names = list(program.schema)
         result = dtype(program.result)
-        function = program.function
 
         def run(batch: pl.Series) -> pl.Series:
-            mask = batch.struct.field(EXACT).fill_null(False)
-            columns = [batch.struct.field(name).to_list() for name in names]
+            pending = (~batch.struct.field(EXACT).fill_null(False)).arg_true()
+            rows = (batch.struct.field(name).gather(pending).to_list() for name in names)
             values: list[object] = [None] * len(batch)
-            for index in (~mask).arg_true():
-                value = function(*(column[index] for column in columns))
-                if not fits(value, program.result):
-                    raise OverflowError(f"udfx result {value!r} does not fit {program.result}")
+            for index, value in zip(pending, program.run(zip(*rows, strict=True)), strict=True):
                 values[index] = value
             return pl.Series(values, dtype=result)
 
