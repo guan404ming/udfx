@@ -12,7 +12,6 @@ from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Type
 
-EXACT = "udfx exact"
 OUT = "udfx out"
 ROW = "udfx row"
 
@@ -37,20 +36,20 @@ class PolarsBackend(Backend[pl.Expr]):
         return ~value
 
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
-        names = list(program.schema)
         result = dtype(program.result)
 
-        def run(batch: pl.Series) -> pl.Series:
-            pending = (~batch.struct.field(EXACT).fill_null(False)).arg_true()
-            rows = (batch.struct.field(name).gather(pending).to_list() for name in names)
-            values: list[object] = [None] * len(batch)
-            for index, value in zip(pending, program.run(zip(*rows, strict=True)), strict=True):
-                values[index] = value
-            return pl.Series(values, dtype=result)
+        def patch(series: Sequence[pl.Series]) -> pl.Series:
+            flags, values, *columns = series
+            pending = (~flags.fill_null(False)).arg_true()
+            if pending.is_empty():
+                return values
+            rows = (column.gather(pending).to_list() for column in columns)
+            return values.scatter(
+                pending, pl.Series(program.run(zip(*rows, strict=True)), dtype=result)
+            )
 
-        packed = pl.struct(exact.alias(EXACT), *(pl.col(name) for name in names))
-        slow = packed.map_batches(run, return_dtype=result)
-        return pl.when(exact.fill_null(False)).then(native).otherwise(slow)
+        inputs = [exact, native, *(pl.col(name) for name in program.schema)]
+        return pl.map_batches(inputs, patch, return_dtype=result, is_elementwise=True)
 
     def evaluate(
         self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]
