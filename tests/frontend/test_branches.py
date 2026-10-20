@@ -71,8 +71,7 @@ def test_pop_jump_if_not_none() -> None:
 
 def test_pop_jump_if_none() -> None:
     program = trace(upper_if_not_none, {"s": STR.or_none()})
-    test = apply("not", apply("is_none", S))
-    assert program.value == If(test, apply(".upper", S), S, STR.or_none())
+    assert program.value == If(apply("is_none", S), S, apply(".upper", S), STR.or_none())
     assert program.fault == FALSE
 
 

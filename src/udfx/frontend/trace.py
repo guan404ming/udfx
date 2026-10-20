@@ -9,7 +9,8 @@ from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
 from udfx.frontend.context import Context, parameters
 from udfx.frontend.handlers import explore
-from udfx.frontend.logic import choose, disj
+from udfx.frontend.logic import disj
+from udfx.frontend.merge import merge
 from udfx.frontend.state import Outcome, Raise, Return, State
 from udfx.frontend.values import Item, Value
 from udfx.ir import FALSE, TRUE, Col
@@ -44,8 +45,8 @@ def _closure(function: FunctionType) -> dict[str, Item]:
 def _merge(
     function: Callable[..., object], schema: Mapping[str, Type], outcomes: list[Outcome]
 ) -> Program:
-    returns = [(outcome.path, outcome.value) for outcome in outcomes if isinstance(outcome, Return)]
+    returns = [outcome for outcome in outcomes if isinstance(outcome, Return)]
     if not returns:
         raise Unsupported("function never returns")
-    fault = reduce(disj, (o.path for o in outcomes if isinstance(o, Raise)), FALSE)
-    return Program(function, dict(schema), choose(returns), fault)
+    faults = [outcome.path for outcome in outcomes if isinstance(outcome, Raise)]
+    return Program(function, dict(schema), merge(returns, faults), reduce(disj, faults, FALSE))

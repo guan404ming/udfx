@@ -81,21 +81,26 @@ def neg(a: Node) -> Node:
     return apply("not", a)
 
 
-def choose(cases: Sequence[tuple[Node, Node]]) -> Node:
-    result = cases[0][1].type
-    for _, value in cases[1:]:
-        unified = unify(result, value.type)
-        if unified is None:
+def unified(values: Sequence[Node]) -> Type:
+    result = values[0].type
+    for value in values[1:]:
+        joined = unify(result, value.type)
+        if joined is None:
             raise Unsupported(f"types {result} and {value.type} differ")
-        result = unified
+        result = joined
+    return result
+
+
+def choose(cases: Sequence[tuple[Node, Node]]) -> Node:
+    result = unified([value for _, value in cases])
     *rest, (_, value) = cases
-    node = _retype(value, result)
+    node = retype(value, result)
     for condition, then in reversed(rest):
-        node = If(condition, _retype(then, result), node, result)
+        node = If(condition, retype(then, result), node, result)
     return node
 
 
-def _retype(node: Node, type: Type) -> Node:
+def retype(node: Node, type: Type) -> Node:
     if isinstance(node, Lit) and node.type.kind is Kind.NONE:
         return Lit(None, type.or_none())
     return node

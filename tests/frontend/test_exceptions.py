@@ -152,8 +152,8 @@ def test_finally_reraises() -> None:
 def test_op_fault_is_caught() -> None:
     s = Col("s", STR)
     program = trace(parse, {"s": STR})
-    invalid = apply("not", apply("int_parses", s))
-    assert program.value == If(invalid, Lit(-1, INT), apply("int", s), INT)
+    valid = apply("int_parses", s)
+    assert program.value == If(valid, apply("int", s), Lit(-1, INT), INT)
     assert program.fault == FALSE
 
 

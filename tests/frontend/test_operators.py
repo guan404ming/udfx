@@ -64,8 +64,7 @@ def test_and_returns_operand() -> None:
 
 def test_or_returns_operand() -> None:
     program = trace(default_or, {"s": STR.or_none()})
-    test = apply("not", apply("bool", S))
-    assert program.value == If(test, Lit("default", STR), S, STR.or_none())
+    assert program.value == If(apply("bool", S), S, Lit("default", STR), STR.or_none())
 
 
 def test_not_negates_truthiness() -> None:
