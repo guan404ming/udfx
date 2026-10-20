@@ -4,12 +4,12 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from udfx.backends import installed
 from udfx.backends.base import Backend
-from udfx.backends.polars import PolarsBackend
 from udfx.ops import Op, all_ops
 from udfx.testing import batches, check_op
 
-BACKENDS: tuple[Backend[Any], ...] = (PolarsBackend(),)
+BACKENDS: tuple[Backend[Any], ...] = installed()
 CASES = [(backend, op) for backend in BACKENDS for op in all_ops()]
 
 

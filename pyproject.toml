@@ -9,11 +9,17 @@ dependencies = []
 
 [project.optional-dependencies]
 polars = ["polars>=2.0"]
+duckdb = ["duckdb>=1.4"]
+datafusion = ["datafusion>=50"]
+spark = ["pyspark>=4.0"]
 testing = ["hypothesis>=6.100"]
 
 [dependency-groups]
 dev = [
     "polars>=2.0",
+    "duckdb>=1.4",
+    "datafusion>=50",
+    "pyspark>=4.0",
     "hypothesis>=6.100",
     "pytest>=8.3",
     "ruff>=0.7",
