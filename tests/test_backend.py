@@ -7,6 +7,7 @@ from typing import Any
 import duckdb
 import pytest
 from conftest import backend_params, spark_session
+from pyspark.sql import SparkSession
 
 from udfx import compile
 from udfx.backends.base import Backend
@@ -14,12 +15,12 @@ from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.spark import SparkBackend
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, Col, Lit
+from udfx.ops import apply
 from udfx.program import Program
-from udfx.testing import check_function, check_translation
+from udfx.testing import check_function
 from udfx.types import FLOAT, INT, INT64_MAX, INT64_MIN, STR
 
 NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
-CASE_INSENSITIVE = {"duckdb", "spark"}
 FLOATS = [(1.0,), (-1.0,), (0.0,), (-0.0,), (float("inf"),), (float("-inf"),), (float("nan"),)]
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 
@@ -56,10 +57,6 @@ def constant_branch(value: int) -> int:
     if value == 0:
         return 1 // 0
     return 2
-
-
-def difference(a: int, A: int) -> int:  # noqa: N803
-    return a - A
 
 
 def split(s: str | None) -> list[str] | None:
@@ -130,15 +127,32 @@ def test_fallback_runs_literals_outside_int64(
 
 
 @pytest.mark.parametrize("backend", backend_params())
-def test_column_names_that_differ_only_by_case(backend: Backend[Any]) -> None:
-    translation = compile(difference, {"a": INT, "A": INT}, backend)
-    if backend.name in CASE_INSENSITIVE:
-        assert isinstance(translation.unsupported, Unsupported)
-        assert str(translation.unsupported) == (
-            f"{backend.name} column names are case-insensitive: 'a' and 'A' collide"
+@pytest.mark.parametrize(
+    ("first", "second", "folding"),
+    [("a", "A", {"duckdb", "spark"}), ("\u00e9", "\u00c9", {"spark"})],
+    ids=["ascii", "accented"],
+)
+def test_column_names_that_differ_only_by_case(
+    backend: Backend[Any], first: str, second: str, folding: set[str]
+) -> None:
+    schema = {first: INT, second: INT}
+    value = apply("__sub__", Col(first, INT), Col(second, INT))
+    program = Program(lambda left, right: left - right, schema, value)
+    if backend.name in folding:
+        with pytest.raises(Unsupported) as error:
+            backend.build(program)
+        assert str(error.value) == (
+            f"{backend.name} column names are case-insensitive: {first!r} and {second!r} collide"
         )
     else:
-        assert check_translation(translation, backend, [(5, 3)]) == []
+        assert backend.evaluate([backend.build(program)], schema, [(5, 3)]) == [[2]]
+
+
+@pytest.mark.xdist_group("spark")
+def test_spark_case_sensitive_session_keeps_case() -> None:
+    session = SparkSession.builder.getOrCreate().newSession()
+    session.conf.set("spark.sql.caseSensitive", "true")
+    assert SparkBackend(session).fold_name("A") == "A"
 
 
 @pytest.mark.parametrize("backend", backend_params())

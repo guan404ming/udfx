@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import string
 from collections.abc import Mapping, Sequence
 from typing import ClassVar, cast
 
@@ -21,6 +22,7 @@ EXACT = "udfx exact"
 OUT = "udfx out"
 ROW = "udfx row"
 FALLBACK = "udfx fallback"
+ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
 
 class DuckDBBackend(Backend[Expression]):
@@ -35,8 +37,8 @@ class DuckDBBackend(Backend[Expression]):
     def connection(self) -> duckdb.DuckDBPyConnection:
         return duckdb.default_connection() if self._connection is None else self._connection
 
-    def case_sensitive(self) -> bool:
-        return False
+    def fold_name(self, name: str) -> str:
+        return name.translate(ASCII_LOWER)
 
     def column(self, node: Col) -> Expression:
         return column(node.name)

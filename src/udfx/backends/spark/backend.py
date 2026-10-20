@@ -57,8 +57,10 @@ class SparkBackend(Backend[Column]):
     def unwrap(self, error: BaseException) -> BaseException:
         return raised(str(error)) or error
 
-    def case_sensitive(self) -> bool:
-        return self.session().conf.get("spark.sql.caseSensitive") == "true"
+    def fold_name(self, name: str) -> str:
+        if self.session().conf.get("spark.sql.caseSensitive") == "true":
+            return name
+        return name.lower()
 
     def column(self, node: Col) -> Column:
         self.session()
