@@ -12,6 +12,13 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
 from udfx.ops.registry import OpKey
 from udfx.program import Program
+from udfx.semantics.literals import (
+    TextPrimitives,
+    float_parses,
+    int_parses,
+    parse_float,
+    parse_int,
+)
 from udfx.semantics.numbers import (
     Binary,
     OrderPrimitives,
@@ -135,6 +142,16 @@ def register_extremum[E](
     )
     for kind in (Kind.INT, Kind.STR):
         rules(name, kind, kind)(lambda left, right: extremum(order, compare, left, right))
+
+
+def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> None:
+    def register(name: str, parse: Callable[[TextPrimitives, Any], tuple[Any, Any]]) -> None:
+        rules(name, Kind.STR)(lambda value: Lowered(*parse(text, value)))
+
+    register("int_parses", int_parses)
+    register("int", parse_int)
+    register("float_parses", float_parses)
+    register("float", parse_float)
 
 
 RAISED = threading.local()

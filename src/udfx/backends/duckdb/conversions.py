@@ -3,7 +3,7 @@ from __future__ import annotations
 import duckdb
 from duckdb import Expression, sqltypes
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, register_text_conversions
 from udfx.backends.duckdb.numbers import cast_float64, cast_int128, is_nan, try_truncate_int64
 from udfx.backends.duckdb.rules import (
     NULL,
@@ -19,10 +19,6 @@ from udfx.semantics.literals import (
     SpellingPrimitives,
     TextPrimitives,
     bool_text,
-    float_parses,
-    int_parses,
-    parse_float,
-    parse_int,
     show_none,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
@@ -91,22 +87,4 @@ def bool_str(value: Expression) -> Expression:
 
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
-
-@RULES("int_parses", Kind.STR)
-def str_int_parses(text: Expression) -> Lowered[Expression]:
-    return Lowered(*int_parses(TEXT, text))
-
-
-@RULES("int", Kind.STR)
-def str_int(text: Expression) -> Lowered[Expression]:
-    return Lowered(*parse_int(TEXT, text))
-
-
-@RULES("float_parses", Kind.STR)
-def str_float_parses(text: Expression) -> Lowered[Expression]:
-    return Lowered(*float_parses(TEXT, text))
-
-
-@RULES("float", Kind.STR)
-def str_float(text: Expression) -> Lowered[Expression]:
-    return Lowered(*parse_float(TEXT, text))
+register_text_conversions(RULES, TEXT)

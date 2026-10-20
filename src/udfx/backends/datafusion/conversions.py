@@ -3,17 +3,13 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, register_text_conversions
 from udfx.backends.datafusion.numbers import cast_float64, finite
 from udfx.backends.datafusion.rules import RULES, length, when
 from udfx.semantics.literals import (
     SpellingPrimitives,
     TextPrimitives,
     bool_text,
-    float_parses,
-    int_parses,
-    parse_float,
-    parse_int,
     show_none,
 )
 from udfx.semantics.numbers import (
@@ -72,22 +68,4 @@ def bool_str(value: Expr) -> Expr:
 
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
-
-@RULES("int_parses", Kind.STR)
-def str_int_parses(text: Expr) -> Lowered[Expr]:
-    return Lowered(*int_parses(TEXT, text))
-
-
-@RULES("int", Kind.STR)
-def str_int(text: Expr) -> Lowered[Expr]:
-    return Lowered(*parse_int(TEXT, text))
-
-
-@RULES("float_parses", Kind.STR)
-def str_float_parses(text: Expr) -> Lowered[Expr]:
-    return Lowered(*float_parses(TEXT, text))
-
-
-@RULES("float", Kind.STR)
-def str_float(text: Expr) -> Lowered[Expr]:
-    return Lowered(*parse_float(TEXT, text))
+register_text_conversions(RULES, TEXT)
