@@ -129,8 +129,8 @@ def str_getitem(a: pl.Expr, b: pl.Expr) -> pl.Expr:
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
-def list_getitem(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return a.list.get(b, null_on_oob=True)
+def list_getitem(container: pl.Expr, index: pl.Expr) -> pl.Expr:
+    return container.list.get(index.clip(-(2**62), None), null_on_oob=True)
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
