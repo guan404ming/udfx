@@ -19,8 +19,10 @@ original function on any row it cannot prove identical.
 ## Install
 
 ```
-uv pip install -e .[polars]    # or duckdb, datafusion, spark
+pip install "udfx[polars]"    # or duckdb, datafusion, spark
 ```
+
+`udfx.testing` (the Python oracle and Hypothesis strategies) needs `udfx[testing]`.
 
 ## Quick start
 
@@ -49,8 +51,8 @@ print(df.select(year=translation.expr)["year"].to_list())
 ```
 
 `compile(function, schema, backend="polars")` returns a `Translation`: `ok`, `expr`, `program`,
-and `unsupported` (the reason when the function cannot be compiled). `udfx.explain(function,
-schema)` prints the traced IR and the native expression.
+`backend` (the backend name), and `unsupported` (the reason when the function cannot be
+compiled). `udfx.explain(function, schema)` prints the traced IR and the native expression.
 
 ## How it works
 
@@ -70,7 +72,7 @@ native expression + exact predicate
 3. [`backends/`](src/udfx/backends) lowers each op per engine. A rule may return an `exact`
    predicate when the engine differs from Python on some rows.
 4. Rows where `exact` is false, or where Python would raise, run the original function through
-   the engine's own UDF path. A raising row fails the query with the same exception type.
+   the engine's own UDF path. A raising row fails the query.
 
 ## Supported
 
@@ -83,8 +85,10 @@ native expression + exact predicate
 Python features: `if`/`else`, conditional expressions, `and`/`or`/`not`, chained comparisons,
 `try`/`except`/`finally`, nested helpers and closures, constant dicts and sets, slices.
 
-Not supported, so `compile` returns `ok == False`: loops, comprehensions, f-strings, keyword
-arguments, `is` against anything but `None`, side effects, calls without a registered op.
+Not supported, so `compile` returns `ok == False` and `unsupported` names the feature: loops,
+comprehensions, f-strings, list and set literals, `with`, `raise`, generators, imports, global
+assignment, attribute access on a column value, keyword arguments, `is` against anything but
+`None`, calls without a registered op.
 
 ## Backends
 
@@ -102,9 +106,17 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 
 - Each row equals the Python result, or the row runs the Python function. Checked by tests, not
   by proof.
+- A raising row fails the query. Polars raises the original exception type. DuckDB, DataFusion,
+  and Spark wrap it in their UDF error. To get the original type, run the query through the
+  backend object's `execute`, for example `backend.execute(lambda: relation.fetchall())`.
 - Globals and closure constants are read once at compile time.
 - udfx does not validate data against the schema. Declare nullable columns with `.or_none()`.
 - Polars eager mode has no common subexpression elimination; use a `LazyFrame` for the best speed.
+- Spark pickles the user function by reference, so executors need the same modules and the same
+  udfx version.
+- DuckDB expressions must run on the connection the backend holds. Pass your connection with
+  `DuckDBBackend(connection)` and run the query on it.
+- `requires-python` stops before 3.15 on purpose: bytecode support is per CPython version.
 
 ## Performance
 

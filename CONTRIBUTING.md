@@ -6,7 +6,8 @@
 uv sync
 ```
 
-Installs the package, all four engines, and the test tools. Spark needs Java 21.
+From a checkout, `uv sync` installs the package, all four engines, and the test tools. Spark
+needs Java 21.
 
 ## Checks
 
@@ -18,7 +19,10 @@ uv run pytest -m corpus
 ```
 
 All must pass before a pull request. CI runs them on Python 3.12, 3.13, and 3.14 with
-`HYPOTHESIS_PROFILE=ci` (300 examples per test instead of 60).
+`HYPOTHESIS_PROFILE=ci` (100 examples per test instead of 25).
+
+`uv run pytest` runs the tests in parallel with `-n auto` and prints the five slowest with
+`--durations=5`. Pass `-n 0` to run in one process.
 
 ## Code rules
 
