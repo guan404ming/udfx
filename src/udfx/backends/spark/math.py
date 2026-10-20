@@ -5,7 +5,8 @@ import operator
 from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered
-from udfx.backends.spark.numbers import cast_float64, either_nan, float_int, floor
+from udfx.backends.spark.conversions import float_int
+from udfx.backends.spark.numbers import cast_float64, either_nan, floor
 from udfx.backends.spark.rules import RULES
 from udfx.semantics.numbers import (
     EXACT_POWERS_OF_TEN,

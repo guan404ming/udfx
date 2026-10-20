@@ -5,7 +5,8 @@ import operator
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.numbers import cast_float64, either_nan, float_int
+from udfx.backends.polars.conversions import float_int
+from udfx.backends.polars.numbers import cast_float64, either_nan
 from udfx.backends.polars.rules import RULES, broadcast
 from udfx.semantics.numbers import (
     EXACT_POWERS_OF_TEN,

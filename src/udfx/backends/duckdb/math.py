@@ -5,7 +5,8 @@ import operator
 from duckdb import Expression
 
 from udfx.backends.base import Lowered
-from udfx.backends.duckdb.numbers import cast_float64, either_nan, float_int
+from udfx.backends.duckdb.conversions import float_int
+from udfx.backends.duckdb.numbers import cast_float64, either_nan
 from udfx.backends.duckdb.rules import RULES, constant, function, when
 from udfx.semantics.numbers import (
     EXACT_POWERS_OF_TEN,

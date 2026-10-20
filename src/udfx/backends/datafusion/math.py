@@ -5,12 +5,12 @@ import operator
 from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered
+from udfx.backends.datafusion.conversions import float_int
 from udfx.backends.datafusion.numbers import (
     INFINITY,
     cast_float64,
     either_nan,
     finite,
-    float_int,
     is_nan,
 )
 from udfx.backends.datafusion.rules import RULES
