@@ -1,7 +1,9 @@
+from udfx.frontend import trace
+from udfx.frontend.calls import invoke
 from udfx.frontend.logic import conjunction, disjunction, fold, negate
-from udfx.ir import FALSE, TRUE, Col, Lit
+from udfx.ir import FALSE, TRUE, Col, Lit, lit
 from udfx.ops import apply
-from udfx.types import BOOL, STR
+from udfx.types import BOOL, INT, STR, list_of
 
 X = Col("x", BOOL)
 Y = Col("y", BOOL)
@@ -41,3 +43,25 @@ def test_fold_evaluates_literal_calls() -> None:
 def test_fold_keeps_raising_calls() -> None:
     parse = apply("int", Lit("x", STR))
     assert fold(parse) == parse
+
+
+def test_constant_receiver_folds() -> None:
+    t = Col("t", STR)
+    program = trace(lambda t: "a,b ".strip().replace(",", t), {"t": STR})
+    assert program.value == apply(".replace", Lit("a,b", STR), Lit(",", STR), t)
+
+
+def test_constant_list_folds_inside_its_consumer() -> None:
+    t = Col("t", STR)
+    program = trace(lambda t: t in "a,b".upper().split(","), {"t": STR})
+    assert program.value == apply("__contains__", Lit(("A", "B"), list_of(STR)), t)
+
+
+def test_constant_call_folds() -> None:
+    assert trace(lambda t: int("12"), {"t": STR}).value == Lit(12, INT)
+
+
+def test_raising_constant_call_keeps_its_faults() -> None:
+    node, faults = invoke("__getitem__", [lit("abc"), lit(5)], TypeError)
+    assert node == apply("__getitem__", lit("abc"), lit(5))
+    assert [fault.kind for fault in faults] == [IndexError]

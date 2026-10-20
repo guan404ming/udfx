@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, If, Lit, Node
 from udfx.ops import apply
-from udfx.types import Kind, Type, unify
+from udfx.types import Kind, Type, fits, unify
 
 EXCLUSIVE = frozenset({"bool", "is_none"})
 
@@ -13,14 +13,17 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 def fold(node: Node) -> Node:
     if not isinstance(node, Call):
         return node
-    arguments = tuple(fold(argument) for argument in node.args)
-    values = [argument.value for argument in arguments if isinstance(argument, Lit)]
-    if len(values) == len(arguments):
-        try:
-            return Lit(node.op.reference(*values), node.op.result)
-        except Exception:
-            return Call(node.op, arguments)
-    return Call(node.op, arguments)
+    folded = Call(node.op, tuple(fold(argument) for argument in node.args))
+    values = [argument.value for argument in folded.args if isinstance(argument, Lit)]
+    if len(values) < len(folded.args):
+        return folded
+    try:
+        value = folded.op.reference(*values)
+    except Exception:
+        return folded
+    if not fits(value, folded.type):
+        return folded
+    return Lit(tuple(value) if isinstance(value, list) else value, folded.type)
 
 
 def conjuncts(node: Node) -> tuple[Node, ...]:

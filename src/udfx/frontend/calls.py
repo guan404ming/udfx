@@ -4,6 +4,7 @@ import math
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
+from udfx.frontend.logic import fold
 from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, Op, all_ops, apply, resolve
@@ -67,18 +68,22 @@ def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
 
 def invoke(
     name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
-) -> tuple[Call, list[Fault]]:
+) -> tuple[Node, list[Fault]]:
     op, arguments = overload(name, arguments)
+    call = Call(op, tuple(arguments))
+    folded = fold(call)
+    if isinstance(folded, Lit) and folded.type.kind is not Kind.LIST:
+        return folded, []
     faults = [
         Fault(first_null_kind if index == 0 else TypeError, apply("is_none", argument))
         for index, (argument, parameter) in enumerate(zip(arguments, op.params, strict=True))
         if argument.type.nullable and not parameter.nullable
     ]
     faults.extend(op.faults(*arguments))
-    return Call(op, tuple(arguments)), faults
+    return (call if isinstance(folded, Lit) else folded), faults
 
 
-def call(callee: Item, arguments: Sequence[Item]) -> tuple[Call, list[Fault]]:
+def call(callee: Item, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
     nodes = [node_of(argument) for argument in arguments]
     match callee:
         case Method(name=name):

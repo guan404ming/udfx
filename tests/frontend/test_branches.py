@@ -77,8 +77,7 @@ def test_pop_jump_if_none() -> None:
 
 def test_jump_forward_joins_branches() -> None:
     program = trace(upper_or_default, {"s": STR.or_none()})
-    default = apply(".upper", Lit("x", STR))
-    assert program.value == If(apply("bool", S), apply(".upper", S), default, STR)
+    assert program.value == If(apply("bool", S), apply(".upper", S), Lit("X", STR), STR)
     assert program.fault == FALSE
 
 

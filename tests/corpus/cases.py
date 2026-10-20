@@ -259,6 +259,17 @@ def not_half(a):
     return a != 1.5
 
 
+def constant_receiver(s):
+    return "a,b ".strip().replace(",", s)
+
+
+def constant_part(i):
+    try:
+        return "a,b".upper().split(",")[i]
+    except IndexError:
+        return None
+
+
 def keyword_split(s):
     return s.split(sep="::")
 
@@ -310,6 +321,8 @@ CASES = [
     Case("split_on_none", split_on_none, {"text": STR}, "native"),
     Case("is_zero", is_zero, {"x": FLOAT}, "native"),
     Case("not_half", not_half, {"a": INT.or_none()}, "native"),
+    Case("constant_receiver", constant_receiver, {"s": STR}, "native"),
+    Case("constant_part", constant_part, {"i": INT}, "native"),
     Case("loop_total", loop_total, {"s": STR}, "fallback"),
     Case("gauss_noise", gauss_noise, {"x": FLOAT}, "fallback"),
     Case("parse_json", parse_json, {"s": STR}, "fallback"),
