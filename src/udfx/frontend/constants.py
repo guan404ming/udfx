@@ -27,12 +27,15 @@ def is_scalar(value: object) -> bool:
 def constant(value: object) -> Item:
     if is_scalar(value):
         return Value(lit(value))
-    if isinstance(value, tuple | list | set | frozenset) and value:
-        kinds = {type(item) for item in value}
+    if isinstance(value, tuple | list | set | frozenset):
+        present = [item for item in value if item is not None]
+        kinds = {type(item) for item in present}
         if len(kinds) == 1 and kinds <= set(ITEMS):
-            items = tuple(sorted(value) if isinstance(value, set | frozenset) else value)
-            item_type = lit(items[0]).type
-            return Value(Lit(items, list_of(item_type)))
+            missing = len(value) - len(present)
+            ordered = isinstance(value, set | frozenset)
+            items = (*sorted(present), *[None] * missing) if ordered else tuple(value)
+            item_type = lit(present[0]).type
+            return Value(Lit(items, list_of(item_type.or_none() if missing else item_type)))
     return Opaque(value)
 
 

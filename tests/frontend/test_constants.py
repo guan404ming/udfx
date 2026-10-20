@@ -1,10 +1,14 @@
+from collections.abc import Callable
+
 import pytest
 
+from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.logic import conjunction, negate
 from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
+from udfx.testing import check_function
 from udfx.types import FLOAT, INT, STR, list_of
 
 pytestmark = pytest.mark.usefixtures("stand_ins")
@@ -27,6 +31,14 @@ def in_list(s: str) -> bool:
 
 def in_set(s: str) -> bool:
     return s in {"b", "a"}
+
+
+def in_tuple_with_none(s: str | None) -> bool:
+    return s in ("a", None)
+
+
+def in_set_with_none(s: str | None) -> bool:
+    return s in {None, "b", "a"}
 
 
 def in_ints(a: int) -> bool:
@@ -89,6 +101,22 @@ def test_none_item_is_not_in_a_list() -> None:
 def test_none_item_in_text_raises() -> None:
     s = Col("s", STR.or_none())
     assert trace(in_text, {"s": s.type, "t": STR}).fault == apply("is_none", s)
+
+
+@pytest.mark.parametrize(
+    ("function", "items"),
+    [(in_tuple_with_none, ("a", None)), (in_set_with_none, ("a", "b", None))],
+    ids=["tuple", "set"],
+)
+def test_none_item_makes_a_nullable_item_list(
+    function: Callable[[str | None], bool], items: tuple[str | None, ...]
+) -> None:
+    s = Col("s", STR.or_none())
+    program = trace(function, {"s": s.type})
+    assert program.value == apply("__contains__", Lit(items, list_of(STR.or_none())), s)
+    assert program.fault == FALSE
+    rows = [("a",), ("b",), ("c",), (None,)]
+    assert check_function(function, {"s": s.type}, PolarsBackend(), rows) == []
 
 
 def test_list_constant_keeps_order() -> None:
