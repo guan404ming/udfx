@@ -49,19 +49,19 @@ class Backend[E](ABC):
     rules: ClassVar[RuleSet[Any]]
 
     @abstractmethod
-    def column(self, col: Col) -> E: ...
+    def column(self, node: Col) -> E: ...
 
     @abstractmethod
-    def literal(self, lit: Lit) -> E: ...
+    def literal(self, node: Lit) -> E: ...
 
     @abstractmethod
-    def select(self, cond: E, then: E, orelse: E) -> E: ...
+    def select(self, condition: E, then: E, orelse: E) -> E: ...
 
     @abstractmethod
-    def both(self, a: E, b: E) -> E: ...
+    def both(self, left: E, right: E) -> E: ...
 
     @abstractmethod
-    def negate(self, a: E) -> E: ...
+    def negate(self, value: E) -> E: ...
 
     @abstractmethod
     def fallback(self, native: E, exact: E, program: Program) -> E: ...
@@ -93,12 +93,13 @@ class Backend[E](ABC):
         return self.fallback(value.expr, exact, program)
 
     def _lower_if(self, node: If) -> Lowered[E]:
-        cond, then, orelse = self.lower(node.cond), self.lower(node.then), self.lower(node.orelse)
-        expr = self.select(cond.expr, then.expr, orelse.expr)
+        condition = self.lower(node.cond)
+        then, orelse = self.lower(node.then), self.lower(node.orelse)
+        expr = self.select(condition.expr, then.expr, orelse.expr)
         if then.exact is None and orelse.exact is None:
-            return Lowered(expr, cond.exact)
-        branch = self.select(cond.expr, self._exact(then), self._exact(orelse))
-        return Lowered(expr, self._all(cond.exact, branch))
+            return Lowered(expr, condition.exact)
+        branch = self.select(condition.expr, self._exact(then), self._exact(orelse))
+        return Lowered(expr, self._all(condition.exact, branch))
 
     def _lower_call(self, node: Call) -> Lowered[E]:
         rule = self.rules.get(node.op.key)

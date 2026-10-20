@@ -12,28 +12,29 @@ from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Type
 
-EXACT = "__udfx_exact"
-OUT = "__udfx_out"
+EXACT = "udfx exact"
+OUT = "udfx out"
+ROW = "udfx row"
 
 
 class PolarsBackend(Backend[pl.Expr]):
     name: ClassVar[str] = "polars"
     rules: ClassVar[RuleSet[pl.Expr]] = RULES
 
-    def column(self, col: Col) -> pl.Expr:
-        return pl.col(col.name)
+    def column(self, node: Col) -> pl.Expr:
+        return pl.col(node.name)
 
-    def literal(self, lit: Lit) -> pl.Expr:
-        return pl.lit(lit.value, dtype=dtype(lit.type))
+    def literal(self, node: Lit) -> pl.Expr:
+        return pl.lit(node.value, dtype=dtype(node.type))
 
-    def select(self, cond: pl.Expr, then: pl.Expr, orelse: pl.Expr) -> pl.Expr:
-        return pl.when(cond).then(then).otherwise(orelse)
+    def select(self, condition: pl.Expr, then: pl.Expr, orelse: pl.Expr) -> pl.Expr:
+        return pl.when(condition).then(then).otherwise(orelse)
 
-    def both(self, a: pl.Expr, b: pl.Expr) -> pl.Expr:
-        return a & b
+    def both(self, left: pl.Expr, right: pl.Expr) -> pl.Expr:
+        return left & right
 
-    def negate(self, a: pl.Expr) -> pl.Expr:
-        return ~a
+    def negate(self, value: pl.Expr) -> pl.Expr:
+        return ~value
 
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         names = list(program.schema)
@@ -42,7 +43,7 @@ class PolarsBackend(Backend[pl.Expr]):
 
         def run(batch: pl.Series) -> pl.Series:
             mask = batch.struct.field(EXACT).fill_null(False)
-            columns = [batch.struct.field(name) for name in names]
+            columns = [batch.struct.field(name).to_list() for name in names]
             values: list[object] = [None] * len(batch)
             for index in (~mask).arg_true():
                 values[index] = function(*(column[index] for column in columns))
@@ -58,8 +59,11 @@ class PolarsBackend(Backend[pl.Expr]):
         columns = list(zip(*rows, strict=True)) if rows else [() for _ in schema]
         frame = pl.DataFrame(
             [
-                pl.Series(name, list(values), dtype=dtype(type), strict=True)
-                for (name, type), values in zip(schema.items(), columns, strict=True)
+                pl.Series(ROW, range(len(rows))),
+                *(
+                    pl.Series(name, list(values), dtype=dtype(type), strict=True)
+                    for (name, type), values in zip(schema.items(), columns, strict=True)
+                ),
             ]
         )
         return frame.with_columns(expr.alias(OUT)).get_column(OUT).to_list()

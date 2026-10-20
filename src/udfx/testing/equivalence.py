@@ -29,19 +29,24 @@ def check_function(
     translation = compile(function, schema, backend)
     if translation.unsupported is not None:
         raise translation.unsupported
+    expr = translation.expr
     expected = [run(function, row) for row in rows]
     returned = [
         (row, out) for row, out in zip(rows, expected, strict=True) if isinstance(out, Returned)
     ]
-    actual = backend.evaluate(translation.expr, schema, [row for row, _ in returned])
+    actual = backend.evaluate(expr, schema, [row for row, _ in returned])
     mismatches = [
         Mismatch(row, out, repr(value))
         for (row, out), value in zip(returned, actual, strict=True)
         if not same(out.value, value)
     ]
     for row, out in zip(rows, expected, strict=True):
-        if isinstance(out, Raised) and not _raises(backend, translation.expr, schema, row):
-            mismatches.append(Mismatch(row, out, "no error"))
+        if isinstance(out, Raised):
+            got = _attempt(backend, expr, schema, [row])
+            if not (isinstance(got, Raised) and got.kind is out.kind):
+                mismatches.append(Mismatch(row, out, repr(got)))
+    if len(returned) < len(rows) and not isinstance(_attempt(backend, expr, schema, rows), Raised):
+        mismatches.append(Mismatch(rows[0], Raised(Exception), "batch did not raise"))
     return mismatches
 
 
@@ -61,6 +66,10 @@ def check_op(op: Op, backend: Backend[Any], rows: Sequence[Row]) -> list[Mismatc
     hits = [evaluate(item.expr) for item in lowered]
     mismatches: list[Mismatch] = []
     for index, row in enumerate(rows):
+        flags_here = [flags[index] for flags in (*exacts, *hits)]
+        if any(flag not in (True, False, None) for flag in flags_here):
+            mismatches.append(Mismatch(row, run(op.reference, row), f"predicates {flags_here}"))
+            continue
         if not all(flags[index] is True for flags in exacts):
             continue
         expected = run(op.reference, row)
@@ -68,7 +77,7 @@ def check_op(op: Op, backend: Backend[Any], rows: Sequence[Row]) -> list[Mismatc
             fault.kind for fault, flags in zip(faults, hits, strict=True) if flags[index] is True
         ]
         if isinstance(expected, Raised):
-            if not raised or not issubclass(expected.kind, raised[0]):
+            if not raised or expected.kind is not raised[0]:
                 mismatches.append(Mismatch(row, expected, f"faults {raised}"))
         elif raised:
             mismatches.append(Mismatch(row, expected, f"spurious faults {raised}"))
@@ -77,11 +86,12 @@ def check_op(op: Op, backend: Backend[Any], rows: Sequence[Row]) -> list[Mismatc
     return mismatches
 
 
-def _raises(backend: Backend[Any], expr: object, schema: Mapping[str, Type], row: Row) -> bool:
+def _attempt(
+    backend: Backend[Any], expr: object, schema: Mapping[str, Type], rows: Sequence[Row]
+) -> Outcome:
     try:
-        backend.evaluate(expr, schema, [row])
+        return Returned(backend.evaluate(expr, schema, rows))
     except Unsupported:
         raise
-    except Exception:
-        return True
-    return False
+    except Exception as error:
+        return Raised(type(error))
