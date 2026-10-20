@@ -17,9 +17,9 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/ir.py` | IR nodes: `Col`, `Lit`, `Call`, `If` |
 | `src/udfx/program.py` | `Program`: the traced function, its schema, value, fault, and `run` for fallback rows |
 | `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py` |
-| `src/udfx/semantics/` | Facts about Python that every backend needs: whitespace, literal grammars, operator tables, Unicode drift |
+| `src/udfx/semantics/` | Facts about Python that every backend needs: whitespace, literal grammars, operator tables, Unicode drift, and policies that build expressions from a primitives record |
 | `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
-| `src/udfx/backends/base.py` | Generic lowering and fallback composition. Backends never reimplement it |
+| `src/udfx/backends/base.py` | Generic lowering, fallback composition, boolean rules, mixed int and float registration, and `evaluate` helpers. Backends never reimplement it |
 | `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, `dtypes.py`, and one rule file per op family with the same names as `ops/` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
@@ -43,6 +43,7 @@ An op is an `Op(name, parameters, result, reference, faults)` in `src/udfx/ops/<
 - A param with `nullable=True` accepts `None`. The frontend adds `TypeError` or `AttributeError` faults for `None` on other params.
 - `faults(*args)` returns `Fault(kind, when)` items. `when` is an IR predicate. It must be true exactly when Python raises `kind`. Build it with `apply(name, *nodes)`.
 - Fault order matters. The first true fault wins.
+- `not`, `and`, and `or` lower to `~`, `&`, and `|` on every engine. `RuleSet()` registers these rules. Do not write backend rules for them.
 
 Op names:
 
@@ -67,20 +68,24 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 - If the rule matches Python only on some rows, return `Lowered(expr, exact)`. `exact` is true only on rows where `expr` equals Python. Other rows fall back to Python.
 - Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
 - Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
+- For a Python policy, fill the primitives record from `semantics/` with engine calls and call its function. The records are `FloatPrimitives`, `OrderPrimitives`, `RoundPrimitives`, and `IntegerPrimitives` in `numbers.py`, `TextPrimitives` and `SpellingPrimitives` in `literals.py`, and `SlicePrimitives` and `SearchPrimitives` in `text.py`.
+- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, and `register_extremum` from `base.py`. Give them the engine cast to float and the `OrderPrimitives` record.
 
 ## Backend contract
 
 A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `BACKEND`, a `Backend` subclass. `udfx.backends.installed()` discovers it when its engine imports.
 
-- `backend.py`: the `Backend` subclass. `column`, `literal`, `select`, `both`, `negate` build expressions. `fallback(native, exact, program)` runs `program.run` on rows where `exact` is false and keeps `native` elsewhere. `evaluate(expr, schema, rows)` runs an expression on in-memory rows for tests.
+- `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
+- `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and calls `run_fallback_rows(program, rows)`.
+- `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type.
 - `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`: rules, one file per op family.
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
-- `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception. Spark carries the type through the error message.
+- `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception. Spark overrides `run_fallback_rows` to carry the type in the error message, and `decode_fallback_exception` rebuilds it.
 - `fold_name(name)` returns the name as the engine compares it: identity for Polars and DataFusion, ASCII lower for DuckDB, and `str.lower` for Spark when `spark.sql.caseSensitive` is false. `build` rejects schemas whose folded names collide.
-- Arrow backends implement the fallback UDF with `arrow.fallback`; only batch unpacking and UDF registration stay in the backend.
+- Arrow backends implement the fallback UDF with `arrow.fallback`, which uses `arrow.make_gather`. Only batch unpacking and UDF registration stay in the backend.
 
 ## Tests
 
