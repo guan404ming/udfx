@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import string
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from typing import ClassVar, cast
 
@@ -53,9 +53,6 @@ class DuckDBBackend(Backend[Expression]):
     def connection(self) -> duckdb.DuckDBPyConnection:
         return duckdb.default_connection() if self._connection is None else self._connection
 
-    def execute[T](self, run: Callable[[], T]) -> T:
-        return super(DuckDBBackend, RUNNER).execute(run)
-
     def fold_name(self, name: str) -> str:
         return name.translate(ASCII_LOWER)
 
@@ -82,7 +79,7 @@ class DuckDBBackend(Backend[Expression]):
         def patch(packed: pa.ChunkedArray) -> pa.Array:
             batch = cast(pa.StructArray, packed.combine_chunks())
             columns = [batch.field(field) for field in program.schema]
-            return arrow.fallback(RUNNER, program, batch.field(EXACT), columns, result)
+            return arrow.fallback(self, program, batch.field(EXACT), columns, result)
 
         with suppress(duckdb.NotImplementedException):
             self.connection.create_function(
@@ -122,6 +119,3 @@ class DuckDBBackend(Backend[Expression]):
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         outputs = self.execute(lambda: typed.select(*aliased).fetchall())
         return [list(values) for values in zip(*outputs, strict=True)] or [[] for _ in exprs]
-
-
-RUNNER = DuckDBBackend()

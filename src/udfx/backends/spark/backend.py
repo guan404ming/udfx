@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import ClassVar, cast
 
@@ -17,19 +16,6 @@ from udfx.program import Program
 from udfx.types import Kind, Type
 
 EXACT = f"{RESERVED}exact"
-RAISED = "udfx raised "
-
-
-def decode_fallback_exception(text: str) -> Exception | None:
-    _, found, detail = text.partition(RAISED)
-    name, _, message = detail.partition(": ")
-    kind = getattr(builtins, name.strip(), None)
-    if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
-        return None
-    try:
-        return kind(message.partition("\n")[0])
-    except TypeError:
-        return None
 
 
 def fallback_patch(program: Program) -> Callable[[pa.Array], pa.Array]:
@@ -57,15 +43,6 @@ class SparkBackend(Backend[Column]):
             return SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
         except Exception as error:
             raise RuntimeError("udfx needs a SparkSession to build Spark columns") from error
-
-    def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
-        try:
-            return program.run(rows)
-        except Exception as error:
-            raise RuntimeError(f"{RAISED}{type(error).__name__}: {error}") from error
-
-    def unwrap(self, error: BaseException) -> BaseException:
-        return decode_fallback_exception(str(error)) or error
 
     def fold_name(self, name: str) -> str:
         if self.session().conf.get("spark.sql.caseSensitive") == "true":

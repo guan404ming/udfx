@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import builtins
 import operator
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -120,17 +122,38 @@ def register_extremum[E](
         rules(name, kind, kind)(lambda left, right: extremum(order, compare, left, right))
 
 
+RAISED = threading.local()
+MARKER = "udfx raised "
+
+
+class FallbackError(RuntimeError):
+    def __init__(self, error: Exception) -> None:
+        super().__init__(f"{MARKER}{type(error).__name__}: {error}")
+        self.error = error
+
+
+def decode_fallback_error(text: str) -> Exception | None:
+    _, found, detail = text.partition(MARKER)
+    name, _, message = detail.partition(": ")
+    kind = getattr(builtins, name.strip(), None)
+    if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
+        return None
+    try:
+        return kind(message.partition("\n")[0])
+    except TypeError:
+        return None
+
+
 class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
-    raised: BaseException | None = None
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
             return program.run(rows)
         except Exception as error:
-            self.raised = error
-            raise
+            RAISED.error = error
+            raise FallbackError(error) from error
 
     def evaluate_pending_rows(
         self, program: Program, pending: list[int], gather: Gather
@@ -152,16 +175,16 @@ class Backend[E](ABC):
         return values
 
     def execute[T](self, run: Callable[[], T]) -> T:
-        self.raised = None
+        RAISED.error = None
         try:
             return run()
         except Exception as error:
             raise self.unwrap(error) from None
         finally:
-            self.raised = None
+            RAISED.error = None
 
     def unwrap(self, error: BaseException) -> BaseException:
-        return self.raised or error
+        return getattr(RAISED, "error", None) or decode_fallback_error(str(error)) or error
 
     @abstractmethod
     def column(self, node: Col) -> E: ...
