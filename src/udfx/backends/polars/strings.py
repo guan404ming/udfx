@@ -9,7 +9,7 @@ import polars as pl
 from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.semantics import text
-from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
+from udfx.semantics.text import CLUSTER_JOINERS, SIGMA, CaseDrift, whitespace, word
 from udfx.types import Kind
 
 
@@ -18,7 +18,7 @@ def case_drift(method: str) -> CaseDrift:
     def native(samples: Sequence[str]) -> list[str]:
         return getattr(pl.Series(samples).str, f"to_{method}case")().to_list()
 
-    return text.case_drift(method, native)
+    return text.case_drift(method, native, f"polars {pl.__version__}")
 
 
 def recase(value: pl.Expr, method: str) -> pl.Expr | Lowered[pl.Expr]:
@@ -83,14 +83,15 @@ def find(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
-def reverse(text: pl.Expr) -> pl.Expr:
-    return text.str.split("").list.reverse().list.join("")
+def single_code_point_clusters(text: pl.Expr) -> pl.Expr:
+    return ~text.str.contains(CLUSTER_JOINERS)
 
 
 @RULES(".rfind", Kind.STR, Kind.STR)
-def rfind(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
-    position = find(reverse(text), reverse(pattern))
-    return when(position < 0, pl.lit(-1), length(text) - length(pattern) - position)
+def rfind(text: pl.Expr, pattern: pl.Expr) -> Lowered[pl.Expr]:
+    position = find(text.str.reverse(), pattern.str.reverse())
+    found = when(position < 0, pl.lit(-1), length(text) - length(pattern) - position)
+    return Lowered(found, single_code_point_clusters(text) & single_code_point_clusters(pattern))
 
 
 @RULES(".count", Kind.STR, Kind.STR)

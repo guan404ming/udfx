@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from functools import cache, reduce
 from typing import cast
 
+import pyspark
 from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered
@@ -28,7 +29,7 @@ def case_drift(method: str) -> CaseDrift:
         (recased,) = backend.evaluate([expr], {POINT: STR}, [(sample,) for sample in samples])
         return cast("list[str]", recased)
 
-    return text.case_drift(method, native)
+    return text.case_drift(method, native, f"spark {pyspark.__version__}")
 
 
 def recase(value: Column, method: str) -> Column | Lowered[Column]:

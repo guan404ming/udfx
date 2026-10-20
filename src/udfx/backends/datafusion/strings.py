@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from functools import cache, reduce
 from typing import cast
 
+import datafusion
 import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
@@ -27,7 +28,7 @@ def case_drift(method: str) -> CaseDrift:
         )
         return cast("list[str]", recased)
 
-    return text.case_drift(method, native)
+    return text.case_drift(method, native, f"datafusion {datafusion.__version__}")
 
 
 def recase(value: Expr, method: str) -> Expr | Lowered[Expr]:

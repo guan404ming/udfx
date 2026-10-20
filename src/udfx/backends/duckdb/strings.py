@@ -34,7 +34,7 @@ def case_drift(method: str) -> CaseDrift:
         rows = duckdb.from_arrow(table).select(function(method, column(POINT))).fetchall()
         return [row[0] for row in rows]
 
-    return text.case_drift(method, native)
+    return text.case_drift(method, native, f"duckdb {duckdb.__version__}")
 
 
 def recase(value: Expression, method: str) -> Expression | Lowered[Expression]:
