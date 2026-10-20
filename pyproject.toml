@@ -26,7 +26,7 @@ Issues = "https://github.com/guan404ming/udfx/issues"
 
 [project.optional-dependencies]
 polars = ["polars>=2.0"]
-duckdb = ["duckdb>=1.4"]
+duckdb = ["duckdb>=1.4", "numpy>=2.0"]
 datafusion = ["datafusion>=50"]
 spark = ["pyspark>=4.0"]
 testing = ["hypothesis>=6.100"]
@@ -35,6 +35,7 @@ testing = ["hypothesis>=6.100"]
 dev = [
     "polars>=2.0",
     "duckdb>=1.4",
+    "numpy>=2.0",
     "datafusion>=50",
     "pyspark>=4.0",
     "hypothesis>=6.100",
