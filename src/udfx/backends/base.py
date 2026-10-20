@@ -9,7 +9,7 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
 from udfx.ops.registry import OpKey
 from udfx.program import Program
-from udfx.types import Kind, Type
+from udfx.types import Kind, Type, fits
 
 Row = tuple[object, ...]
 
@@ -105,6 +105,8 @@ class Backend[E](ABC):
         match node:
             case Col():
                 return Lowered(self.column(node))
+            case Lit() if node.type.kind is Kind.INT and not fits(node.value, node.type):
+                return Lowered(self.literal(Lit(0, node.type)), self.literal(FALSE))
             case Lit():
                 return Lowered(self.literal(node))
             case If():

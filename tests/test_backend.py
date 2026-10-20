@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -7,7 +8,7 @@ from udfx.backends.base import Backend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function
-from udfx.types import INT, STR
+from udfx.types import INT, INT64_MAX, INT64_MIN, STR
 
 BACKENDS = installed()
 
@@ -22,6 +23,14 @@ def inverse(x: int) -> float:
 
 def year(text: str) -> int:
     return int(text[:4]) + 1
+
+
+def below_int64(x: int) -> bool:
+    return x < 2**63
+
+
+def above_int64(x: int) -> bool:
+    return x > -(2**63) - 1
 
 
 def constant_branch(value: int) -> int:
@@ -67,3 +76,12 @@ def test_fallback_broadcasts_constant_inputs(backend: Backend[Any]) -> None:
     program = Program(lambda value: value + 1, {"value": INT}, Col("value", INT))
     expr = backend.fallback(backend.literal(Lit(0, INT)), backend.literal(FALSE), program)
     assert backend.evaluate([expr], {"value": INT}, [(1,), (2,)]) == [[2, 3]]
+
+
+@pytest.mark.parametrize("backend", BACKENDS, ids=case_id)
+@pytest.mark.parametrize("function", [below_int64, above_int64], ids=lambda f: f.__name__)
+def test_fallback_runs_literals_outside_int64(
+    backend: Backend[Any], function: Callable[[int], bool]
+) -> None:
+    rows = [(0,), (INT64_MAX,), (INT64_MIN,)]
+    assert check_function(function, {"x": INT}, backend, rows) == []
