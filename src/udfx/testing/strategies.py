@@ -30,6 +30,12 @@ STRING_TRAPS = (
     "[]",
     '["b a", "c"]',
     "123456",
+    "\x1c",
+    " \x1c a \x85 ",
+    "aa",
+    "aaa",
+    "$0",
+    "a😀b",
 )
 
 INT_TRAPS = (0, 1, -1, 2, -2, INT64_MIN, INT64_MAX, 10, 1000)
