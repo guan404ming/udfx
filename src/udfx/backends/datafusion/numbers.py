@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import operator
-import sys
 from collections.abc import Callable
 
 import pyarrow as pa
@@ -9,7 +8,13 @@ from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered
 from udfx.backends.datafusion.rules import RULES, length, not_distinct, when
-from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
+from udfx.semantics.literals import (
+    TextPrimitives,
+    float_parses,
+    int_parses,
+    parse_float,
+    parse_int,
+)
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -92,12 +97,16 @@ def int_divmod(a: Expr, b: Expr) -> tuple[Expr, Expr]:
     return when(shift, quotient - lit(1), quotient), when(shift, remainder + divisor, remainder)
 
 
-def is_ascii(a: Expr) -> Expr:
-    return functions.octet_length(a) == functions.character_length(a)
-
-
-def cleaned(a: Expr) -> Expr:
-    return functions.replace(functions.btrim(a, lit(ASCII_SPACE)), lit("_"), lit(""))
+TEXT = TextPrimitives(
+    matches=lambda text, pattern: functions.regexp_like(text, lit(pattern)),
+    strip=lambda text, chars: functions.btrim(text, lit(chars)),
+    replace=lambda text, old, new: functions.replace(text, lit(old), lit(new)),
+    byte_length=functions.octet_length,
+    char_length=length,
+    not_null=Expr.is_not_null,
+    try_int=lambda text: text.try_cast(pa.int64()),
+    try_float=lambda text: text.try_cast(pa.float64()),
+)
 
 
 def finite(a: Expr) -> Expr:
@@ -206,30 +215,23 @@ def int_str(a: Expr) -> Expr:
 
 
 @RULES("int_parses", Kind.STR)
-def str_int_parses(a: Expr) -> Lowered[Expr]:
-    limit = sys.get_int_max_str_digits() or sys.maxsize
-    return Lowered(
-        functions.regexp_like(a, lit(INT_LITERAL)), is_ascii(a) & (length(a) <= lit(limit))
-    )
+def str_int_parses(text: Expr) -> Lowered[Expr]:
+    return Lowered(*int_parses(TEXT, text))
 
 
 @RULES("int", Kind.STR)
-def str_int(a: Expr) -> Lowered[Expr]:
-    parsed = cleaned(a).try_cast(pa.int64())
-    literal = functions.regexp_like(a, lit(INT_LITERAL))
-    return Lowered(parsed, is_ascii(a) & (parsed.is_not_null() | ~literal))
+def str_int(text: Expr) -> Lowered[Expr]:
+    return Lowered(*parse_int(TEXT, text))
 
 
 @RULES("float_parses", Kind.STR)
-def str_float_parses(a: Expr) -> Lowered[Expr]:
-    return Lowered(functions.regexp_like(a, lit(FLOAT_LITERAL)), is_ascii(a))
+def str_float_parses(text: Expr) -> Lowered[Expr]:
+    return Lowered(*float_parses(TEXT, text))
 
 
 @RULES("float", Kind.STR)
-def str_float(a: Expr) -> Lowered[Expr]:
-    parsed = cleaned(a).try_cast(pa.float64())
-    literal = functions.regexp_like(a, lit(FLOAT_LITERAL))
-    return Lowered(parsed, is_ascii(a) & (parsed.is_not_null() | ~literal))
+def str_float(text: Expr) -> Lowered[Expr]:
+    return Lowered(*parse_float(TEXT, text))
 
 
 RULES("math.log10", Kind.FLOAT)(functions.log10)

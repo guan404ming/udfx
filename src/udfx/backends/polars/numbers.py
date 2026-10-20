@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import operator
-import sys
 from collections.abc import Callable
 
 import polars as pl
 
 from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES, when
-from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
+from udfx.semantics.literals import (
+    TextPrimitives,
+    float_parses,
+    int_parses,
+    parse_float,
+    parse_int,
+)
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -94,12 +99,16 @@ def float_mod(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(remainder, exact)
 
 
-def is_ascii(a: pl.Expr) -> pl.Expr:
-    return a.str.len_bytes() == a.str.len_chars()
-
-
-def cleaned(a: pl.Expr) -> pl.Expr:
-    return a.str.strip_chars(ASCII_SPACE).str.replace_all("_", "", literal=True)
+TEXT = TextPrimitives(
+    matches=lambda text, pattern: text.str.contains(pattern),
+    strip=lambda text, chars: text.str.strip_chars(chars),
+    replace=lambda text, old, new: text.str.replace_all(old, new, literal=True),
+    byte_length=lambda text: text.str.len_bytes(),
+    char_length=lambda text: text.str.len_chars(),
+    not_null=pl.Expr.is_not_null,
+    try_int=lambda text: text.str.to_integer(strict=False),
+    try_float=lambda text: text.cast(pl.Float64, strict=False),
+)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -174,26 +183,23 @@ def int_str(a: pl.Expr) -> pl.Expr:
 
 
 @RULES("int_parses", Kind.STR)
-def str_int_parses(a: pl.Expr) -> Lowered[pl.Expr]:
-    limit = sys.get_int_max_str_digits() or sys.maxsize
-    return Lowered(a.str.contains(INT_LITERAL), is_ascii(a) & (a.str.len_bytes() <= limit))
+def str_int_parses(text: pl.Expr) -> Lowered[pl.Expr]:
+    return Lowered(*int_parses(TEXT, text))
 
 
 @RULES("int", Kind.STR)
-def str_int(a: pl.Expr) -> Lowered[pl.Expr]:
-    parsed = cleaned(a).str.to_integer(strict=False)
-    return Lowered(parsed, is_ascii(a) & (parsed.is_not_null() | ~a.str.contains(INT_LITERAL)))
+def str_int(text: pl.Expr) -> Lowered[pl.Expr]:
+    return Lowered(*parse_int(TEXT, text))
 
 
 @RULES("float_parses", Kind.STR)
-def str_float_parses(a: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(a.str.contains(FLOAT_LITERAL), is_ascii(a))
+def str_float_parses(text: pl.Expr) -> Lowered[pl.Expr]:
+    return Lowered(*float_parses(TEXT, text))
 
 
 @RULES("float", Kind.STR)
-def str_float(a: pl.Expr) -> Lowered[pl.Expr]:
-    parsed = cleaned(a).cast(pl.Float64, strict=False)
-    return Lowered(parsed, is_ascii(a) & (parsed.is_not_null() | ~a.str.contains(FLOAT_LITERAL)))
+def str_float(text: pl.Expr) -> Lowered[pl.Expr]:
+    return Lowered(*parse_float(TEXT, text))
 
 
 def log10(a: pl.Expr) -> Lowered[pl.Expr]:

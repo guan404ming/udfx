@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import operator
-import sys
 from collections.abc import Callable
 
 import duckdb
@@ -18,7 +17,15 @@ from udfx.backends.duckdb.rules import (
     nullable_equal,
     when,
 )
-from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
+from udfx.semantics.literals import (
+    FLOAT_LITERAL,
+    INT_LITERAL,
+    TextPrimitives,
+    float_parses,
+    int_parses,
+    parse_float,
+    parse_int,
+)
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -137,17 +144,31 @@ def int_divmod(a: Expression, b: Expression) -> tuple[Expression, Expression, Ex
     )
 
 
-def is_ascii(a: Expression) -> Expression:
-    return function("strlen", a) == length(a)
+def matches(text: Expression, pattern: str) -> Expression:
+    return function("regexp_matches", text, constant(pattern))
 
 
-def cleaned(a: Expression) -> Expression:
-    trimmed = function("trim", a, constant(ASCII_SPACE))
-    return function("replace", trimmed, constant("_"), constant(""))
+def try_int(digits: Expression) -> Expression:
+    parsable = matches(digits, INT_LITERAL) & (length(digits) <= constant(38))
+    value = when(parsable, wide(digits), NULL)
+    fits = value.between(constant(INT64_MIN), constant(INT64_MAX))
+    return when(fits, value, NULL).cast(sqltypes.BIGINT)
 
 
-def matches(a: Expression, pattern: str) -> Expression:
-    return function("regexp_matches", a, constant(pattern))
+def try_float(digits: Expression) -> Expression:
+    return when(matches(digits, FLOAT_LITERAL), floating(digits), NULL)
+
+
+TEXT = TextPrimitives(
+    matches=matches,
+    strip=lambda text, chars: function("trim", text, constant(chars)),
+    replace=lambda text, old, new: function("replace", text, constant(old), constant(new)),
+    byte_length=lambda text: function("strlen", text),
+    char_length=length,
+    not_null=Expression.isnotnull,
+    try_int=try_int,
+    try_float=try_float,
+)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -230,29 +251,23 @@ def int_str(a: Expression) -> Expression:
 
 
 @RULES("int_parses", Kind.STR)
-def str_int_parses(a: Expression) -> Lowered[Expression]:
-    limit = sys.get_int_max_str_digits() or sys.maxsize
-    return Lowered(matches(a, INT_LITERAL), is_ascii(a) & (length(a) <= constant(limit)))
+def str_int_parses(text: Expression) -> Lowered[Expression]:
+    return Lowered(*int_parses(TEXT, text))
 
 
 @RULES("int", Kind.STR)
-def str_int(a: Expression) -> Lowered[Expression]:
-    digits = cleaned(a)
-    parsable = matches(a, INT_LITERAL)
-    parsed = narrow(when(parsable & (length(digits) <= constant(38)), wide(digits), NULL))
-    exact = ~parsable | duckdb.CoalesceOperator(parsed.exact, constant(False))
-    return Lowered(parsed.expr, is_ascii(a) & exact)
+def str_int(text: Expression) -> Lowered[Expression]:
+    return Lowered(*parse_int(TEXT, text))
 
 
 @RULES("float_parses", Kind.STR)
-def str_float_parses(a: Expression) -> Lowered[Expression]:
-    return Lowered(matches(a, FLOAT_LITERAL), is_ascii(a))
+def str_float_parses(text: Expression) -> Lowered[Expression]:
+    return Lowered(*float_parses(TEXT, text))
 
 
 @RULES("float", Kind.STR)
-def str_float(a: Expression) -> Lowered[Expression]:
-    parsed = when(matches(a, FLOAT_LITERAL), floating(cleaned(a)), NULL)
-    return Lowered(parsed, is_ascii(a))
+def str_float(text: Expression) -> Lowered[Expression]:
+    return Lowered(*parse_float(TEXT, text))
 
 
 def log10(a: Expression) -> Expression:

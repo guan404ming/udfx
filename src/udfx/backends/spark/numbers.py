@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 
 from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered
 from udfx.backends.spark.rules import RULES, when
-from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
+from udfx.semantics.literals import (
+    TextPrimitives,
+    float_parses,
+    int_parses,
+    parse_float,
+    parse_int,
+)
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -103,13 +108,16 @@ def infinite(a: Column) -> Column:
     return functions.abs(a) == INFINITY
 
 
-def is_ascii(a: Column) -> Column:
-    return functions.length(a) == functions.octet_length(a)
-
-
-def cleaned(a: Column) -> Column:
-    stripped = functions.btrim(a, functions.lit(ASCII_SPACE))
-    return functions.replace(stripped, functions.lit("_"), functions.lit(""))
+TEXT = TextPrimitives(
+    matches=lambda text, pattern: text.rlike(pattern),
+    strip=lambda text, chars: functions.btrim(text, functions.lit(chars)),
+    replace=lambda text, old, new: functions.replace(text, functions.lit(old), functions.lit(new)),
+    byte_length=functions.octet_length,
+    char_length=functions.length,
+    not_null=Column.isNotNull,
+    try_int=lambda text: text.try_cast("bigint"),
+    try_float=lambda text: text.try_cast("double"),
+)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -188,26 +196,23 @@ def int_str(a: Column) -> Column:
 
 
 @RULES("int_parses", Kind.STR)
-def str_int_parses(a: Column) -> Lowered[Column]:
-    limit = sys.get_int_max_str_digits() or sys.maxsize
-    return Lowered(a.rlike(INT_LITERAL), is_ascii(a) & (functions.length(a) <= limit))
+def str_int_parses(text: Column) -> Lowered[Column]:
+    return Lowered(*int_parses(TEXT, text))
 
 
 @RULES("int", Kind.STR)
-def str_int(a: Column) -> Lowered[Column]:
-    parsed = cleaned(a).try_cast("bigint")
-    return Lowered(parsed, is_ascii(a) & (parsed.isNotNull() | ~a.rlike(INT_LITERAL)))
+def str_int(text: Column) -> Lowered[Column]:
+    return Lowered(*parse_int(TEXT, text))
 
 
 @RULES("float_parses", Kind.STR)
-def str_float_parses(a: Column) -> Lowered[Column]:
-    return Lowered(a.rlike(FLOAT_LITERAL), is_ascii(a))
+def str_float_parses(text: Column) -> Lowered[Column]:
+    return Lowered(*float_parses(TEXT, text))
 
 
 @RULES("float", Kind.STR)
-def str_float(a: Column) -> Lowered[Column]:
-    parsed = cleaned(a).try_cast("double")
-    return Lowered(parsed, is_ascii(a) & (parsed.isNotNull() | ~a.rlike(FLOAT_LITERAL)))
+def str_float(text: Column) -> Lowered[Column]:
+    return Lowered(*parse_float(TEXT, text))
 
 
 def log10(a: Column) -> Lowered[Column]:
