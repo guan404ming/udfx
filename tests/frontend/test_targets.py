@@ -1,14 +1,17 @@
+from collections.abc import Callable, Mapping
+
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
+from udfx.backends.polars import PolarsBackend
 from udfx.frontend import trace
-from udfx.frontend.logic import choose, conj, neg
-from udfx.ir import FALSE, Call, Col, If, Lit, Node, lit
+from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
-from udfx.types import BOOL, FLOAT, INT, STR
+from udfx.testing import batches, check_function
+from udfx.types import BOOL, FLOAT, INT, STR, Type
 
-pytestmark = pytest.mark.usefixtures("stand_ins")
-
-NOTHING = lit(None)
+POLARS = PolarsBackend()
 
 
 def extractfunder(project: str | None) -> str | None:
@@ -34,7 +37,7 @@ def extractyear(arg: str | None) -> int | None:
         return None
 
 
-def converttoeuro(x: float | None, y: str | None) -> float | None:
+def converttoeuro(x: str | None, y: str | None) -> float | None:
     rates = {"EUR": 1.0, "USD": 1.09, "GBP": 0.85}
     if x is not None and y is not None:
         try:
@@ -52,55 +55,35 @@ def removeshort(name: str) -> bool:
     return keep(name)
 
 
-def op_names(node: Node) -> set[str]:
-    match node:
-        case Call(op=op, args=args):
-            return {op.name}.union(*(op_names(arg) for arg in args))
-        case If(cond=condition, then=then, orelse=orelse):
-            return op_names(condition) | op_names(then) | op_names(orelse)
-        case _:
-            return set()
+TARGETS: list[tuple[Callable[..., object], Mapping[str, Type], Type]] = [
+    (extractfunder, {"project": STR.or_none()}, STR.or_none()),
+    (extractyear, {"arg": STR.or_none()}, INT.or_none()),
+    (converttoeuro, {"x": STR.or_none(), "y": STR.or_none()}, FLOAT.or_none()),
+    (removeshort, {"name": STR}, BOOL),
+]
 
 
-def test_extractfunder() -> None:
-    project = Col("project", STR.or_none())
-    program = trace(extractfunder, {"project": project.type})
-    truthy = apply("bool", project)
-    found = apply("__contains__", project, Lit("::", STR))
-    first = apply("__getitem__", apply(".split", project, Lit("::", STR)), Lit(0, INT))
-    expected = choose(
-        [(conj(truthy, found), first), (conj(truthy, neg(found)), NOTHING), (neg(truthy), NOTHING)]
-    )
-    assert program.value == expected
+@pytest.mark.parametrize(("function", "schema", "result"), TARGETS)
+def test_target_traces_without_faults(
+    function: Callable[..., object], schema: Mapping[str, Type], result: Type
+) -> None:
+    program = trace(function, schema)
+    assert program.result == result
     assert program.fault == FALSE
 
 
-def test_extractyear() -> None:
-    arg = Col("arg", STR.or_none())
-    program = trace(extractyear, {"arg": arg.type})
-    truthy = apply("bool", arg)
-    head = apply("slice", arg, Lit(None, INT.or_none()), apply(".find", arg, Lit("-", STR)))
-    empty = neg(apply("bool", head))
-    expected = choose(
-        [
-            (conj(truthy, empty), Lit(-1, INT)),
-            (conj(truthy, neg(empty)), apply("int", head)),
-            (neg(truthy), NOTHING),
-        ]
-    )
-    assert program.value == expected
-    assert program.fault == FALSE
-
-
-def test_converttoeuro() -> None:
-    program = trace(converttoeuro, {"x": FLOAT.or_none(), "y": STR.or_none()})
-    assert program.result == FLOAT.or_none()
-    assert program.fault == FALSE
-    assert {"__eq__", "float", "__truediv__", "is_none"} <= op_names(program.value)
-
-
-def test_removeshort() -> None:
+def test_removeshort_inlines_helper() -> None:
     program = trace(removeshort, {"name": STR})
     assert program.value == apply("__gt__", apply("len", Col("name", STR)), Lit(2, INT))
-    assert program.result == BOOL
-    assert program.fault == FALSE
+
+
+@pytest.mark.parametrize(("function", "schema", "result"), TARGETS)
+@given(data=st.data())
+def test_target_matches_python(
+    function: Callable[..., object],
+    schema: Mapping[str, Type],
+    result: Type,
+    data: st.DataObject,
+) -> None:
+    rows = data.draw(batches(schema))
+    assert check_function(function, schema, POLARS, rows) == []

@@ -149,12 +149,11 @@ def test_finally_reraises() -> None:
     assert program.fault == MISSING
 
 
-@pytest.mark.usefixtures("stand_ins")
 def test_op_fault_is_caught() -> None:
     s = Col("s", STR)
     program = trace(parse, {"s": STR})
-    empty = apply("not", apply("bool", s))
-    assert program.value == If(empty, Lit(-1, INT), apply("int", s), INT)
+    invalid = apply("not", apply("int_parses", s))
+    assert program.value == If(invalid, Lit(-1, INT), apply("int", s), INT)
     assert program.fault == FALSE
 
 

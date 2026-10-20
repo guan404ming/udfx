@@ -164,7 +164,6 @@ def test_top_level_closure_constants() -> None:
     assert trace(make_above(5), {"a": INT}).value == apply("__gt__", A, Lit(5, INT))
 
 
-@pytest.mark.usefixtures("stand_ins")
 def test_top_level_closure_container() -> None:
     members = Lit(("x", "y"), list_of(STR))
     program = trace(make_member(["x", "y"]), {"s": STR})

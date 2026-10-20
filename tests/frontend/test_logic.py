@@ -1,5 +1,5 @@
-from udfx.frontend.logic import conj, disj, neg
-from udfx.ir import FALSE, TRUE, Col
+from udfx.frontend.logic import conj, disj, fold, neg
+from udfx.ir import FALSE, TRUE, Col, Lit
 from udfx.ops import apply
 from udfx.types import BOOL, STR
 
@@ -31,3 +31,13 @@ def test_neg_removes_double_negation() -> None:
 def test_disj_drops_duplicates() -> None:
     assert disj(X, X) == X
     assert disj(FALSE, X) == X
+
+
+def test_fold_evaluates_literal_calls() -> None:
+    assert fold(apply("not", apply("bool", Lit("::", STR)))) == FALSE
+    assert fold(apply("bool", S)) == apply("bool", S)
+
+
+def test_fold_keeps_raising_calls() -> None:
+    parse = apply("int", Lit("x", STR))
+    assert fold(parse) == parse

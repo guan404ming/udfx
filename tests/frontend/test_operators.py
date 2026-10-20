@@ -90,12 +90,10 @@ def test_chained_comparison_uses_swap_and_copy() -> None:
     assert program.value == If(first, second, first, BOOL)
 
 
-@pytest.mark.usefixtures("stand_ins")
 def test_unary_negative_uses_neg_op() -> None:
     assert trace(negative, {"a": INT}).value == apply("__neg__", A)
 
 
-@pytest.mark.usefixtures("stand_ins")
 def test_contains_puts_container_first() -> None:
     s = Col("s", STR)
     found = apply("__contains__", s, Lit("::", STR))

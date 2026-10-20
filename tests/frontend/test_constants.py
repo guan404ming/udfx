@@ -2,7 +2,7 @@ import pytest
 
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.logic import conj, disj, neg
+from udfx.frontend.logic import conj, neg
 from udfx.ir import Col, If, Lit
 from udfx.ops import apply
 from udfx.types import FLOAT, INT, STR, list_of
@@ -122,14 +122,12 @@ def test_build_map_lookup() -> None:
     assert program.fault == neg(test)
 
 
-def test_none_key_raises_key_error() -> None:
+def test_none_key_misses() -> None:
     s = Col("s", STR.or_none())
     program = trace(rate, {"s": s.type})
     euro = apply("__eq__", s, Lit("EUR", STR))
     dollar = apply("__eq__", s, Lit("USD", STR))
-    missing = apply("is_none", s)
-    miss = conj(neg(missing), conj(neg(euro), neg(dollar)))
-    assert program.fault == disj(missing, miss)
+    assert program.fault == conj(neg(euro), neg(dollar))
 
 
 def test_constant_key_is_looked_up_statically() -> None:

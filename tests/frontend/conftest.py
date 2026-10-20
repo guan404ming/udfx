@@ -3,37 +3,11 @@ from collections.abc import Iterator
 
 import pytest
 
-from udfx.ir import Node
-from udfx.ops import Fault, Op, apply, register, resolve
+from udfx.ops import Op, register, resolve
 from udfx.ops.registry import scoped
-from udfx.types import BOOL, FLOAT, INT, STR, list_of
+from udfx.types import BOOL, INT, list_of
 
-
-def empty(s: Node) -> tuple[Fault, ...]:
-    return (Fault(ValueError, apply("not", apply("bool", s))),)
-
-
-def zero_divisor(a: Node, b: Node) -> tuple[Fault, ...]:
-    return (Fault(ZeroDivisionError, apply("not", apply("bool", b))),)
-
-
-STAND_INS = (
-    Op("int", (STR,), INT, int, empty),
-    Op("__neg__", (INT,), INT, operator.neg),
-    Op("__contains__", (STR, STR), BOOL, operator.contains),
-    Op("__contains__", (list_of(STR), STR), BOOL, operator.contains),
-    Op("__contains__", (list_of(INT), INT), BOOL, operator.contains),
-    Op("__eq__", (STR, STR), BOOL, operator.eq),
-    Op("__eq__", (INT, INT), BOOL, operator.eq),
-    Op(".find", (STR, STR), INT, str.find),
-    Op(".split", (STR, STR), list_of(STR), str.split),
-    Op("len", (STR,), INT, len),
-    Op("float", (FLOAT,), FLOAT, float),
-    Op("__truediv__", (FLOAT, FLOAT), FLOAT, operator.truediv, zero_divisor),
-    Op("__getitem__", (STR, INT), STR, operator.getitem),
-    Op("__getitem__", (list_of(STR), INT), STR, operator.getitem),
-    Op("slice", (STR, INT.or_none(), INT.or_none()), STR, lambda s, a, b: s[a:b]),
-)
+STAND_INS = (Op("__contains__", (list_of(INT), INT), BOOL, operator.contains),)
 
 
 @pytest.fixture

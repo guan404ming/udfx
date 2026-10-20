@@ -10,6 +10,19 @@ from udfx.types import Kind, Type, unify
 EXCLUSIVE = frozenset({"bool", "is_none"})
 
 
+def fold(node: Node) -> Node:
+    if not isinstance(node, Call):
+        return node
+    arguments = tuple(fold(argument) for argument in node.args)
+    values = [argument.value for argument in arguments if isinstance(argument, Lit)]
+    if len(values) == len(arguments):
+        try:
+            return Lit(node.op.reference(*values), node.op.result)
+        except Exception:
+            return Call(node.op, arguments)
+    return Call(node.op, arguments)
+
+
 def conjuncts(node: Node) -> tuple[Node, ...]:
     if isinstance(node, Call) and node.op.name == "and":
         return conjuncts(node.args[0]) + conjuncts(node.args[1])
