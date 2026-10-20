@@ -39,3 +39,8 @@ def test_fallback_raises_the_python_exception(backend: Backend[Any]) -> None:
 def test_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
     rows = [("2024-01",), (" 123",), ("\uff11\uff12\uff13\uff14",), ("9223372036854775807",)]
     assert check_function(year, {"text": STR}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", BACKENDS, ids=case_id)
+def test_fallback_patches_rows_without_columns(backend: Backend[Any]) -> None:
+    assert check_function(lambda: int("\uff11\uff12"), {}, backend, [(), ()]) == []

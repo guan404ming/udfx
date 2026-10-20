@@ -40,13 +40,9 @@ class PolarsBackend(Backend[pl.Expr]):
 
         def patch(series: Sequence[pl.Series]) -> pl.Series:
             flags, values, *columns = series
-            pending = (~flags.fill_null(False)).arg_true()
-            if pending.is_empty():
-                return values
-            rows = (column.gather(pending).to_list() for column in columns)
-            return values.scatter(
-                pending, pl.Series(program.run(zip(*rows, strict=True)), dtype=result)
-            )
+            arguments = [column.to_list() for column in columns]
+            patched = self.fallback_values(program, flags.to_list(), arguments)
+            return values.zip_with(flags.fill_null(False), pl.Series(patched, dtype=result))
 
         inputs = [exact, native, *(pl.col(name) for name in program.schema)]
         return pl.map_batches(inputs, patch, return_dtype=result, is_elementwise=True)

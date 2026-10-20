@@ -60,14 +60,8 @@ class DuckDBBackend(Backend[Expression]):
 
         def patch(packed: pa.ChunkedArray) -> pa.Array:
             batch = cast(pa.StructArray, packed.combine_chunks())
-            flags = batch.field(EXACT).fill_null(False).to_pylist()
-            pending = [index for index, flag in enumerate(flags) if not flag]
-            values: list[object] = [None] * len(batch)
-            if pending:
-                columns = [batch.field(field).take(pending).to_pylist() for field in program.schema]
-                patched = self.patch(program, zip(*columns, strict=True))
-                for index, value in zip(pending, patched, strict=True):
-                    values[index] = value
+            columns = [batch.field(field).to_pylist() for field in program.schema]
+            values = self.fallback_values(program, batch.field(EXACT).to_pylist(), columns)
             return pa.array(values, result)
 
         self.connection.create_function(

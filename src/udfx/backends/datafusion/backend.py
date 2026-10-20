@@ -45,12 +45,8 @@ class DataFusionBackend(Backend[Expr]):
         result = dtype(program.result)
 
         def run(flags: pa.Array, *columns: pa.Array) -> pa.Array:
-            pending = [index for index, flag in enumerate(flags.to_pylist()) if not flag]
             arguments = [column.to_pylist() for column in columns]
-            rows = [tuple(values[index] for values in arguments) for index in pending]
-            values: list[object] = [None] * len(flags)
-            for index, value in zip(pending, self.patch(program, rows), strict=True):
-                values[index] = value
+            values = self.fallback_values(program, flags.to_pylist(), arguments)
             return pa.array(values, type=result)
 
         slow = udf(

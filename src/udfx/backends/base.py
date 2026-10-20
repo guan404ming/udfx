@@ -56,6 +56,16 @@ class Backend[E](ABC):
             self.raised = error
             raise
 
+    def fallback_values(
+        self, program: Program, flags: Sequence[object], columns: Sequence[Sequence[object]]
+    ) -> list[object]:
+        pending = [index for index, flag in enumerate(flags) if not flag]
+        rows = [tuple(column[index] for column in columns) for index in pending]
+        values: list[object] = [None] * len(flags)
+        for index, value in zip(pending, self.patch(program, rows), strict=True):
+            values[index] = value
+        return values
+
     def unwrap(self, error: BaseException) -> BaseException:
         raised, self.raised = self.raised, None
         return raised or error
