@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from udfx.ir import Call, Node
-from udfx.types import Kind, Type
+from udfx.types import Kind, Type, accepts
 
 
 @dataclass(frozen=True)
@@ -40,16 +40,21 @@ class Op:
         return OpKey(self.name, tuple(parameter.kind for parameter in self.parameters))
 
     def __str__(self) -> str:
-        return f"{self.key} -> {self.result}"
+        return f"{self.name}({', '.join(map(str, self.parameters))}) -> {self.result}"
 
 
-_OPS: dict[OpKey, Op] = {}
+_OPS: dict[tuple[str, tuple[Type, ...]], Op] = {}
+
+
+def signature(types: Sequence[Type]) -> tuple[Type, ...]:
+    return tuple(type.strict() for type in types)
 
 
 def register(op: Op) -> Op:
-    if op.key in _OPS:
-        raise ValueError(f"duplicate op {op.key}")
-    _OPS[op.key] = op
+    key = (op.name, signature(op.parameters))
+    if key in _OPS:
+        raise ValueError(f"duplicate op {op}")
+    _OPS[key] = op
     return op
 
 
@@ -57,15 +62,28 @@ def all_ops() -> tuple[Op, ...]:
     return tuple(_OPS.values())
 
 
-def resolve(name: str, kinds: tuple[Kind, ...]) -> Op | None:
-    return _OPS.get(OpKey(name, kinds))
+def matching(name: str, types: Sequence[Type]) -> list[Op]:
+    found = [
+        op
+        for op in _OPS.values()
+        if op.name == name
+        and len(op.parameters) == len(types)
+        and all(map(accepts, op.parameters, types))
+    ]
+    return sorted(found, key=lambda op: signature(op.parameters) != signature(types))
+
+
+def resolve(name: str, types: Sequence[Type]) -> Op | None:
+    found = matching(name, types)
+    return found[0] if found else None
 
 
 def apply(name: str, *arguments: Node) -> Call:
-    kinds = tuple(argument.type.kind for argument in arguments)
-    op = resolve(name, kinds)
+    op = resolve(name, [argument.type for argument in arguments])
     if op is None:
-        raise LookupError(f"no op {OpKey(name, kinds)}")
+        raise LookupError(
+            f"no op {name}({', '.join(str(argument.type) for argument in arguments)})"
+        )
     return Call(op, arguments)
 
 

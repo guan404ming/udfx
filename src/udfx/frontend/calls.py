@@ -8,7 +8,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.logic import fold
 from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
-from udfx.ops import Fault, Op, all_ops, apply, resolve
+from udfx.ops import Fault, Op, apply, matching
 from udfx.types import BOOL, Kind, type_of
 
 CALLABLES: tuple[tuple[object, str], ...] = (
@@ -45,32 +45,23 @@ def op_name(callee: object) -> str:
     raise Unsupported(f"unknown callable {named(callee)}")
 
 
-def accepts(op: Op, kinds: tuple[Kind, ...]) -> bool:
-    return len(op.parameters) == len(kinds) and all(
-        kind is parameter.kind or (kind is Kind.NONE and parameter.nullable)
-        for kind, parameter in zip(kinds, op.parameters, strict=True)
-    )
-
-
 def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
-    kinds = tuple(argument.type.kind for argument in arguments)
-    op = resolve(name, kinds)
-    if op is None:
-        candidates = [op for op in all_ops() if op.name == name and accepts(op, kinds)]
-        others = {kind for kind in kinds if kind is not Kind.NONE}
-        preferred = [
-            op
-            for op in candidates
-            if all(
-                parameter.kind in others
-                for kind, parameter in zip(kinds, op.parameters, strict=True)
-                if kind is Kind.NONE
-            )
-        ]
-        chosen = preferred or candidates
-        if not chosen:
-            raise Unsupported(f"no op {name}({', '.join(kinds)})")
-        op = chosen[0]
+    types = [argument.type for argument in arguments]
+    candidates = matching(name, types)
+    others = {type.kind for type in types if type.kind is not Kind.NONE}
+    preferred = [
+        op
+        for op in candidates
+        if all(
+            parameter.kind in others
+            for type, parameter in zip(types, op.parameters, strict=True)
+            if type.kind is Kind.NONE
+        )
+    ]
+    chosen = preferred or candidates
+    if not chosen:
+        raise Unsupported(f"no op {name}({', '.join(str(type.strict()) for type in types)})")
+    op = chosen[0]
     typed = [
         Lit(None, parameter) if argument.type.kind is Kind.NONE else argument
         for argument, parameter in zip(arguments, op.parameters, strict=True)

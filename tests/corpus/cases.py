@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from udfx.types import FLOAT, INT, STR, Type
+from udfx.types import FLOAT, INT, STR, Type, list_of
 
 
 @dataclass(frozen=True)
@@ -270,6 +270,18 @@ def constant_part(i):
         return None
 
 
+def first_or_default(items):
+    if items:
+        first = items[0]
+        if first is not None:
+            return first
+    return "default"
+
+
+def join_or_error(items):
+    return ",".join(items)
+
+
 def keyword_split(s):
     return s.split(sep="::")
 
@@ -323,6 +335,10 @@ CASES = [
     Case("not_half", not_half, {"a": INT.or_none()}, "native"),
     Case("constant_receiver", constant_receiver, {"s": STR}, "native"),
     Case("constant_part", constant_part, {"i": INT}, "native"),
+    Case(
+        "first_or_default", first_or_default, {"items": list_of(STR.or_none()).or_none()}, "native"
+    ),
+    Case("join_or_error", join_or_error, {"items": list_of(STR.or_none())}, "native"),
     Case("loop_total", loop_total, {"s": STR}, "fallback"),
     Case("gauss_noise", gauss_noise, {"x": FLOAT}, "fallback"),
     Case("parse_json", parse_json, {"s": STR}, "fallback"),

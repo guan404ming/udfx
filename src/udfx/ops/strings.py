@@ -14,6 +14,10 @@ def empty_separator(_: Node, separator: Node) -> tuple[Fault, ...]:
     return (Fault(ValueError, apply("__eq__", separator, lit(""))),)
 
 
+def none_item(_: Node, items: Node) -> tuple[Fault, ...]:
+    return (Fault(TypeError, apply("__contains__", items, lit(None, STR.or_none()))),)
+
+
 def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
     length = apply("len", container)
     too_high = apply("not", apply("__gt__", length, index))
@@ -39,13 +43,15 @@ register(Op(".startswith", (STR, STR), BOOL, str.startswith))
 register(Op(".endswith", (STR, STR), BOOL, str.endswith))
 register(Op(".replace", (STR, STR, STR), STR, str.replace))
 register(Op(".join", (STR, STRINGS), STR, str.join))
+register(Op(".join", (STR, OPTIONAL_STRINGS), STR, str.join, none_item))
 register(Op("__add__", (STR, STR), STR, operator.add))
 register(Op("__eq__", (STR.or_none(), STR.or_none()), BOOL, operator.eq))
 register(Op("__ne__", (STR.or_none(), STR.or_none()), BOOL, operator.ne))
 register(Op("__contains__", (STR, STR), BOOL, operator.contains))
 register(Op("__contains__", (OPTIONAL_STRINGS, STR.or_none()), BOOL, operator.contains))
 register(Op("len", (STR,), INT, len))
-register(Op("len", (STRINGS,), INT, len))
+register(Op("len", (OPTIONAL_STRINGS,), INT, len))
 register(Op("__getitem__", (STR, INT), STR, operator.getitem, out_of_range))
 register(Op("__getitem__", (STRINGS, INT), STR, operator.getitem, out_of_range))
+register(Op("__getitem__", (OPTIONAL_STRINGS, INT), STR.or_none(), operator.getitem, out_of_range))
 register(Op("slice", (STR, INT.or_none(), INT.or_none()), STR, slice_of))

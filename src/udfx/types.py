@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
-__all__ = ["BOOL", "FLOAT", "INT", "NONE", "STR", "Kind", "Type", "list_of"]
+__all__ = ["BOOL", "FLOAT", "INT", "NONE", "STR", "Kind", "Type", "accepts", "list_of"]
 
 INT64_MIN = -(2**63)
 INT64_MAX = 2**63 - 1
@@ -71,6 +71,18 @@ def unify(left: Type, right: Type) -> Type | None:
     if left.strict() != right.strict():
         return None
     return left.or_none() if left.nullable or right.nullable else left
+
+
+def accepts(parameter: Type, argument: Type) -> bool:
+    if argument.kind is Kind.NONE:
+        return parameter.nullable
+    if argument.kind is not parameter.kind:
+        return False
+    if parameter.item is None or argument.item is None:
+        return parameter.item == argument.item
+    return accepts(parameter.item, argument.item) and (
+        parameter.item.nullable or not argument.item.nullable
+    )
 
 
 def fits(value: object, type: Type) -> bool:

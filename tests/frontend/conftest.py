@@ -14,6 +14,6 @@ STAND_INS = (Op("__contains__", (list_of(INT), INT), BOOL, operator.contains),)
 def stand_ins() -> Iterator[None]:
     with scoped():
         for op in STAND_INS:
-            if resolve(op.name, op.key.kinds) is None:
+            if resolve(op.name, op.parameters) is None:
                 register(op)
         yield
