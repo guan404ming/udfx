@@ -7,7 +7,7 @@ from functools import cache, reduce
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.rules import RULES, broadcast
+from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.semantics import text
 from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
 from udfx.types import Kind
@@ -83,12 +83,14 @@ def find(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
+def reverse(text: pl.Expr) -> pl.Expr:
+    return text.str.split("").list.reverse().list.join("")
+
+
 @RULES(".rfind", Kind.STR, Kind.STR)
 def rfind(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
-    suffix = length(text.str.split(pattern).list.last())
-    found = text.str.contains(pattern, literal=True)
-    position = length(text) - length(pattern) - suffix
-    return pl.when(pattern == "").then(length(text)).when(found).then(position).otherwise(-1)
+    position = find(reverse(text), reverse(pattern))
+    return when(position < 0, pl.lit(-1), length(text) - length(pattern) - position)
 
 
 @RULES(".count", Kind.STR, Kind.STR)
