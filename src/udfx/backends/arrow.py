@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, cast
 
 import pyarrow as pa
 from pyarrow import compute
 
-from udfx.backends.base import Gather
+from udfx.backends.base import Backend, Gather
+from udfx.program import Program
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, pa.DataType] = {
@@ -34,3 +35,14 @@ def pending(flags: pa.Array) -> list[int]:
     exact = cast(pa.BooleanArray, compute.fill_null(flags, pa.scalar(False)))
     missing = compute.invert(exact)
     return cast("list[int]", compute.indices_nonzero(missing).to_pylist())
+
+
+def fallback(
+    backend: Backend[Any],
+    program: Program,
+    flags: pa.Array,
+    columns: Sequence[pa.Array],
+    result: pa.DataType,
+) -> pa.Array:
+    values = backend.fallback_values(program, len(flags), pending(flags), gather(columns))
+    return pa.array(values, type=result)

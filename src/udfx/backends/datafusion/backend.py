@@ -52,9 +52,7 @@ class DataFusionBackend(Backend[Expr]):
         result = dtype(program.result)
 
         def run(flags: pa.Array, *columns: pa.Array) -> pa.Array:
-            pending = arrow.pending(flags)
-            values = self.fallback_values(program, len(flags), pending, arrow.gather(columns))
-            return pa.array(values, type=result)
+            return arrow.fallback(self, program, flags, columns, result)
 
         slow = udf(
             run,

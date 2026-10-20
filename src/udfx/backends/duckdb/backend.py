@@ -64,9 +64,7 @@ class DuckDBBackend(Backend[Expression]):
         def patch(packed: pa.ChunkedArray) -> pa.Array:
             batch = cast(pa.StructArray, packed.combine_chunks())
             columns = [batch.field(field) for field in program.schema]
-            pending = arrow.pending(batch.field(EXACT))
-            values = self.fallback_values(program, len(batch), pending, arrow.gather(columns))
-            return pa.array(values, result)
+            return arrow.fallback(self, program, batch.field(EXACT), columns, result)
 
         connection = self.connection
         if (connection, name) not in self.registered:
