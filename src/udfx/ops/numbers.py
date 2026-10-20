@@ -6,16 +6,10 @@ from collections.abc import Callable
 
 from udfx.ir import Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
+from udfx.semantics.numbers import ARITHMETIC, COMPARISONS
 from udfx.types import BOOL, FLOAT, INT, STR, Kind, Type
 
 PAIRS: tuple[tuple[Type, Type], ...] = ((INT, INT), (FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT))
-
-COMPARISONS: dict[str, Callable[..., object]] = {
-    "__lt__": operator.lt,
-    "__le__": operator.le,
-    "__gt__": operator.gt,
-    "__ge__": operator.ge,
-}
 
 
 def zero(node: Node) -> Node:
@@ -57,9 +51,8 @@ def unparsable(name: str) -> Callable[[Node], tuple[Fault, ...]]:
 
 for a, b in PAIRS:
     result = INT if (a, b) == (INT, INT) else FLOAT
-    register(Op("__add__", (a, b), result, operator.add))
-    register(Op("__sub__", (a, b), result, operator.sub))
-    register(Op("__mul__", (a, b), result, operator.mul))
+    for name, operation in ARITHMETIC.items():
+        register(Op(name, (a, b), result, operation))
     register(Op("__truediv__", (a, b), FLOAT, operator.truediv, divisor_zero))
     register(Op("__floordiv__", (a, b), result, operator.floordiv, divisor_zero))
     register(Op("__mod__", (a, b), result, operator.mod, divisor_zero))
