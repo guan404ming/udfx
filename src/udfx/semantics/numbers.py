@@ -75,8 +75,7 @@ def extremum(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any
 
 
 def float_extremum(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any) -> Any:
-    replace = compare(right, left) & ~primitives.either_nan(left, right)
-    return primitives.when(replace, right, left)
+    return primitives.when(float_compare(primitives, compare, right, left), right, left)
 
 
 @dataclass(frozen=True)
@@ -128,7 +127,8 @@ def int_divmod(primitives: IntegerPrimitives, left: Any, right: Any) -> tuple[An
     literal, when = primitives.literal, primitives.when
     overflow = division_overflows(literal, left, right)
     divisor = when((right == literal(0)) | overflow, literal(1), right)
-    quotient, remainder = primitives.truncated_divide(left, divisor), left % divisor
+    quotient = primitives.truncated_divide(left, divisor)
+    remainder = left - quotient * divisor
     adjust = (remainder != literal(0)) & ((remainder < literal(0)) != (divisor < literal(0)))
     return (
         when(adjust, quotient - literal(1), quotient),
