@@ -7,6 +7,7 @@ from udfx.ops.registry import Fault, Op, apply, register
 from udfx.types import BOOL, INT, STR, list_of
 
 STRINGS = list_of(STR)
+OPTIONAL_STRINGS = list_of(STR.or_none())
 
 
 def empty_separator(_: Node, separator: Node) -> tuple[Fault, ...]:
@@ -42,7 +43,7 @@ register(Op("__add__", (STR, STR), STR, operator.add))
 register(Op("__eq__", (STR.or_none(), STR.or_none()), BOOL, operator.eq))
 register(Op("__ne__", (STR.or_none(), STR.or_none()), BOOL, operator.ne))
 register(Op("__contains__", (STR, STR), BOOL, operator.contains))
-register(Op("__contains__", (STRINGS, STR.or_none()), BOOL, operator.contains))
+register(Op("__contains__", (OPTIONAL_STRINGS, STR.or_none()), BOOL, operator.contains))
 register(Op("len", (STR,), INT, len))
 register(Op("len", (STRINGS,), INT, len))
 register(Op("__getitem__", (STR, INT), STR, operator.getitem, out_of_range))

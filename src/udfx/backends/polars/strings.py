@@ -159,7 +159,7 @@ def str_contains(text: pl.Expr, item: pl.Expr) -> pl.Expr:
 
 @RULES("__contains__", Kind.LIST, Kind.STR)
 def list_contains(container: pl.Expr, item: pl.Expr) -> pl.Expr:
-    return item.is_not_null() & container.list.contains(item)
+    return container.list.contains(item, nulls_equal=True)
 
 
 @RULES("len", Kind.STR)

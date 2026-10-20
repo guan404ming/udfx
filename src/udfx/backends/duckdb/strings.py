@@ -162,7 +162,7 @@ def str_contains(text: Expression, item: Expression) -> Expression:
 
 @RULES("__contains__", Kind.LIST, Kind.STR)
 def list_contains(container: Expression, item: Expression) -> Expression:
-    return item.isnotnull() & function("list_contains", container, item)
+    return function("list_position", container, item).isnotnull()
 
 
 RULES("len", Kind.STR)(length)
