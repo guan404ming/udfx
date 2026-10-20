@@ -79,8 +79,6 @@ class Context:
     def target(self, instruction: dis.Instruction) -> int:
         if instruction.opcode not in JUMPS or not isinstance(instruction.argval, int):
             raise Unsupported(f"{instruction.opname} has no jump target")
-        if instruction.argval <= instruction.offset:
-            raise Unsupported("loops")
         return self.index_of[instruction.argval]
 
     def global_(self, name: str) -> Item:
