@@ -67,6 +67,10 @@ def measure(case: Case) -> tuple[float, float, float] | None:
     if translation.program is None or translation.expr is None:
         return None
     data = frame(case.schema)
+    try:
+        translation.program.run(data.iter_rows())
+    except Exception:
+        return None
     python = python_expr(case.function, case.schema, translation.program.result)
     native = translation.expr
     return (
