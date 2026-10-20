@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from itertools import count
 from typing import ClassVar, cast
 
 import duckdb
@@ -22,7 +21,6 @@ EXACT = "udfx exact"
 OUT = "udfx out"
 ROW = "udfx row"
 FALLBACK = "udfx fallback"
-COUNTER = count()
 
 
 class DuckDBBackend(Backend[Expression]):
@@ -30,7 +28,12 @@ class DuckDBBackend(Backend[Expression]):
     rules: ClassVar[RuleSet[Expression]] = RULES
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
-        self.connection = connection or duckdb.connect()
+        self._connection = connection
+        self.registered: set[tuple[duckdb.DuckDBPyConnection, str]] = set()
+
+    @property
+    def connection(self) -> duckdb.DuckDBPyConnection:
+        return duckdb.default_connection() if self._connection is None else self._connection
 
     def column(self, node: Col) -> Expression:
         return column(node.name)
@@ -50,7 +53,7 @@ class DuckDBBackend(Backend[Expression]):
         return ~value
 
     def fallback(self, native: Expression, exact: Expression, program: Program) -> Expression:
-        name = f"{FALLBACK} {next(COUNTER)}"
+        name = f"{FALLBACK} {id(self)} {id(program)}"
         fields = {
             EXACT: sqltypes.BOOLEAN,
             **{field: dtype(type) for field, type in program.schema.items()},
@@ -65,14 +68,17 @@ class DuckDBBackend(Backend[Expression]):
             values = self.fallback_values(program, len(batch), pending, arrow.gather(columns))
             return pa.array(values, result)
 
-        self.connection.create_function(
-            name,
-            patch,
-            [duckdb.struct_type(fields)],
-            dtype(program.result),
-            type=ARROW,
-            null_handling=SPECIAL,
-        )
+        connection = self.connection
+        if (connection, name) not in self.registered:
+            connection.create_function(
+                name,
+                patch,
+                [duckdb.struct_type(fields)],
+                dtype(program.result),
+                type=ARROW,
+                null_handling=SPECIAL,
+            )
+            self.registered.add((connection, name))
         packed = function(
             "struct_pack",
             exact.alias(EXACT),

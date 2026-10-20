@@ -1,14 +1,19 @@
 from collections.abc import Callable
 from typing import Any
 
+import duckdb
 import pytest
 from conftest import backend_params
 
+from udfx import compile
 from udfx.backends.base import Backend
+from udfx.backends.duckdb import DuckDBBackend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function
 from udfx.types import INT, INT64_MAX, INT64_MIN, STR
+
+YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 
 
 def inverse(x: int) -> float:
@@ -79,3 +84,21 @@ def test_fallback_runs_literals_outside_int64(
 ) -> None:
     rows = [(0,), (INT64_MAX,), (INT64_MIN,)]
     assert check_function(function, {"x": INT}, backend, rows) == []
+
+
+@pytest.mark.xdist_group("duckdb")
+def test_duckdb_string_form_runs_on_default_connection() -> None:
+    translation = compile(year, {"text": STR}, "duckdb")
+    assert translation.ok
+    assert duckdb.sql(YEARS).select(translation.expr).fetchall() == [(2025,), (1235,)]
+
+
+@pytest.mark.xdist_group("duckdb")
+def test_duckdb_explicit_connection_registers_each_program_once() -> None:
+    connection = duckdb.connect()
+    backend = DuckDBBackend(connection)
+    translation = compile(year, {"text": STR}, backend)
+    assert translation.program is not None
+    again = backend.build(translation.program)
+    for expr in (translation.expr, again):
+        assert connection.sql(YEARS).select(expr).fetchall() == [(2025,), (1235,)]
