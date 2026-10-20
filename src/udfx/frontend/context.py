@@ -10,12 +10,13 @@ from typing import NamedTuple
 from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
 from udfx.frontend.logic import conj, fold, neg
+from udfx.frontend.opcodes import normalize
 from udfx.frontend.state import Raise, State, Step
 from udfx.frontend.values import Item, Opaque, Value
 from udfx.ir import FALSE, lit
 from udfx.ops import Fault
 
-JUMPS = frozenset(dis.hasjrel) | frozenset(dis.hasjabs)
+JUMPS = frozenset(dis.opname[opcode] for opcode in (*dis.hasjrel, *dis.hasjabs))
 
 
 class Protected(NamedTuple):
@@ -50,7 +51,7 @@ class Context:
         builtins: Mapping[str, object],
         caller: tuple[Context, State] | None,
     ) -> Context:
-        instructions = tuple(dis.get_instructions(code))
+        instructions = normalize(code)
         index_of = {instruction.offset: index for index, instruction in enumerate(instructions)}
         protected = tuple(
             Protected(entry.start, entry.end, entry.target, entry.depth, entry.lasti)
@@ -77,7 +78,7 @@ class Context:
         return f"{self.code.co_qualname}+{instruction.offset} {instruction.opname}"
 
     def target(self, instruction: dis.Instruction) -> int:
-        if instruction.opcode not in JUMPS or not isinstance(instruction.argval, int):
+        if instruction.opname not in JUMPS or not isinstance(instruction.argval, int):
             raise Unsupported(f"{instruction.opname} has no jump target")
         return self.index_of[instruction.argval]
 
