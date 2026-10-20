@@ -35,7 +35,7 @@ def check_function(
     returned = [
         (row, out) for row, out in zip(rows, expected, strict=True) if isinstance(out, Returned)
     ]
-    actual = backend.evaluate(expr, schema, [row for row, _ in returned])
+    (actual,) = backend.evaluate([expr], schema, [row for row, _ in returned])
     mismatches = [
         Mismatch(row, out, repr(value))
         for (row, out), value in zip(returned, actual, strict=True)
@@ -71,11 +71,8 @@ def check_op(
     exact_parts = [value.exact, *(item.exact for item in lowered)]
     exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]
 
-    def evaluate(expr: object) -> list[object]:
-        return backend.evaluate(expr, schema, rows)
-
-    values, exacts = evaluate(value.expr), [evaluate(expr) for expr in exact]
-    hits = [evaluate(item.expr) for item in lowered]
+    outputs = backend.evaluate([value.expr, *exact, *(item.expr for item in lowered)], schema, rows)
+    values, exacts, hits = outputs[0], outputs[1 : 1 + len(exact)], outputs[1 + len(exact) :]
     mismatches: list[Mismatch] = []
     for index, row in enumerate(rows):
         flags_here = [flags[index] for flags in (*exacts, *hits)]
@@ -102,7 +99,7 @@ def _attempt(
     backend: Backend[Any], expr: object, schema: Mapping[str, Type], rows: Sequence[Row]
 ) -> Outcome:
     try:
-        return Returned(backend.evaluate(expr, schema, rows))
+        return Returned(backend.evaluate([expr], schema, rows)[0])
     except Unsupported:
         raise
     except Exception as error:

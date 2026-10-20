@@ -8,4 +8,4 @@ POLARS = PolarsBackend()
 
 def test_evaluate_keeps_row_count_without_columns() -> None:
     program = Program(lambda: 1, {}, Lit(1, INT))
-    assert POLARS.evaluate(POLARS.build(program), {}, [(), (), ()]) == [1, 1, 1]
+    assert POLARS.evaluate([POLARS.build(program)], {}, [(), (), ()]) == [[1, 1, 1]]

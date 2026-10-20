@@ -53,8 +53,8 @@ class PolarsBackend(Backend[pl.Expr]):
         return pl.when(exact.fill_null(False)).then(native).otherwise(slow)
 
     def evaluate(
-        self, expr: pl.Expr, schema: Mapping[str, Type], rows: Sequence[Row]
-    ) -> list[object]:
+        self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]
+    ) -> list[list[object]]:
         columns = list(zip(*rows, strict=True)) if rows else [() for _ in schema]
         frame = pl.DataFrame(
             [
@@ -65,4 +65,8 @@ class PolarsBackend(Backend[pl.Expr]):
                 ),
             ]
         )
-        return frame.with_columns(expr.alias(OUT)).get_column(OUT).to_list()
+        names = [f"{OUT} {index}" for index in range(len(exprs))]
+        outputs = frame.with_columns(
+            *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
+        )
+        return [outputs.get_column(name).to_list() for name in names]

@@ -68,8 +68,8 @@ class Backend[E](ABC):
 
     @abstractmethod
     def evaluate(
-        self, expr: E, schema: Mapping[str, Type], rows: Sequence[Row]
-    ) -> list[object]: ...
+        self, exprs: Sequence[E], schema: Mapping[str, Type], rows: Sequence[Row]
+    ) -> list[list[object]]: ...
 
     def lower(self, node: Node) -> Lowered[E]:
         match node:
