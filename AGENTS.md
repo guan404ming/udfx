@@ -83,7 +83,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`: rules, one file per op family.
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
-- `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception. Spark overrides `run_fallback_rows` to carry the type in the error message, and `decode_fallback_exception` rebuilds it.
+- `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception: `run_fallback_rows` records it in thread-local state and raises a `FallbackError` whose message carries the type, and `unwrap` restores it from either. Engines that run the UDF in another thread or process (DuckDB, Spark) rely on the message, so only builtin exception types come back there.
 - `fold_name(name)` returns the name as the engine compares it: identity for Polars and DataFusion, ASCII lower for DuckDB, and `str.lower` for Spark when `spark.sql.caseSensitive` is false. `build` rejects schemas whose folded names collide.
 - Arrow backends implement the fallback UDF with `arrow.fallback`, which uses `arrow.make_gather`. Only batch unpacking and UDF registration stay in the backend.
 
