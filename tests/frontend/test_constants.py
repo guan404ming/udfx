@@ -3,7 +3,7 @@ import pytest
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.logic import conjunction, negate
-from udfx.ir import Col, If, Lit
+from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
 from udfx.types import FLOAT, INT, STR, list_of
 
@@ -41,6 +41,10 @@ def in_mixed(s: str) -> bool:
     return s in (1, "a")
 
 
+def in_text(s: str, t: str) -> bool:
+    return s in t
+
+
 def returns_tuple(s: str) -> tuple[str, str]:
     return ("a", "b")
 
@@ -73,6 +77,18 @@ def nested(s: str) -> list[int]:
 def test_tuple_constant_becomes_list_literal() -> None:
     members = Lit(("a", "b"), list_of(STR))
     assert trace(in_tuple, {"s": STR}).value == apply("__contains__", members, S)
+
+
+def test_none_item_is_not_in_a_list() -> None:
+    s = Col("s", STR.or_none())
+    program = trace(in_tuple, {"s": s.type})
+    assert program.value == apply("__contains__", Lit(("a", "b"), list_of(STR)), s)
+    assert program.fault == FALSE
+
+
+def test_none_item_in_text_raises() -> None:
+    s = Col("s", STR.or_none())
+    assert trace(in_text, {"s": s.type, "t": STR}).fault == apply("is_none", s)
 
 
 def test_list_constant_keeps_order() -> None:

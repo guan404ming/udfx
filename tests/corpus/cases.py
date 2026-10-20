@@ -239,6 +239,10 @@ def float_text(x):
     return str(x)
 
 
+def optional_code(code):
+    return code in ("A1", "B2")
+
+
 def keyword_split(s):
     return s.split(sep="::")
 
@@ -285,6 +289,7 @@ CASES = [
     Case("conditional_expression", conditional_expression, {"n": INT}, "native"),
     Case("text_or_empty", text_or_empty, {"x": INT.or_none()}, "native"),
     Case("float_text", float_text, {"x": FLOAT.or_none()}, "native"),
+    Case("optional_code", optional_code, {"code": STR.or_none()}, "native"),
     Case("loop_total", loop_total, {"s": STR}, "fallback"),
     Case("gauss_noise", gauss_noise, {"x": FLOAT}, "fallback"),
     Case("parse_json", parse_json, {"s": STR}, "fallback"),

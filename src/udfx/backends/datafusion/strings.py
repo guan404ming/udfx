@@ -150,7 +150,7 @@ def str_contains(text: Expr, item: Expr) -> Expr:
 
 @RULES("__contains__", Kind.LIST, Kind.STR)
 def list_contains(container: Expr, item: Expr) -> Expr:
-    return functions.array_has(container, item)
+    return item.is_not_null() & functions.array_has(container, item)
 
 
 @RULES("len", Kind.STR)
