@@ -30,7 +30,7 @@ def conjuncts(node: Node) -> tuple[Node, ...]:
 
 
 def refuted(part: Node, known: Sequence[Node]) -> bool:
-    if neg(part) in known:
+    if negate(part) in known:
         return True
     if not isinstance(part, Call) or part.op.name not in EXCLUSIVE:
         return False
@@ -42,7 +42,7 @@ def refuted(part: Node, known: Sequence[Node]) -> bool:
     )
 
 
-def conj(a: Node, b: Node) -> Node:
+def conjunction(a: Node, b: Node) -> Node:
     if a == TRUE:
         return b
     if b == TRUE:
@@ -52,7 +52,7 @@ def conj(a: Node, b: Node) -> Node:
     known = list(conjuncts(a))
     result = a
     for part in conjuncts(b):
-        if refuted(neg(part), known):
+        if refuted(negate(part), known):
             continue
         if refuted(part, known):
             return FALSE
@@ -61,7 +61,7 @@ def conj(a: Node, b: Node) -> Node:
     return result
 
 
-def disj(a: Node, b: Node) -> Node:
+def disjunction(a: Node, b: Node) -> Node:
     if a in (FALSE, b):
         return b
     if b == FALSE:
@@ -71,7 +71,7 @@ def disj(a: Node, b: Node) -> Node:
     return apply("or", a, b)
 
 
-def neg(a: Node) -> Node:
+def negate(a: Node) -> Node:
     if a == TRUE:
         return FALSE
     if a == FALSE:

@@ -9,7 +9,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
 from udfx.frontend.context import Context, parameters
 from udfx.frontend.handlers import explore
-from udfx.frontend.logic import disj
+from udfx.frontend.logic import disjunction
 from udfx.frontend.merge import merge
 from udfx.frontend.state import Outcome, Raise, Return, State
 from udfx.frontend.values import Item, Value
@@ -49,4 +49,6 @@ def _merge(
     if not returns:
         raise Unsupported("function never returns")
     faults = [outcome.path for outcome in outcomes if isinstance(outcome, Raise)]
-    return Program(function, dict(schema), merge(returns, faults), reduce(disj, faults, FALSE))
+    return Program(
+        function, dict(schema), merge(returns, faults), reduce(disjunction, faults, FALSE)
+    )

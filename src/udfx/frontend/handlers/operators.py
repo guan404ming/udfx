@@ -7,7 +7,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, node_of, none_test, truth
 from udfx.frontend.constants import GENERICS, annotation, lookup
 from udfx.frontend.context import Context
-from udfx.frontend.logic import neg
+from udfx.frontend.logic import negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Value
@@ -61,7 +61,7 @@ def compare_op(context: Context, state: State, instruction: dis.Instruction) -> 
 def unary_not(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item,), rest = state.pop()
     test, faults = truth(item)
-    return emit(context, rest, Value(neg(test)), faults)
+    return emit(context, rest, Value(negate(test)), faults)
 
 
 @handles("UNARY_NEGATIVE")
@@ -80,7 +80,7 @@ def is_op(context: Context, state: State, instruction: dis.Instruction) -> list[
         test = none_test(right)
     else:
         raise Unsupported("identity check against a value other than None", context.where(state))
-    return [rest.push(Value(neg(test) if instruction.arg else test)).advance()]
+    return [rest.push(Value(negate(test) if instruction.arg else test)).advance()]
 
 
 @handles("CONTAINS_OP")
@@ -88,7 +88,7 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
     (item, container), rest = state.pop(2)
     members = container.node if isinstance(container, Value) else node_of(container)
     node, faults = invoke("__contains__", [members, node_of(item)], TypeError)
-    return emit(context, rest, Value(neg(node) if instruction.arg else node), faults)
+    return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
 
 
 @handles("BINARY_SUBSCR")

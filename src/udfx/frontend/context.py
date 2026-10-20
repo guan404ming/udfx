@@ -9,7 +9,7 @@ from typing import NamedTuple
 
 from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
-from udfx.frontend.logic import conj, fold, neg
+from udfx.frontend.logic import conjunction, fold, negate
 from udfx.frontend.opcodes import normalize
 from udfx.frontend.state import Raise, State, Step
 from udfx.frontend.values import Item, Opaque, Value
@@ -94,10 +94,10 @@ class Context:
         path = state.path
         for fault in faults:
             when = fold(fault.when)
-            failing = conj(path, when)
+            failing = conjunction(path, when)
             if failing != FALSE:
                 steps.append(self.raised(state.under(failing), fault.kind))
-            path = conj(path, neg(when))
+            path = conjunction(path, negate(when))
         return (state.under(path) if path != FALSE else None), steps
 
     def raised(self, state: State, kind: type[Exception]) -> Step:

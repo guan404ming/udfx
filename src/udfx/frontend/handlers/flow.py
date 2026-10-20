@@ -6,7 +6,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.calls import node_of, none_test, truth
 from udfx.frontend.constants import constant
 from udfx.frontend.context import Context
-from udfx.frontend.logic import conj, neg
+from udfx.frontend.logic import conjunction, negate
 from udfx.frontend.machine import handles
 from udfx.frontend.state import Return, State, Step
 from udfx.ir import FALSE
@@ -21,10 +21,10 @@ def branch(context: Context, state: State, instruction: dis.Instruction) -> list
     survivor, steps = context.guard(rest, faults)
     if survivor is None:
         return steps
-    jump = test if instruction.opname in JUMP_WHEN_TRUE else neg(test)
+    jump = test if instruction.opname in JUMP_WHEN_TRUE else negate(test)
     for path, index in (
-        (conj(survivor.path, neg(jump)), survivor.index + 1),
-        (conj(survivor.path, jump), context.target(instruction)),
+        (conjunction(survivor.path, negate(jump)), survivor.index + 1),
+        (conjunction(survivor.path, jump), context.target(instruction)),
     ):
         if path != FALSE:
             steps.append(survivor.under(path).goto(index))

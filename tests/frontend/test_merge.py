@@ -4,8 +4,11 @@ import pytest
 
 from udfx.explain import render
 from udfx.frontend import trace
-from udfx.ir import If, Node
-from udfx.types import INT, STR, Type
+from udfx.frontend.merge import merge
+from udfx.frontend.state import Return
+from udfx.ir import TRUE, Col, If, Node, lit
+from udfx.ops import apply
+from udfx.types import BOOL, INT, STR, Type
 
 from .test_targets import TARGETS, converttoeuro
 
@@ -77,3 +80,22 @@ def test_atoms_appear_once_per_path(
     function: Callable[..., object], schema: Mapping[str, Type]
 ) -> None:
     assert atoms_once(trace(function, schema).value)
+
+
+FIRST = Col("first", BOOL)
+SECOND = Col("second", BOOL)
+BOTH = apply("and", FIRST, SECOND)
+
+
+def test_contradictory_literals_keep_chain_order() -> None:
+    contradiction = apply("and", BOTH, apply("not", BOTH))
+    tree = merge([Return(contradiction, lit(1)), Return(BOTH, lit(2))], [apply("not", BOTH)])
+    assert (
+        render(tree) == "if(and(and(col first, col second), not(and(col first, col second))), 1, 2)"
+    )
+
+
+def test_unrecognized_literal_is_still_checked() -> None:
+    double = apply("not", apply("not", FIRST))
+    tree = merge([Return(double, lit(1)), Return(TRUE, lit(0))], [])
+    assert render(tree) == "if(not(not(col first)), 1, 0)"

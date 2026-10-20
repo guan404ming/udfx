@@ -5,7 +5,7 @@ from types import GenericAlias, UnionType
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke
-from udfx.frontend.logic import choose, conj, neg
+from udfx.frontend.logic import choose, conjunction, negate
 from udfx.frontend.values import Item, Opaque, Value
 from udfx.ir import TRUE, Lit, Node, lit
 from udfx.ops import Fault
@@ -86,5 +86,5 @@ def lookup(mapping: object, key: Node) -> tuple[Node, list[Fault]]:
         test, test_faults = invoke("__eq__", [key, lit(entry)], KeyError)
         cases.append((test, lit(value)))
         faults.extend(test_faults)
-        miss = conj(miss, neg(test))
+        miss = conjunction(miss, negate(test))
     return choose(cases), [*faults, Fault(KeyError, miss)]

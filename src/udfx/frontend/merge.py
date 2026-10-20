@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import reduce
 
-from udfx.frontend.logic import conjuncts, neg, retype, unified
+from udfx.frontend.logic import choose, conjunction, conjuncts, negate, retype, unified
 from udfx.frontend.state import Return
 from udfx.ir import TRUE, Call, If, Node
 from udfx.types import Type
@@ -30,7 +31,7 @@ def _atom(literal: Node) -> Node:
 def _sign(atom: Node, literals: tuple[Node, ...]) -> bool | None:
     if all(part in literals for part in conjuncts(atom)):
         return True
-    if neg(atom) in literals:
+    if negate(atom) in literals:
         return False
     return None
 
@@ -50,7 +51,7 @@ def _pick(cases: list[Case]) -> Node | None:
 
 
 def _side(cases: list[Case], atom: Node, sign: bool) -> list[Case]:
-    decided = conjuncts(atom) if sign else (neg(atom),)
+    decided = conjuncts(atom) if sign else (negate(atom),)
     side: list[Case] = []
     for literals, value in cases:
         mention = _sign(atom, literals)
@@ -62,10 +63,11 @@ def _side(cases: list[Case], atom: Node, sign: bool) -> list[Case]:
 
 
 def _build(cases: list[Case], result: Type) -> Node:
-    returns = [value for _, value in cases if value is not None]
+    returns = [(literals, value) for literals, value in cases if value is not None]
     atom = None if len(returns) == 1 else _pick(cases)
     if atom is None:
-        return retype(returns[0], result)
+        chain = [(reduce(conjunction, literals, TRUE), value) for literals, value in returns]
+        return retype(choose(chain), result)
     positive = _build(_side(cases, atom, True), result)
     negative = _build(_side(cases, atom, False), result)
     return If(atom, positive, negative, result)

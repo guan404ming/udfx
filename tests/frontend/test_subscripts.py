@@ -1,5 +1,5 @@
 from udfx.frontend import trace
-from udfx.frontend.logic import conj, disj, neg
+from udfx.frontend.logic import conjunction, disjunction, negate
 from udfx.ir import Col, Lit
 from udfx.ops import apply
 from udfx.types import INT, STR
@@ -41,4 +41,4 @@ def test_nullable_container_faults_first() -> None:
     program = trace(first, {"s": s.type})
     missing = apply("is_none", s)
     (index,) = apply("__getitem__", s, Lit(0, INT)).op.faults(s, Lit(0, INT))
-    assert program.fault == disj(missing, conj(neg(missing), index.when))
+    assert program.fault == disjunction(missing, conjunction(negate(missing), index.when))

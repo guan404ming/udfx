@@ -2,7 +2,7 @@ import pytest
 
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.logic import conj, neg
+from udfx.frontend.logic import conjunction, negate
 from udfx.ir import Col, If, Lit
 from udfx.ops import apply
 from udfx.types import FLOAT, INT, STR, list_of
@@ -112,14 +112,14 @@ def test_dict_lookup_becomes_if_chain() -> None:
     for function in (rate, global_rate):
         program = trace(function, {"s": STR})
         assert program.value == expected
-        assert program.fault == conj(neg(euro), neg(dollar))
+        assert program.fault == conjunction(negate(euro), negate(dollar))
 
 
 def test_build_map_lookup() -> None:
     program = trace(single, {"s": STR})
     test = apply("__eq__", S, Lit("a", STR))
     assert program.value == Lit(1, INT)
-    assert program.fault == neg(test)
+    assert program.fault == negate(test)
 
 
 def test_none_key_misses() -> None:
@@ -127,7 +127,7 @@ def test_none_key_misses() -> None:
     program = trace(rate, {"s": s.type})
     euro = apply("__eq__", s, Lit("EUR", STR))
     dollar = apply("__eq__", s, Lit("USD", STR))
-    assert program.fault == conj(neg(euro), neg(dollar))
+    assert program.fault == conjunction(negate(euro), negate(dollar))
 
 
 def test_constant_key_is_looked_up_statically() -> None:

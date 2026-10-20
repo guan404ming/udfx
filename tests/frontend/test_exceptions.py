@@ -4,7 +4,7 @@ from hypothesis import given
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.logic import conj, neg
+from udfx.frontend.logic import conjunction, negate
 from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
@@ -140,7 +140,7 @@ def test_handler_return_type_joins_unify() -> None:
 
 def test_fault_outside_try_raises() -> None:
     program = trace(outside, SCHEMA)
-    assert program.fault == conj(neg(apply("bool", S)), MISSING)
+    assert program.fault == conjunction(negate(apply("bool", S)), MISSING)
 
 
 def test_finally_reraises() -> None:
