@@ -245,9 +245,30 @@ def float_float(value: Expression) -> Expression:
     return value
 
 
+def shown(text: Expression) -> Expression:
+    return duckdb.CoalesceOperator(text, constant("None"))
+
+
 @RULES("str", Kind.INT)
 def int_str(value: Expression) -> Expression:
-    return value.cast(sqltypes.VARCHAR)
+    return shown(value.cast(sqltypes.VARCHAR))
+
+
+@RULES("str", Kind.FLOAT)
+def float_str(value: Expression) -> Lowered[Expression]:
+    return Lowered(
+        shown(value.cast(sqltypes.VARCHAR)),
+        ~duckdb.CoalesceOperator(is_nan(value), constant(False)),
+    )
+
+
+@RULES("str", Kind.BOOL)
+def bool_str(value: Expression) -> Expression:
+    named = when(value, constant("True"), constant("False"))
+    return when(value.isnull(), constant("None"), named)
+
+
+RULES("str", Kind.STR)(shown)
 
 
 @RULES("int_parses", Kind.STR)

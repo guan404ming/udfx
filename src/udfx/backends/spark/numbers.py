@@ -32,6 +32,8 @@ CHECKED: dict[str, Callable[[Column, Column], Column]] = {
 }
 
 INFINITY = float("inf")
+JAVA_FIXED_MIN = 1e-3
+JAVA_FIXED_MAX = 1e7
 
 
 def representable(value: Column) -> Column:
@@ -192,9 +194,29 @@ def float_float(value: Column) -> Column:
     return value
 
 
+def shown(text: Column) -> Column:
+    return functions.coalesce(text, functions.lit("None"))
+
+
 @RULES("str", Kind.INT)
 def int_str(value: Column) -> Column:
-    return value.cast("string")
+    return shown(value.cast("string"))
+
+
+@RULES("str", Kind.FLOAT)
+def float_str(value: Column) -> Lowered[Column]:
+    size = functions.abs(value)
+    fixed = (size >= JAVA_FIXED_MIN) & (size < JAVA_FIXED_MAX)
+    return Lowered(shown(value.cast("string")), value.isNull() | (value == 0.0) | fixed)
+
+
+@RULES("str", Kind.BOOL)
+def bool_str(value: Column) -> Column:
+    named = when(value, functions.lit("True"), functions.lit("False"))
+    return when(value.isNull(), functions.lit("None"), named)
+
+
+RULES("str", Kind.STR)(shown)
 
 
 @RULES("int_parses", Kind.STR)

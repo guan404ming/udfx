@@ -7,6 +7,7 @@ import polars as pl
 
 from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES, broadcast, when
+from udfx.ops.numbers import REPR_FIXED_MAX, REPR_FIXED_MIN
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -177,7 +178,26 @@ def float_float(value: pl.Expr) -> pl.Expr:
 
 @RULES("str", Kind.INT)
 def int_str(value: pl.Expr) -> pl.Expr:
-    return value.cast(pl.String)
+    return value.cast(pl.String).fill_null("None")
+
+
+@RULES("str", Kind.FLOAT)
+def float_str(value: pl.Expr) -> Lowered[pl.Expr]:
+    fixed = value.abs().is_between(REPR_FIXED_MIN, REPR_FIXED_MAX, closed="left")
+    return Lowered(
+        value.cast(pl.String).fill_null("None"), value.is_null() | (value == 0.0) | fixed
+    )
+
+
+@RULES("str", Kind.BOOL)
+def bool_str(value: pl.Expr) -> pl.Expr:
+    named = when(value, pl.lit("True"), pl.lit("False"))
+    return when(value.is_null(), pl.lit("None"), named)
+
+
+@RULES("str", Kind.STR)
+def str_str(value: pl.Expr) -> pl.Expr:
+    return value.fill_null("None")
 
 
 @RULES("int_parses", Kind.STR)

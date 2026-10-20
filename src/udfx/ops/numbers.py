@@ -11,6 +11,9 @@ from udfx.types import BOOL, FLOAT, INT, STR, Kind, Type
 
 PAIRS: tuple[tuple[Type, Type], ...] = ((INT, INT), (FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT))
 
+REPR_FIXED_MIN = 1e-4
+REPR_FIXED_MAX = 1e16
+
 
 def zero(node: Node) -> Node:
     return lit(0 if node.type.kind is Kind.INT else 0.0)
@@ -71,7 +74,8 @@ register(Op("int", (FLOAT,), INT, int, not_finite))
 register(Op("float", (STR,), FLOAT, float, unparsable("float")))
 register(Op("float", (INT,), FLOAT, float))
 register(Op("float", (FLOAT,), FLOAT, float))
-register(Op("str", (INT,), STR, str))
+for scalar in (INT, FLOAT, BOOL, STR):
+    register(Op("str", (scalar.or_none(),), STR, str))
 register(Op("int_parses", (STR,), BOOL, parses(int)))
 register(Op("float_parses", (STR,), BOOL, parses(float)))
 register(Op("math.isnan", (FLOAT,), BOOL, math.isnan))

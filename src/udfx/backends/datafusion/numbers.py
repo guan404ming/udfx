@@ -8,6 +8,7 @@ from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered
 from udfx.backends.datafusion.rules import RULES, length, not_distinct, when
+from udfx.ops.numbers import REPR_FIXED_MAX, REPR_FIXED_MIN
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -209,9 +210,29 @@ def float_float(value: Expr) -> Expr:
     return value
 
 
+def shown(text: Expr) -> Expr:
+    return functions.coalesce(text, lit("None"))
+
+
 @RULES("str", Kind.INT)
 def int_str(value: Expr) -> Expr:
-    return value.cast(pa.string())
+    return shown(value.cast(pa.string()))
+
+
+@RULES("str", Kind.FLOAT)
+def float_str(value: Expr) -> Lowered[Expr]:
+    size = functions.abs(value)
+    fixed = (size >= lit(REPR_FIXED_MIN)) & (size < lit(REPR_FIXED_MAX))
+    exact = value.is_null() | (value == lit(0.0)) | fixed
+    return Lowered(shown(value.cast(pa.string())), exact)
+
+
+@RULES("str", Kind.BOOL)
+def bool_str(value: Expr) -> Expr:
+    return when(value.is_null(), lit("None"), when(value, lit("True"), lit("False")))
+
+
+RULES("str", Kind.STR)(shown)
 
 
 @RULES("int_parses", Kind.STR)

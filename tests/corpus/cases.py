@@ -228,6 +228,17 @@ def parse_json(s):
     return json.loads(s)
 
 
+def text_or_empty(x):
+    try:
+        return str(x)
+    except TypeError:
+        return ""
+
+
+def float_text(x):
+    return str(x)
+
+
 def keyword_split(s):
     return s.split(sep="::")
 
@@ -272,6 +283,8 @@ CASES = [
     Case("clamp", clamp, {"x": FLOAT}, "native"),
     Case("nested_helper", nested_helper, {"s": STR.or_none()}, "native"),
     Case("conditional_expression", conditional_expression, {"n": INT}, "native"),
+    Case("text_or_empty", text_or_empty, {"x": INT.or_none()}, "native"),
+    Case("float_text", float_text, {"x": FLOAT.or_none()}, "native"),
     Case("loop_total", loop_total, {"s": STR}, "fallback"),
     Case("gauss_noise", gauss_noise, {"x": FLOAT}, "fallback"),
     Case("parse_json", parse_json, {"s": STR}, "fallback"),

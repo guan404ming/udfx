@@ -9,10 +9,10 @@ from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.calls import invoke
-from udfx.ir import Col, Lit
+from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
-from udfx.types import FLOAT, STR
+from udfx.types import FLOAT, INT, STR
 
 POLARS = PolarsBackend()
 
@@ -82,6 +82,13 @@ def get_rate(s: str) -> float | None:
     return RATES.get(s)
 
 
+def text_or_empty(x: int | None) -> str:
+    try:
+        return str(x)
+    except TypeError:
+        return ""
+
+
 def test_module_function_resolves_by_identity() -> None:
     x = Col("x", FLOAT)
     assert trace(log, {"x": FLOAT}).value == apply("math.log10", x)
@@ -130,6 +137,12 @@ def test_none_argument_of_method_raises_type_error() -> None:
     t = Col("t", STR.or_none())
     _, faults = invoke(".find", [S, t], AttributeError)
     assert [fault.kind for fault in faults] == [AttributeError, TypeError]
+
+
+def test_str_of_none_does_not_raise() -> None:
+    program = trace(text_or_empty, {"x": INT.or_none()})
+    assert program.value == apply("str", Col("x", INT.or_none()))
+    assert program.fault == FALSE
 
 
 @given(batches({"x": FLOAT}))
