@@ -1,7 +1,9 @@
+import importlib
 import os
 import subprocess
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -185,6 +187,16 @@ def test_reserved_column_names(backend: Backend[Any], name: str) -> None:
 def test_nullable_list_literal(backend: Backend[Any]) -> None:
     rows = [("a,b",), ("",), (None,)]
     assert check_function(split, {"s": STR.or_none()}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_case_drift_probe_runs_on_the_engine(
+    backend: Backend[Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("UDFX_CACHE_DIR", str(tmp_path))
+    strings = importlib.import_module(f"udfx.backends.{backend.name}.strings")
+    assert strings.native_recase("lower", ["A", "b", "C"]) == ["a", "b", "c"]
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("backend", backend_params())

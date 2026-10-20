@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import cache
+from functools import cache, partial
 from typing import cast
 
 import datafusion
@@ -26,19 +26,21 @@ from udfx.semantics.text import (
 )
 from udfx.types import STR, Kind
 
-POINT = "udfx point"
+POINT = "point"
+
+
+def native_recase(method: str, samples: Sequence[str]) -> list[str]:
+    expr = getattr(functions, method)(col(POINT))
+    (recased,) = DataFusionBackend().evaluate(
+        [expr], {POINT: STR}, [(sample,) for sample in samples]
+    )
+    return cast("list[str]", recased)
 
 
 @cache
 def case_drift(method: str) -> CaseDrift:
-    def native(samples: Sequence[str]) -> list[str]:
-        expr = getattr(functions, method)(col(POINT))
-        (recased,) = DataFusionBackend().evaluate(
-            [expr], {POINT: STR}, [(sample,) for sample in samples]
-        )
-        return cast("list[str]", recased)
-
-    return text.case_drift(method, native, f"datafusion {datafusion.__version__}")
+    engine = f"datafusion {datafusion.__version__}"
+    return text.case_drift(method, partial(native_recase, method), engine)
 
 
 def recase(value: Expr, method: str) -> RuleResult[Expr]:

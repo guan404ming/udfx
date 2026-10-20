@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import cache
+from functools import cache, partial
 
 import polars as pl
 
@@ -24,12 +24,13 @@ from udfx.semantics.text import (
 from udfx.types import Kind
 
 
+def native_recase(method: str, samples: Sequence[str]) -> list[str]:
+    return getattr(pl.Series(samples).str, f"to_{method}case")().to_list()
+
+
 @cache
 def case_drift(method: str) -> CaseDrift:
-    def native(samples: Sequence[str]) -> list[str]:
-        return getattr(pl.Series(samples).str, f"to_{method}case")().to_list()
-
-    return text.case_drift(method, native, f"polars {pl.__version__}")
+    return text.case_drift(method, partial(native_recase, method), f"polars {pl.__version__}")
 
 
 def recase(value: pl.Expr, method: str) -> RuleResult[pl.Expr]:

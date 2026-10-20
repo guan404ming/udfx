@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import cache
+from functools import cache, partial
 from typing import cast
 
 import pyspark
@@ -27,19 +27,20 @@ from udfx.semantics.text import (
 from udfx.types import STR, Kind
 
 INT32_MAX = 2**31 - 1
-POINT = "udfx point"
+POINT = "point"
+
+
+def native_recase(method: str, samples: Sequence[str]) -> list[str]:
+    backend = SparkBackend()
+    expr = getattr(functions, method)(backend.column(Col(POINT, STR)))
+    (recased,) = backend.evaluate([expr], {POINT: STR}, [(sample,) for sample in samples])
+    return cast("list[str]", recased)
 
 
 @cache
 def case_drift(method: str) -> CaseDrift:
-    backend = SparkBackend()
-
-    def native(samples: Sequence[str]) -> list[str]:
-        expr = getattr(functions, method)(backend.column(Col(POINT, STR)))
-        (recased,) = backend.evaluate([expr], {POINT: STR}, [(sample,) for sample in samples])
-        return cast("list[str]", recased)
-
-    return text.case_drift(method, native, f"spark {pyspark.__version__}")
+    engine = f"spark {pyspark.__version__}"
+    return text.case_drift(method, partial(native_recase, method), engine)
 
 
 def recase(value: Column, method: str) -> RuleResult[Column]:

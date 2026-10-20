@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from functools import cache
+from functools import cache, partial
 
 import duckdb
 import pyarrow as pa
@@ -38,14 +38,16 @@ ITEM = "udfx item"
 INDEX = "udfx index"
 
 
+def native_recase(method: str, samples: Sequence[str]) -> list[str]:
+    table = pa.table({POINT: pa.array(list(samples))})
+    rows = duckdb.from_arrow(table).select(function(method, column(POINT))).fetchall()
+    return [row[0] for row in rows]
+
+
 @cache
 def case_drift(method: str) -> CaseDrift:
-    def native(samples: Sequence[str]) -> list[str]:
-        table = pa.table({POINT: pa.array(list(samples))})
-        rows = duckdb.from_arrow(table).select(function(method, column(POINT))).fetchall()
-        return [row[0] for row in rows]
-
-    return text.case_drift(method, native, f"duckdb {duckdb.__version__}")
+    engine = f"duckdb {duckdb.__version__}"
+    return text.case_drift(method, partial(native_recase, method), engine)
 
 
 def recase(value: Expression, method: str) -> RuleResult[Expression]:
