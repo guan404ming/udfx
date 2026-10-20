@@ -24,7 +24,7 @@ def _literals(path: Node) -> tuple[Node, ...]:
 
 def _atom(literal: Node) -> Node:
     if isinstance(literal, Call) and literal.op.name == "not":
-        return literal.args[0]
+        return literal.arguments[0]
     return literal
 
 

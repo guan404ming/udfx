@@ -26,6 +26,10 @@ from udfx.semantics.numbers import (
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 
+def cast_float64(value: pl.Expr) -> pl.Expr:
+    return value.cast(pl.Float64)
+
+
 def fits_int64(wide: pl.Expr) -> pl.Expr:
     return wide.is_between(INT64_MIN, INT64_MAX)
 
@@ -34,7 +38,7 @@ def representable(value: pl.Expr) -> pl.Expr:
     return value.is_between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
-def checked(operation: Binary) -> BinaryRule[pl.Expr]:
+def overflow_checked(operation: Binary) -> BinaryRule[pl.Expr]:
     def rule(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
         wide = operation(left.cast(pl.Int128), right.cast(pl.Int128))
         return Lowered(operation(left, right), fits_int64(wide))
@@ -42,34 +46,34 @@ def checked(operation: Binary) -> BinaryRule[pl.Expr]:
     return rule
 
 
-def floating(name: str, rule: BinaryRule[pl.Expr]) -> None:
+def register_float_variants(name: str, rule: BinaryRule[pl.Expr]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(left.cast(pl.Float64), right))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, right.cast(pl.Float64)))
+    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(cast_float64(left), right))
+    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, cast_float64(right)))
 
 
-def widened(name: str, rule: Binary) -> None:
+def register_widened_variants(name: str, rule: Binary) -> None:
     def exact(value: pl.Expr) -> pl.Expr:
         return value.is_null() | representable(value)
 
     RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(left.cast(pl.Float64), right), exact(left))
+        lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
     )
     RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, right.cast(pl.Float64)), exact(right))
+        lambda left, right: Lowered(rule(left, cast_float64(right)), exact(right))
     )
 
 
-def comparison(name: str, compare: Binary) -> None:
+def register_comparison(name: str, compare: Binary) -> None:
     def ordered(left: pl.Expr, right: pl.Expr) -> pl.Expr:
         return compare(left, right) & left.is_not_nan() & right.is_not_nan()
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    widened(name, ordered)
+    register_widened_variants(name, ordered)
 
 
-def materialized(operation: Binary) -> Binary:
+def materialize(operation: Binary) -> Binary:
     return lambda left, right: operation(broadcast(left), broadcast(right))
 
 
@@ -85,8 +89,8 @@ def truncated_remainder(left: pl.Expr, right: pl.Expr) -> tuple[pl.Expr, pl.Expr
     )
     undefined = ~left.is_finite() | right.is_nan()
     small = left.abs() < right.abs()
-    whole = (whole_left.cast(pl.Float64) == left) & (whole_right.cast(pl.Float64) == right)
-    expr = when(undefined, pl.lit(float("nan")), when(small, left, truncated.cast(pl.Float64)))
+    whole = (cast_float64(whole_left) == left) & (cast_float64(whole_right) == right)
+    expr = when(undefined, pl.lit(float("nan")), when(small, left, cast_float64(truncated)))
     return expr, undefined | small | whole.fill_null(False)
 
 
@@ -116,15 +120,15 @@ TEXT = TextPrimitives(
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(checked(_operation))
-    floating(_name, materialized(_operation))
+    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
+    register_float_variants(_name, materialize(_operation))
 
 for _name, _compare in COMPARISONS.items():
-    comparison(_name, _compare)
+    register_comparison(_name, _compare)
 
-floating("__truediv__", materialized(operator.truediv))
-floating("__floordiv__", float_floordiv)
-floating("__mod__", float_mod)
+register_float_variants("__truediv__", materialize(operator.truediv))
+register_float_variants("__floordiv__", float_floordiv)
+register_float_variants("__mod__", float_mod)
 
 RULES("__eq__", Kind.INT, Kind.INT)(pl.Expr.eq_missing)
 RULES("__ne__", Kind.INT, Kind.INT)(pl.Expr.ne_missing)
@@ -155,8 +159,8 @@ def float_ne(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left.ne_missing(right) | either_nan(left, right)
 
 
-widened("__eq__", float_eq)
-widened("__ne__", float_ne)
+register_widened_variants("__eq__", float_eq)
+register_widened_variants("__ne__", float_ne)
 
 
 @RULES("__neg__", Kind.INT)
@@ -177,7 +181,7 @@ def float_int(value: pl.Expr) -> Lowered[pl.Expr]:
 
 @RULES("float", Kind.INT)
 def int_float(value: pl.Expr) -> pl.Expr:
-    return value.cast(pl.Float64)
+    return cast_float64(value)
 
 
 @RULES("float", Kind.FLOAT)
@@ -238,4 +242,4 @@ RULES("math.log10", Kind.FLOAT)(log10)
 
 @RULES("math.log10", Kind.INT)
 def int_log10(value: pl.Expr) -> Lowered[pl.Expr]:
-    return log10(value.cast(pl.Float64))
+    return log10(cast_float64(value))

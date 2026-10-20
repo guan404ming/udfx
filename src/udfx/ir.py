@@ -24,7 +24,7 @@ class Lit:
 @dataclass(frozen=True)
 class Call:
     op: Op
-    args: tuple[Node, ...]
+    arguments: tuple[Node, ...]
 
     @property
     def type(self) -> Type:
@@ -33,7 +33,7 @@ class Call:
 
 @dataclass(frozen=True)
 class If:
-    cond: Node
+    condition: Node
     then: Node
     orelse: Node
     type: Type

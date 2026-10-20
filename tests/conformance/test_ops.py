@@ -25,8 +25,8 @@ def test_every_op_has_a_rule(backend: Backend[Any]) -> None:
 @pytest.mark.parametrize(("backend", "op"), CASES)
 @given(data=st.data())
 def test_op_matches_python(backend: Backend[Any], op: Op, data: st.DataObject) -> None:
-    schema = {f"arg{index}": param for index, param in enumerate(op.params)}
+    schema = {f"arg{index}": param for index, param in enumerate(op.parameters)}
     rows = data.draw(batches(schema))
-    constant = data.draw(st.sampled_from([None, *range(len(op.params))]))
-    constants = {} if constant is None else {constant: data.draw(values(op.params[constant]))}
+    constant = data.draw(st.sampled_from([None, *range(len(op.parameters))]))
+    constants = {} if constant is None else {constant: data.draw(values(op.parameters[constant]))}
     assert check_op(op, backend, rows, constants) == []

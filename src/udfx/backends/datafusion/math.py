@@ -5,7 +5,14 @@ import operator
 from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered
-from udfx.backends.datafusion.numbers import INFINITY, finite, float_int, floating, is_nan
+from udfx.backends.datafusion.numbers import (
+    INFINITY,
+    cast_float64,
+    either_nan,
+    finite,
+    float_int,
+    is_nan,
+)
 from udfx.backends.datafusion.rules import RULES
 from udfx.semantics.numbers import (
     EXACT_POWERS_OF_TEN,
@@ -32,56 +39,58 @@ def below_zero(value: Expr) -> Expr:
     return (value < lit(0.0)) & ~is_nan(value)
 
 
-def power(a: Expr, b: Expr) -> Lowered[Expr]:
-    undefined = (a == lit(0.0)) & below_zero(b)
-    base = functions.when(undefined, lit(1.0)).otherwise(a)
-    value = functions.when(undefined, lit(INFINITY)).otherwise(functions.power(base, b))
-    complex_result = below_zero(a) & (functions.floor(b) != b)
+def power(base: Expr, exponent: Expr) -> Lowered[Expr]:
+    undefined = (base == lit(0.0)) & below_zero(exponent)
+    safe_base = functions.when(undefined, lit(1.0)).otherwise(base)
+    value = functions.when(undefined, lit(INFINITY)).otherwise(functions.power(safe_base, exponent))
+    complex_result = below_zero(base) & (functions.floor(exponent) != exponent)
     return Lowered(value, ~complex_result)
 
 
-def root(a: Expr) -> Expr:
-    return functions.sqrt(functions.when(below_zero(a), lit(0.0)).otherwise(a))
+def root(value: Expr) -> Expr:
+    return functions.sqrt(functions.when(below_zero(value), lit(0.0)).otherwise(value))
 
 
-def pick(name: str, compare: Binary) -> None:
-    def ordered(a: Expr, b: Expr) -> Expr:
-        return functions.when(compare(b, a) & ~is_nan(a) & ~is_nan(b), b).otherwise(a)
+def register_extremum(name: str, compare: Binary) -> None:
+    def ordered(left: Expr, right: Expr) -> Expr:
+        return functions.when(compare(right, left) & ~either_nan(left, right), right).otherwise(
+            left
+        )
 
-    def total(a: Expr, b: Expr) -> Expr:
-        return functions.when(compare(b, a), b).otherwise(a)
+    def total(left: Expr, right: Expr) -> Expr:
+        return functions.when(compare(right, left), right).otherwise(left)
 
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
     RULES(name, Kind.INT, Kind.INT)(total)
     RULES(name, Kind.STR, Kind.STR)(total)
 
 
-pick("max", operator.gt)
-pick("min", operator.lt)
+register_extremum("max", operator.gt)
+register_extremum("min", operator.lt)
 
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
-RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda a, b: power(floating(a), b))
-RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda a, b: power(a, floating(b)))
+RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda base, exponent: power(cast_float64(base), exponent))
+RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda base, exponent: power(base, cast_float64(exponent)))
 RULES("math.sqrt", Kind.FLOAT)(root)
-RULES("math.sqrt", Kind.INT)(lambda a: root(floating(a)))
-RULES("math.ceil", Kind.FLOAT)(lambda a: float_int(functions.ceil(a)))
-RULES("math.floor", Kind.FLOAT)(lambda a: float_int(functions.floor(a)))
+RULES("math.sqrt", Kind.INT)(lambda value: root(cast_float64(value)))
+RULES("math.ceil", Kind.FLOAT)(lambda value: float_int(functions.ceil(value)))
+RULES("math.floor", Kind.FLOAT)(lambda value: float_int(functions.floor(value)))
 RULES("math.ceil", Kind.INT)(identity)
 RULES("math.floor", Kind.INT)(identity)
-RULES("round", Kind.FLOAT)(lambda a: float_int(half_even(a)))
+RULES("round", Kind.FLOAT)(lambda value: float_int(half_even(value)))
 
 
 @RULES("pow_overflows", Kind.FLOAT, Kind.FLOAT)
-def pow_overflows(a: Expr, b: Expr) -> Lowered[Expr]:
-    result = power(a, b)
+def pow_overflows(base: Expr, exponent: Expr) -> Lowered[Expr]:
+    result = power(base, exponent)
     overflow = functions.abs(result.expr) == lit(INFINITY)
-    return Lowered(overflow & finite(a) & finite(b) & (a != lit(0.0)), result.exact)
+    return Lowered(overflow & finite(base) & finite(exponent) & (base != lit(0.0)), result.exact)
 
 
 @RULES("round", Kind.FLOAT, Kind.INT)
-def round_digits(a: Expr, digits: Expr) -> Lowered[Expr]:
-    scale = functions.power(lit(10.0), floating(digits))
-    scaled = a * scale
+def round_digits(value: Expr, digits: Expr) -> Lowered[Expr]:
+    scale = functions.power(lit(10.0), cast_float64(digits))
+    scaled = value * scale
     rounded = half_even(scaled)
     tie = scaled - functions.floor(scaled) == lit(0.5)
     exact = (
@@ -89,11 +98,11 @@ def round_digits(a: Expr, digits: Expr) -> Lowered[Expr]:
         & (functions.abs(scaled) < lit(HALF_INTEGER_LIMIT))
         & ((digits == lit(0)) | ~tie)
     )
-    value = functions.when(rounded == lit(0.0), a * lit(0.0)).otherwise(rounded / scale)
-    return Lowered(value, exact)
+    result = functions.when(rounded == lit(0.0), value * lit(0.0)).otherwise(rounded / scale)
+    return Lowered(result, exact)
 
 
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
-def round_overflows(a: Expr, digits: Expr) -> Lowered[Expr]:
-    safe = (digits >= lit(0)) | (functions.abs(a) < lit(ROUND_OVERFLOW_LIMIT))
+def round_overflows(value: Expr, digits: Expr) -> Lowered[Expr]:
+    safe = (digits >= lit(0)) | (functions.abs(value) < lit(ROUND_OVERFLOW_LIMIT))
     return Lowered(lit(False), safe)

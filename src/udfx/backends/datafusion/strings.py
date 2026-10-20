@@ -10,7 +10,7 @@ from datafusion import Expr, col, functions, lit
 
 from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.datafusion.backend import DataFusionBackend
-from udfx.backends.datafusion.rules import RULES, length, not_distinct, typed, when
+from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed, when
 from udfx.semantics import text
 from udfx.semantics.text import (
     SIGMA,
@@ -145,12 +145,12 @@ def str_add(left: Expr, right: Expr) -> Expr:
 
 @RULES("__eq__", Kind.STR, Kind.STR)
 def str_eq(left: Expr, right: Expr) -> Expr:
-    return not_distinct(left, right)
+    return null_safe_equal(left, right)
 
 
 @RULES("__ne__", Kind.STR, Kind.STR)
 def str_ne(left: Expr, right: Expr) -> Expr:
-    return ~not_distinct(left, right)
+    return ~null_safe_equal(left, right)
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)
@@ -168,11 +168,11 @@ def str_len(text: Expr) -> Expr:
     return length(text)
 
 
-def size(container: Expr) -> Expr:
+def list_len(container: Expr) -> Expr:
     return functions.cardinality(container).cast(pa.int64())
 
 
-RULES("len", Kind.LIST)(size)
+RULES("len", Kind.LIST)(list_len)
 
 
 @RULES("__getitem__", Kind.STR, Kind.INT)
@@ -185,7 +185,7 @@ def str_getitem(text: Expr, index: Expr) -> Expr:
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
 def list_getitem(container: Expr, index: Expr) -> Expr:
-    total = size(container)
+    total = list_len(container)
     position = functions.when(index < lit(0), functions.greatest(index, lit(-1) - total)).otherwise(
         functions.least(index, total) + lit(1)
     )

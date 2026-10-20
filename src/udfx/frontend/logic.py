@@ -13,9 +13,9 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 def fold(node: Node) -> Node:
     if not isinstance(node, Call):
         return node
-    folded = Call(node.op, tuple(fold(argument) for argument in node.args))
-    values = [argument.value for argument in folded.args if isinstance(argument, Lit)]
-    if len(values) < len(folded.args):
+    folded = Call(node.op, tuple(fold(argument) for argument in node.arguments))
+    values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]
+    if len(values) < len(folded.arguments):
         return folded
     try:
         value = folded.op.reference(*values)
@@ -28,7 +28,7 @@ def fold(node: Node) -> Node:
 
 def conjuncts(node: Node) -> tuple[Node, ...]:
     if isinstance(node, Call) and node.op.name == "and":
-        return conjuncts(node.args[0]) + conjuncts(node.args[1])
+        return conjuncts(node.arguments[0]) + conjuncts(node.arguments[1])
     return (node,)
 
 
@@ -40,21 +40,21 @@ def refuted(part: Node, known: Sequence[Node]) -> bool:
     return any(
         isinstance(fact, Call)
         and fact.op.name in EXCLUSIVE - {part.op.name}
-        and fact.args == part.args
+        and fact.arguments == part.arguments
         for fact in known
     )
 
 
-def conjunction(a: Node, b: Node) -> Node:
-    if a == TRUE:
-        return b
-    if b == TRUE:
-        return a
-    if FALSE in (a, b):
+def conjunction(left: Node, right: Node) -> Node:
+    if left == TRUE:
+        return right
+    if right == TRUE:
+        return left
+    if FALSE in (left, right):
         return FALSE
-    known = list(conjuncts(a))
-    result = a
-    for part in conjuncts(b):
+    known = list(conjuncts(left))
+    result = left
+    for part in conjuncts(right):
         if refuted(negate(part), known):
             continue
         if refuted(part, known):
@@ -64,24 +64,24 @@ def conjunction(a: Node, b: Node) -> Node:
     return result
 
 
-def disjunction(a: Node, b: Node) -> Node:
-    if a in (FALSE, b):
-        return b
-    if b == FALSE:
-        return a
-    if TRUE in (a, b):
+def disjunction(left: Node, right: Node) -> Node:
+    if left in (FALSE, right):
+        return right
+    if right == FALSE:
+        return left
+    if TRUE in (left, right):
         return TRUE
-    return apply("or", a, b)
+    return apply("or", left, right)
 
 
-def negate(a: Node) -> Node:
-    if a == TRUE:
+def negate(value: Node) -> Node:
+    if value == TRUE:
         return FALSE
-    if a == FALSE:
+    if value == FALSE:
         return TRUE
-    if isinstance(a, Call) and a.op.name == "not":
-        return a.args[0]
-    return apply("not", a)
+    if isinstance(value, Call) and value.op.name == "not":
+        return value.arguments[0]
+    return apply("not", value)
 
 
 def unified(values: Sequence[Node]) -> Type:

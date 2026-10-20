@@ -16,18 +16,18 @@ def zero(node: Node) -> Node:
     return lit(0 if node.type.kind is Kind.INT else 0.0)
 
 
-def divisor_zero(_: Node, b: Node) -> tuple[Fault, ...]:
-    return (Fault(ZeroDivisionError, apply("__eq__", b, zero(b))),)
+def divisor_zero(_: Node, divisor: Node) -> tuple[Fault, ...]:
+    return (Fault(ZeroDivisionError, apply("__eq__", divisor, zero(divisor))),)
 
 
-def not_positive(x: Node) -> tuple[Fault, ...]:
-    return (Fault(ValueError, apply("__le__", x, zero(x))),)
+def not_positive(value: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("__le__", value, zero(value))),)
 
 
-def not_finite(x: Node) -> tuple[Fault, ...]:
+def not_finite(value: Node) -> tuple[Fault, ...]:
     return (
-        Fault(ValueError, apply("math.isnan", x)),
-        Fault(OverflowError, apply("math.isinf", x)),
+        Fault(ValueError, apply("math.isnan", value)),
+        Fault(OverflowError, apply("math.isinf", value)),
     )
 
 
@@ -49,17 +49,17 @@ def unparsable(name: str) -> Callable[[Node], tuple[Fault, ...]]:
     return faults
 
 
-for a, b in PAIRS:
-    result = INT if (a, b) == (INT, INT) else FLOAT
+for left, right in PAIRS:
+    result = INT if (left, right) == (INT, INT) else FLOAT
     for name, operation in ARITHMETIC.items():
-        register(Op(name, (a, b), result, operation))
-    register(Op("__truediv__", (a, b), FLOAT, operator.truediv, divisor_zero))
-    register(Op("__floordiv__", (a, b), result, operator.floordiv, divisor_zero))
-    register(Op("__mod__", (a, b), result, operator.mod, divisor_zero))
+        register(Op(name, (left, right), result, operation))
+    register(Op("__truediv__", (left, right), FLOAT, operator.truediv, divisor_zero))
+    register(Op("__floordiv__", (left, right), result, operator.floordiv, divisor_zero))
+    register(Op("__mod__", (left, right), result, operator.mod, divisor_zero))
     for name, compare in COMPARISONS.items():
-        register(Op(name, (a, b), BOOL, compare))
-    register(Op("__eq__", (a.or_none(), b.or_none()), BOOL, operator.eq))
-    register(Op("__ne__", (a.or_none(), b.or_none()), BOOL, operator.ne))
+        register(Op(name, (left, right), BOOL, compare))
+    register(Op("__eq__", (left.or_none(), right.or_none()), BOOL, operator.eq))
+    register(Op("__ne__", (left.or_none(), right.or_none()), BOOL, operator.ne))
 
 for scalar in (INT, FLOAT):
     register(Op("__neg__", (scalar,), scalar, operator.neg))

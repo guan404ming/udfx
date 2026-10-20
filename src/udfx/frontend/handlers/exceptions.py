@@ -11,7 +11,7 @@ from udfx.ir import lit
 
 
 def exception_classes(item: Item) -> tuple[type[BaseException], ...]:
-    candidates = item.obj if isinstance(item, Opaque) else None
+    candidates = item.value if isinstance(item, Opaque) else None
     members = candidates if isinstance(candidates, tuple) else (candidates,)
     classes = tuple(
         member
@@ -25,7 +25,7 @@ def exception_classes(item: Item) -> tuple[type[BaseException], ...]:
 
 def exception_kind(item: Item) -> type[Exception]:
     match item:
-        case Opaque(obj=type() as kind) if issubclass(kind, Exception):
+        case Opaque(value=type() as kind) if issubclass(kind, Exception):
             return kind
         case _:
             raise Unsupported(f"expected an exception, got {describe(item)}")

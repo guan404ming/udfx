@@ -11,9 +11,9 @@ from udfx.types import BOOL, FLOAT, INT, STR, Kind
 
 
 def overflows(function: Callable[..., object]) -> Callable[..., bool]:
-    def check(*args: object) -> bool:
+    def check(*arguments: object) -> bool:
         try:
-            function(*args)
+            function(*arguments)
         except OverflowError:
             return True
         except ArithmeticError:
@@ -27,8 +27,8 @@ def real(node: Node) -> Node:
     return node if node.type.kind is Kind.FLOAT else apply("float", node)
 
 
-def power_faults(a: Node, b: Node) -> tuple[Fault, ...]:
-    base, exponent = real(a), real(b)
+def power_faults(base: Node, exponent: Node) -> tuple[Fault, ...]:
+    base, exponent = real(base), real(exponent)
     finite = apply("not", apply("math.isinf", exponent))
     negative = apply("and", apply("__lt__", exponent, lit(0.0)), finite)
     return (
@@ -41,15 +41,15 @@ def round_faults(value: Node, digits: Node) -> tuple[Fault, ...]:
     return (Fault(OverflowError, apply("round_overflows", value, digits)),)
 
 
-def below_zero(x: Node) -> tuple[Fault, ...]:
-    return (Fault(ValueError, apply("__lt__", x, zero(x))),)
+def below_zero(value: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("__lt__", value, zero(value))),)
 
 
 register(Op("pow_overflows", (FLOAT, FLOAT), BOOL, overflows(operator.pow)))
 register(Op("round_overflows", (FLOAT, INT), BOOL, overflows(round)))
 
-for a, b in ((FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT)):
-    register(Op("__pow__", (a, b), FLOAT, operator.pow, power_faults))
+for left, right in ((FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT)):
+    register(Op("__pow__", (left, right), FLOAT, operator.pow, power_faults))
 
 for scalar in (INT, FLOAT, STR):
     register(Op("max", (scalar, scalar), scalar, max))

@@ -65,7 +65,7 @@ def quoted(pattern: Column) -> Column:
     return functions.concat(functions.lit("\\Q"), escaped, functions.lit("\\E"))
 
 
-def join(words: Column, separator: Column) -> Column:
+def array_join(words: Column, separator: Column) -> Column:
     return functions.call_function("array_join", words, separator)
 
 
@@ -142,13 +142,13 @@ def endswith(text: Column, suffix: Column) -> Column:
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
 def replace(text: Column, old: Column, new: Column) -> Column:
     empty = functions.array(functions.lit(""))
-    spread = join(functions.concat(empty, characters(text), empty), new)
+    spread = array_join(functions.concat(empty, characters(text), empty), new)
     return functions.when(old == "", spread).otherwise(functions.replace(text, old, new))
 
 
 @RULES(".join", Kind.STR, Kind.LIST)
-def join_words(separator: Column, words: Column) -> Column:
-    return join(words, separator)
+def join(separator: Column, words: Column) -> Column:
+    return array_join(words, separator)
 
 
 @RULES("__add__", Kind.STR, Kind.STR)

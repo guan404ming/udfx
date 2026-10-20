@@ -93,10 +93,10 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
 @handles("BINARY_SUBSCR")
 def binary_subscr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, index), rest = state.pop(2)
-    if isinstance(container, Opaque) and any(container.obj is generic for generic in GENERICS):
+    if isinstance(container, Opaque) and any(container.value is generic for generic in GENERICS):
         return [rest.push(annotation(operator.getitem, container, index)).advance()]
     if isinstance(container, Opaque):
-        node, faults = lookup(container.obj, node_of(index))
+        node, faults = lookup(container.value, node_of(index))
     else:
         node, faults = invoke("__getitem__", [node_of(container), node_of(index)], TypeError)
     return emit(context, rest, Value(node), faults)

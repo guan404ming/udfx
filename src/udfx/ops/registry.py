@@ -30,14 +30,14 @@ def no_faults(*_: Node) -> tuple[Fault, ...]:
 @dataclass(frozen=True, eq=False)
 class Op:
     name: str
-    params: tuple[Type, ...]
+    parameters: tuple[Type, ...]
     result: Type
     reference: Callable[..., object]
     faults: Callable[..., tuple[Fault, ...]] = field(default=no_faults)
 
     @property
     def key(self) -> OpKey:
-        return OpKey(self.name, tuple(param.kind for param in self.params))
+        return OpKey(self.name, tuple(parameter.kind for parameter in self.parameters))
 
     def __str__(self) -> str:
         return f"{self.key} -> {self.result}"
@@ -61,12 +61,12 @@ def resolve(name: str, kinds: tuple[Kind, ...]) -> Op | None:
     return _OPS.get(OpKey(name, kinds))
 
 
-def apply(name: str, *args: Node) -> Call:
-    kinds = tuple(arg.type.kind for arg in args)
+def apply(name: str, *arguments: Node) -> Call:
+    kinds = tuple(argument.type.kind for argument in arguments)
     op = resolve(name, kinds)
     if op is None:
         raise LookupError(f"no op {OpKey(name, kinds)}")
-    return Call(op, args)
+    return Call(op, arguments)
 
 
 @contextmanager

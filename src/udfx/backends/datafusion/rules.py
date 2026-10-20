@@ -24,7 +24,7 @@ def length(text: Expr) -> Expr:
     return functions.character_length(text).cast(pa.int64())
 
 
-def not_distinct(left: Expr, right: Expr) -> Expr:
+def null_safe_equal(left: Expr, right: Expr) -> Expr:
     return functions.coalesce(left == right, left.is_null() & right.is_null())
 
 

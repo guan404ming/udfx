@@ -38,7 +38,7 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
     method = instruction.arg is not None and instruction.arg & 1
     (owner,), rest = state.pop()
     match owner:
-        case Opaque(obj=ModuleType() as module) if name in vars(module):
+        case Opaque(value=ModuleType() as module) if name in vars(module):
             attribute = constant(vars(module)[name])
             return [(rest.push(NULL, attribute) if method else rest.push(attribute)).advance()]
         case Value() if method:
@@ -105,13 +105,13 @@ def make_function(context: Context, state: State, instruction: dis.Instruction) 
         cells = cell_names(closure)
     if flags & ANNOTATIONS:
         rest = rest.pop()[1]
-    if not isinstance(code, Opaque) or not isinstance(code.obj, CodeType):
+    if not isinstance(code, Opaque) or not isinstance(code.value, CodeType):
         raise Unsupported(f"function from {describe(code)}", context.where(state))
-    return [rest.push(Function(code.obj, cells, context)).advance()]
+    return [rest.push(Function(code.value, cells, context)).advance()]
 
 
 def cell_names(item: Item) -> tuple[str, ...]:
-    members = item.obj if isinstance(item, Opaque) else None
+    members = item.value if isinstance(item, Opaque) else None
     if not isinstance(members, tuple):
         raise Unsupported(f"closure {describe(item)}")
     names = tuple(member.name for member in members if isinstance(member, Cell))

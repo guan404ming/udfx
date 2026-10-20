@@ -58,9 +58,9 @@ RENDERED = [
 def atoms_once(node: Node, seen: frozenset[Node] = frozenset()) -> bool:
     if not isinstance(node, If):
         return True
-    if node.cond in seen:
+    if node.condition in seen:
         return False
-    below = seen | {node.cond}
+    below = seen | {node.condition}
     return atoms_once(node.then, below) and atoms_once(node.orelse, below)
 
 

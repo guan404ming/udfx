@@ -8,18 +8,18 @@ from udfx.types import Kind
 
 
 @RULES("not", Kind.BOOL)
-def not_(a: Expression) -> Expression:
-    return ~a
+def not_(value: Expression) -> Expression:
+    return ~value
 
 
 @RULES("and", Kind.BOOL, Kind.BOOL)
-def and_(a: Expression, b: Expression) -> Expression:
-    return a & b
+def and_(left: Expression, right: Expression) -> Expression:
+    return left & right
 
 
 @RULES("or", Kind.BOOL, Kind.BOOL)
-def or_(a: Expression, b: Expression) -> Expression:
-    return a | b
+def or_(left: Expression, right: Expression) -> Expression:
+    return left | right
 
 
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
@@ -27,20 +27,20 @@ for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
 
 
 @RULES("bool", Kind.STR)
-def str_truth(a: Expression) -> Expression:
-    return a.isnotnull() & (length(a) > constant(0))
+def str_truth(value: Expression) -> Expression:
+    return value.isnotnull() & (length(value) > constant(0))
 
 
 @RULES("bool", Kind.INT)
-def int_truth(a: Expression) -> Expression:
-    return a.isnotnull() & (a != constant(0))
+def int_truth(value: Expression) -> Expression:
+    return value.isnotnull() & (value != constant(0))
 
 
 @RULES("bool", Kind.FLOAT)
-def float_truth(a: Expression) -> Expression:
-    return a.isnotnull() & (a != constant(0.0))
+def float_truth(value: Expression) -> Expression:
+    return value.isnotnull() & (value != constant(0.0))
 
 
 @RULES("bool", Kind.BOOL)
-def bool_truth(a: Expression) -> Expression:
-    return duckdb.CoalesceOperator(a, constant(False))
+def bool_truth(value: Expression) -> Expression:
+    return duckdb.CoalesceOperator(value, constant(False))

@@ -7,18 +7,18 @@ from udfx.types import Kind
 
 
 @RULES("not", Kind.BOOL)
-def not_(a: pl.Expr) -> pl.Expr:
-    return ~a
+def not_(value: pl.Expr) -> pl.Expr:
+    return ~value
 
 
 @RULES("and", Kind.BOOL, Kind.BOOL)
-def and_(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return a & b
+def and_(left: pl.Expr, right: pl.Expr) -> pl.Expr:
+    return left & right
 
 
 @RULES("or", Kind.BOOL, Kind.BOOL)
-def or_(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return a | b
+def or_(left: pl.Expr, right: pl.Expr) -> pl.Expr:
+    return left | right
 
 
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
@@ -26,20 +26,20 @@ for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
 
 
 @RULES("bool", Kind.STR)
-def str_truth(a: pl.Expr) -> pl.Expr:
-    return a.is_not_null() & (a.str.len_bytes() > 0)
+def str_truth(value: pl.Expr) -> pl.Expr:
+    return value.is_not_null() & (value.str.len_bytes() > 0)
 
 
 @RULES("bool", Kind.INT)
-def int_truth(a: pl.Expr) -> pl.Expr:
-    return a.is_not_null() & (a != 0)
+def int_truth(value: pl.Expr) -> pl.Expr:
+    return value.is_not_null() & (value != 0)
 
 
 @RULES("bool", Kind.FLOAT)
-def float_truth(a: pl.Expr) -> pl.Expr:
-    return a.is_not_null() & (a.is_nan() | (a != 0.0))
+def float_truth(value: pl.Expr) -> pl.Expr:
+    return value.is_not_null() & (value.is_nan() | (value != 0.0))
 
 
 @RULES("bool", Kind.BOOL)
-def bool_truth(a: pl.Expr) -> pl.Expr:
-    return a.fill_null(False)
+def bool_truth(value: pl.Expr) -> pl.Expr:
+    return value.fill_null(False)

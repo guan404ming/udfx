@@ -22,10 +22,10 @@ Outcome = Returned | Raised
 
 
 def run(
-    function: Callable[..., object], args: Sequence[object], result: Type | None = None
+    function: Callable[..., object], arguments: Sequence[object], result: Type | None = None
 ) -> Outcome:
     try:
-        value = function(*args)
+        value = function(*arguments)
     except Exception as error:
         return Raised(type(error))
     if result is not None and not fits(value, result):
@@ -33,15 +33,15 @@ def run(
     return Returned(value)
 
 
-def same(a: object, b: object) -> bool:
-    if isinstance(a, bool) or isinstance(b, bool):
-        return type(a) is type(b) and a == b
-    if isinstance(a, float) and isinstance(b, float):
-        if math.isnan(a) or math.isnan(b):
-            return math.isnan(a) and math.isnan(b)
-        return a == b and math.copysign(1.0, a) == math.copysign(1.0, b)
-    if isinstance(a, list) and isinstance(b, list):
-        left = cast("list[object]", a)
-        right = cast("list[object]", b)
+def same(first: object, second: object) -> bool:
+    if isinstance(first, bool) or isinstance(second, bool):
+        return type(first) is type(second) and first == second
+    if isinstance(first, float) and isinstance(second, float):
+        if math.isnan(first) or math.isnan(second):
+            return math.isnan(first) and math.isnan(second)
+        return first == second and math.copysign(1.0, first) == math.copysign(1.0, second)
+    if isinstance(first, list) and isinstance(second, list):
+        left = cast("list[object]", first)
+        right = cast("list[object]", second)
         return len(left) == len(right) and all(map(same, left, right))
-    return type(a) is type(b) and a == b
+    return type(first) is type(second) and first == second

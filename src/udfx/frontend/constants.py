@@ -40,8 +40,8 @@ def literal(item: Item) -> object:
     match item:
         case Value(node=Lit(value=value)):
             return value
-        case Opaque(obj=obj):
-            return obj
+        case Opaque(value=value):
+            return value
         case _:
             raise Unsupported(f"expected a constant, got {describe(item)}")
 

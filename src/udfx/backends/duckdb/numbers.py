@@ -13,7 +13,7 @@ from udfx.backends.duckdb.rules import (
     constant,
     function,
     length,
-    nullable_equal,
+    null_safe_equal,
     when,
 )
 from udfx.semantics.literals import (
@@ -51,21 +51,21 @@ def representable(value: Expression) -> Expression:
     return value.between(constant(-FLOAT_INT_MAX), constant(FLOAT_INT_MAX))
 
 
-def floating(value: Expression) -> Expression:
+def cast_float64(value: Expression) -> Expression:
     return value.cast(sqltypes.DOUBLE)
 
 
-def checked(operation: Binary) -> BinaryRule[Expression]:
+def overflow_checked(operation: Binary) -> BinaryRule[Expression]:
     def rule(left: Expression, right: Expression) -> Lowered[Expression]:
         return narrow(operation(wide(left), wide(right)))
 
     return rule
 
 
-def mixed(name: str, rule: BinaryRule[Expression]) -> None:
+def register_float_variants(name: str, rule: BinaryRule[Expression]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(floating(left), right))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, floating(right)))
+    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(cast_float64(left), right))
+    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, cast_float64(right)))
 
 
 def is_nan(value: Expression) -> Expression:
@@ -78,25 +78,25 @@ def either_nan(left: Expression, right: Expression) -> Expression:
     )
 
 
-def widened(name: str, rule: Binary) -> None:
+def register_widened_variants(name: str, rule: Binary) -> None:
     def exact(value: Expression) -> Expression:
         return value.isnull() | representable(value)
 
     RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(floating(left), right), exact(left))
+        lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
     )
     RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, floating(right)), exact(right))
+        lambda left, right: Lowered(rule(left, cast_float64(right)), exact(right))
     )
 
 
-def comparison(name: str, compare: Binary) -> None:
+def register_comparison(name: str, compare: Binary) -> None:
     def ordered(left: Expression, right: Expression) -> Expression:
         return compare(left, right) & ~is_nan(left) & ~is_nan(right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    widened(name, ordered)
+    register_widened_variants(name, ordered)
 
 
 def whole(value: Expression) -> Expression:
@@ -113,8 +113,8 @@ def truncated_remainder(left: Expression, right: Expression) -> tuple[Expression
     truncated = whole_left % safe_divisor(whole_left, whole_right)
     undefined = ~function("isfinite", left) | is_nan(right)
     small = function("abs", left) < function("abs", right)
-    exact = (floating(whole_left) == left) & (floating(whole_right) == right)
-    expr = when(undefined, NAN, when(small, left, floating(truncated)))
+    exact = (cast_float64(whole_left) == left) & (cast_float64(whole_right) == right)
+    expr = when(undefined, NAN, when(small, left, cast_float64(truncated)))
     return expr, undefined | small | duckdb.CoalesceOperator(exact, constant(False))
 
 
@@ -160,7 +160,7 @@ def try_int(digits: Expression) -> Expression:
 
 
 def try_float(digits: Expression) -> Expression:
-    return when(matches(digits, FLOAT_LITERAL), floating(digits), NULL)
+    return when(matches(digits, FLOAT_LITERAL), cast_float64(digits), NULL)
 
 
 TEXT = TextPrimitives(
@@ -176,17 +176,17 @@ TEXT = TextPrimitives(
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(checked(_operation))
-    mixed(_name, _operation)
+    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
+    register_float_variants(_name, _operation)
 
 for _name, _compare in COMPARISONS.items():
-    comparison(_name, _compare)
+    register_comparison(_name, _compare)
 
-mixed("__truediv__", operator.truediv)
-mixed("__floordiv__", float_floordiv)
-mixed("__mod__", float_mod)
+register_float_variants("__truediv__", operator.truediv)
+register_float_variants("__floordiv__", float_floordiv)
+register_float_variants("__mod__", float_mod)
 
-RULES("__eq__", Kind.INT, Kind.INT)(nullable_equal)
+RULES("__eq__", Kind.INT, Kind.INT)(null_safe_equal)
 RULES("__neg__", Kind.FLOAT)(Expression.__neg__)
 RULES("abs", Kind.FLOAT)(lambda value: function("abs", value))
 RULES("math.isnan", Kind.FLOAT)(is_nan)
@@ -195,12 +195,14 @@ RULES("math.isinf", Kind.FLOAT)(lambda value: function("isinf", value))
 
 @RULES("__ne__", Kind.INT, Kind.INT)
 def int_ne(left: Expression, right: Expression) -> Expression:
-    return ~nullable_equal(left, right)
+    return ~null_safe_equal(left, right)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(left: Expression, right: Expression) -> Lowered[Expression]:
-    return Lowered(floating(left) / floating(right), representable(left) & representable(right))
+    return Lowered(
+        cast_float64(left) / cast_float64(right), representable(left) & representable(right)
+    )
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)
@@ -217,16 +219,16 @@ def int_mod(left: Expression, right: Expression) -> Lowered[Expression]:
 
 @RULES("__eq__", Kind.FLOAT, Kind.FLOAT)
 def float_eq(left: Expression, right: Expression) -> Expression:
-    return nullable_equal(left, right) & ~either_nan(left, right)
+    return null_safe_equal(left, right) & ~either_nan(left, right)
 
 
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
 def float_ne(left: Expression, right: Expression) -> Expression:
-    return ~nullable_equal(left, right) | either_nan(left, right)
+    return ~null_safe_equal(left, right) | either_nan(left, right)
 
 
-widened("__eq__", float_eq)
-widened("__ne__", float_ne)
+register_widened_variants("__eq__", float_eq)
+register_widened_variants("__ne__", float_ne)
 
 
 @RULES("__neg__", Kind.INT)
@@ -245,7 +247,7 @@ def float_int(value: Expression) -> Lowered[Expression]:
     return Lowered(value, value.isnotnull() | ~function("isfinite", value))
 
 
-RULES("float", Kind.INT)(floating)
+RULES("float", Kind.INT)(cast_float64)
 
 
 @RULES("float", Kind.FLOAT)
@@ -253,19 +255,19 @@ def float_float(value: Expression) -> Expression:
     return value
 
 
-def shown(text: Expression) -> Expression:
+def show_none(text: Expression) -> Expression:
     return duckdb.CoalesceOperator(text, constant("None"))
 
 
 @RULES("str", Kind.INT)
 def int_str(value: Expression) -> Expression:
-    return shown(value.cast(sqltypes.VARCHAR))
+    return show_none(value.cast(sqltypes.VARCHAR))
 
 
 @RULES("str", Kind.FLOAT)
 def float_str(value: Expression) -> Lowered[Expression]:
     return Lowered(
-        shown(value.cast(sqltypes.VARCHAR)),
+        show_none(value.cast(sqltypes.VARCHAR)),
         ~duckdb.CoalesceOperator(is_nan(value), constant(False)),
     )
 
@@ -276,7 +278,7 @@ def bool_str(value: Expression) -> Expression:
     return when(value.isnull(), constant("None"), named)
 
 
-RULES("str", Kind.STR)(shown)
+RULES("str", Kind.STR)(show_none)
 
 
 @RULES("int_parses", Kind.STR)
@@ -308,4 +310,4 @@ RULES("math.log10", Kind.FLOAT)(log10)
 
 @RULES("math.log10", Kind.INT)
 def int_log10(value: Expression) -> Expression:
-    return log10(floating(value))
+    return log10(cast_float64(value))

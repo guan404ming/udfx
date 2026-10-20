@@ -7,7 +7,7 @@ def test_method_call_becomes_op() -> None:
     program = trace(lambda s: s.lower(), {"s": STR})
     assert isinstance(program.value, Call)
     assert program.value.op.name == ".lower"
-    assert program.value.args == (Col("s", STR),)
+    assert program.value.arguments == (Col("s", STR),)
     assert program.fault == FALSE
 
 

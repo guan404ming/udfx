@@ -7,18 +7,18 @@ from udfx.types import Kind
 
 
 @RULES("not", Kind.BOOL)
-def not_(a: Column) -> Column:
-    return ~a
+def not_(value: Column) -> Column:
+    return ~value
 
 
 @RULES("and", Kind.BOOL, Kind.BOOL)
-def and_(a: Column, b: Column) -> Column:
-    return a & b
+def and_(left: Column, right: Column) -> Column:
+    return left & right
 
 
 @RULES("or", Kind.BOOL, Kind.BOOL)
-def or_(a: Column, b: Column) -> Column:
-    return a | b
+def or_(left: Column, right: Column) -> Column:
+    return left | right
 
 
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
@@ -26,20 +26,20 @@ for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
 
 
 @RULES("bool", Kind.STR)
-def str_truth(a: Column) -> Column:
-    return a.isNotNull() & (functions.length(a) > 0)
+def str_truth(value: Column) -> Column:
+    return value.isNotNull() & (functions.length(value) > 0)
 
 
 @RULES("bool", Kind.INT)
-def int_truth(a: Column) -> Column:
-    return a.isNotNull() & (a != 0)
+def int_truth(value: Column) -> Column:
+    return value.isNotNull() & (value != 0)
 
 
 @RULES("bool", Kind.FLOAT)
-def float_truth(a: Column) -> Column:
-    return a.isNotNull() & (a != 0.0)
+def float_truth(value: Column) -> Column:
+    return value.isNotNull() & (value != 0.0)
 
 
 @RULES("bool", Kind.BOOL)
-def bool_truth(a: Column) -> Column:
-    return functions.coalesce(a, functions.lit(False))
+def bool_truth(value: Column) -> Column:
+    return functions.coalesce(value, functions.lit(False))

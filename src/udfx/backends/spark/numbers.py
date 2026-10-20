@@ -34,11 +34,15 @@ JAVA_FIXED_MIN = 1e-3
 JAVA_FIXED_MAX = 1e7
 
 
+def cast_float64(value: Column) -> Column:
+    return value.cast("double")
+
+
 def representable(value: Column) -> Column:
     return value.between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
-def checked(operation: Callable[[Column, Column], Column]) -> BinaryRule[Column]:
+def overflow_checked(operation: Callable[[Column, Column], Column]) -> BinaryRule[Column]:
     def rule(left: Column, right: Column) -> Lowered[Column]:
         result = operation(left, right)
         return Lowered(result, result.isNotNull())
@@ -46,35 +50,35 @@ def checked(operation: Callable[[Column, Column], Column]) -> BinaryRule[Column]
     return rule
 
 
-def floating(name: str, rule: BinaryRule[Column]) -> None:
+def register_float_variants(name: str, rule: BinaryRule[Column]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(left.cast("double"), right))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, right.cast("double")))
+    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(cast_float64(left), right))
+    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, cast_float64(right)))
 
 
 def either_nan(left: Column, right: Column) -> Column:
     return functions.isnan(left) | functions.isnan(right)
 
 
-def widened(name: str, rule: Binary) -> None:
+def register_widened_variants(name: str, rule: Binary) -> None:
     def exact(value: Column) -> Column:
         return value.isNull() | representable(value)
 
     RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(left.cast("double"), right), exact(left))
+        lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
     )
     RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, right.cast("double")), exact(right))
+        lambda left, right: Lowered(rule(left, cast_float64(right)), exact(right))
     )
 
 
-def comparison(name: str, compare: Binary) -> None:
+def register_comparison(name: str, compare: Binary) -> None:
     def ordered(left: Column, right: Column) -> Column:
         return compare(left, right) & ~either_nan(left, right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    widened(name, ordered)
+    register_widened_variants(name, ordered)
 
 
 def nonzero(divisor: Column, undefined: Column) -> Column:
@@ -128,15 +132,15 @@ TEXT = TextPrimitives(
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(checked(CHECKED[_name]))
-    floating(_name, _operation)
+    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(CHECKED[_name]))
+    register_float_variants(_name, _operation)
 
 for _name, _compare in COMPARISONS.items():
-    comparison(_name, _compare)
+    register_comparison(_name, _compare)
 
-floating("__truediv__", functions.try_divide)
-floating("__floordiv__", float_floordiv)
-floating("__mod__", float_mod)
+register_float_variants("__truediv__", functions.try_divide)
+register_float_variants("__floordiv__", float_floordiv)
+register_float_variants("__mod__", float_mod)
 
 RULES("__eq__", Kind.INT, Kind.INT)(Column.eqNullSafe)
 RULES("__mod__", Kind.INT, Kind.INT)(lambda left, right: int_divmod(left, right)[1])
@@ -171,8 +175,8 @@ def float_ne(left: Column, right: Column) -> Column:
     return ~left.eqNullSafe(right) | either_nan(left, right)
 
 
-widened("__eq__", float_eq)
-widened("__ne__", float_ne)
+register_widened_variants("__eq__", float_eq)
+register_widened_variants("__ne__", float_ne)
 
 
 @RULES("__neg__", Kind.INT)
@@ -195,7 +199,7 @@ def float_int(value: Column) -> Lowered[Column]:
 
 @RULES("float", Kind.INT)
 def int_float(value: Column) -> Column:
-    return value.cast("double")
+    return cast_float64(value)
 
 
 @RULES("float", Kind.FLOAT)
@@ -203,20 +207,20 @@ def float_float(value: Column) -> Column:
     return value
 
 
-def shown(text: Column) -> Column:
+def show_none(text: Column) -> Column:
     return functions.coalesce(text, functions.lit("None"))
 
 
 @RULES("str", Kind.INT)
 def int_str(value: Column) -> Column:
-    return shown(value.cast("string"))
+    return show_none(value.cast("string"))
 
 
 @RULES("str", Kind.FLOAT)
 def float_str(value: Column) -> Lowered[Column]:
     size = functions.abs(value)
     fixed = (size >= JAVA_FIXED_MIN) & (size < JAVA_FIXED_MAX)
-    return Lowered(shown(value.cast("string")), value.isNull() | (value == 0.0) | fixed)
+    return Lowered(show_none(value.cast("string")), value.isNull() | (value == 0.0) | fixed)
 
 
 @RULES("str", Kind.BOOL)
@@ -225,7 +229,7 @@ def bool_str(value: Column) -> Column:
     return when(value.isNull(), functions.lit("None"), named)
 
 
-RULES("str", Kind.STR)(shown)
+RULES("str", Kind.STR)(show_none)
 
 
 @RULES("int_parses", Kind.STR)
@@ -257,4 +261,4 @@ RULES("math.log10", Kind.FLOAT)(log10)
 
 @RULES("math.log10", Kind.INT)
 def int_log10(value: Column) -> Lowered[Column]:
-    return log10(value.cast("double"))
+    return log10(cast_float64(value))

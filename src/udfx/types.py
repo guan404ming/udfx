@@ -61,14 +61,14 @@ def type_of(value: object) -> Type | None:
             return None
 
 
-def unify(a: Type, b: Type) -> Type | None:
-    if a.kind is Kind.NONE:
-        return b.or_none()
-    if b.kind is Kind.NONE:
-        return a.or_none()
-    if a.strict() != b.strict():
+def unify(left: Type, right: Type) -> Type | None:
+    if left.kind is Kind.NONE:
+        return right.or_none()
+    if right.kind is Kind.NONE:
+        return left.or_none()
+    if left.strict() != right.strict():
         return None
-    return a.or_none() if a.nullable or b.nullable else a
+    return left.or_none() if left.nullable or right.nullable else left
 
 
 def fits(value: object, type: Type) -> bool:

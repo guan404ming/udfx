@@ -68,15 +68,15 @@ def check_op(
     constants: Mapping[int, object] | None = None,
 ) -> list[Mismatch]:
     constants = constants or {}
-    columns = tuple(Col(f"arg{index}", param) for index, param in enumerate(op.params))
+    columns = tuple(Col(f"arg{index}", parameter) for index, parameter in enumerate(op.parameters))
     schema = {column.name: column.type for column in columns}
-    args = tuple(
+    arguments = tuple(
         Lit(constants[index], column.type) if index in constants else column
         for index, column in enumerate(columns)
     )
     rows = [tuple(constants.get(index, item) for index, item in enumerate(row)) for row in rows]
-    value = backend.lower(Call(op, args))
-    faults = op.faults(*args)
+    value = backend.lower(Call(op, arguments))
+    faults = op.faults(*arguments)
     lowered = [backend.lower(fault.when) for fault in faults]
     exact_parts = [value.exact, *(item.exact for item in lowered)]
     exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]

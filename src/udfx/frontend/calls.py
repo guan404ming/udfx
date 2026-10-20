@@ -45,9 +45,9 @@ def op_name(callee: object) -> str:
 
 
 def accepts(op: Op, kinds: tuple[Kind, ...]) -> bool:
-    return len(op.params) == len(kinds) and all(
+    return len(op.parameters) == len(kinds) and all(
         kind is parameter.kind or (kind is Kind.NONE and parameter.nullable)
-        for kind, parameter in zip(kinds, op.params, strict=True)
+        for kind, parameter in zip(kinds, op.parameters, strict=True)
     )
 
 
@@ -61,7 +61,7 @@ def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
         (op,) = candidates
     typed = [
         Lit(None, parameter) if argument.type.kind is Kind.NONE else argument
-        for argument, parameter in zip(arguments, op.params, strict=True)
+        for argument, parameter in zip(arguments, op.parameters, strict=True)
     ]
     return op, typed
 
@@ -76,7 +76,7 @@ def invoke(
         return folded, []
     faults = [
         Fault(first_null_kind if index == 0 else TypeError, apply("is_none", argument))
-        for index, (argument, parameter) in enumerate(zip(arguments, op.params, strict=True))
+        for index, (argument, parameter) in enumerate(zip(arguments, op.parameters, strict=True))
         if argument.type.nullable and not parameter.nullable
     ]
     faults.extend(op.faults(*arguments))
@@ -88,8 +88,8 @@ def call(callee: Item, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
     match callee:
         case Method(name=name):
             return invoke(f".{name}", nodes, AttributeError)
-        case Opaque(obj=obj):
-            return invoke(op_name(obj), nodes, TypeError)
+        case Opaque(value=value):
+            return invoke(op_name(value), nodes, TypeError)
         case _:
             raise Unsupported(f"cannot call {describe(callee)}")
 
@@ -114,7 +114,7 @@ def none_test(item: Item) -> Node:
             return apply("is_none", node)
         case Value():
             return FALSE
-        case Opaque(obj=obj):
-            return lit(obj is None)
+        case Opaque(value=value):
+            return lit(value is None)
         case _:
             raise Unsupported(f"None test of {describe(item)}")

@@ -148,7 +148,7 @@ class Backend[E](ABC):
         return self.fallback(value.expr, exact, program)
 
     def _lower_if(self, node: If) -> Lowered[E]:
-        condition = self.lower(node.cond)
+        condition = self.lower(node.condition)
         then, orelse = self.lower(node.then), self.lower(node.orelse)
         expr = self.select(condition.expr, then.expr, orelse.expr)
         if then.exact is None and orelse.exact is None:
@@ -160,10 +160,12 @@ class Backend[E](ABC):
         rule = self.rules.get(node.op.key)
         if rule is None:
             raise Unsupported(f"{self.name} has no rule for {node.op.key}")
-        args = [self.lower(arg) for arg in node.args]
-        result: RuleResult[E] = rule(*(arg.expr for arg in args))
+        arguments = [self.lower(argument) for argument in node.arguments]
+        result: RuleResult[E] = rule(*(argument.expr for argument in arguments))
         lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
-        return Lowered(lowered.expr, self._all(*(arg.exact for arg in args), lowered.exact))
+        return Lowered(
+            lowered.expr, self._all(*(argument.exact for argument in arguments), lowered.exact)
+        )
 
     def _exact(self, lowered: Lowered[E]) -> E:
         return lowered.exact if lowered.exact is not None else self.literal(TRUE)

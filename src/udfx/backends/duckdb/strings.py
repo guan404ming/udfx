@@ -14,7 +14,7 @@ from udfx.backends.duckdb.rules import (
     constant,
     function,
     length,
-    nullable_equal,
+    null_safe_equal,
     when,
 )
 from udfx.semantics import text
@@ -146,12 +146,12 @@ def str_add(left: Expression, right: Expression) -> Expression:
     return function("concat", left, right)
 
 
-RULES("__eq__", Kind.STR, Kind.STR)(nullable_equal)
+RULES("__eq__", Kind.STR, Kind.STR)(null_safe_equal)
 
 
 @RULES("__ne__", Kind.STR, Kind.STR)
 def str_ne(left: Expression, right: Expression) -> Expression:
-    return ~nullable_equal(left, right)
+    return ~null_safe_equal(left, right)
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)

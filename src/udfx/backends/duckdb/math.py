@@ -5,7 +5,7 @@ import operator
 from duckdb import Expression
 
 from udfx.backends.base import Lowered
-from udfx.backends.duckdb.numbers import either_nan, float_int, floating
+from udfx.backends.duckdb.numbers import cast_float64, either_nan, float_int
 from udfx.backends.duckdb.rules import RULES, constant, function, when
 from udfx.semantics.numbers import (
     EXACT_POWERS_OF_TEN,
@@ -24,53 +24,53 @@ def identity(value: Expression) -> Expression:
     return value
 
 
-def power(a: Expression, b: Expression) -> Lowered[Expression]:
-    complex_result = (a < constant(0.0)) & (function("floor", b) != b)
-    return Lowered(function("pow", a, b), ~complex_result)
+def power(base: Expression, exponent: Expression) -> Lowered[Expression]:
+    complex_result = (base < constant(0.0)) & (function("floor", exponent) != exponent)
+    return Lowered(function("pow", base, exponent), ~complex_result)
 
 
-def root(a: Expression) -> Expression:
-    return function("sqrt", when(a < constant(0.0), constant(0.0), a))
+def root(value: Expression) -> Expression:
+    return function("sqrt", when(value < constant(0.0), constant(0.0), value))
 
 
-def pick(name: str, compare: Binary) -> None:
-    def ordered(a: Expression, b: Expression) -> Expression:
-        return when(compare(b, a) & ~either_nan(a, b), b, a)
+def register_extremum(name: str, compare: Binary) -> None:
+    def ordered(left: Expression, right: Expression) -> Expression:
+        return when(compare(right, left) & ~either_nan(left, right), right, left)
 
-    def total(a: Expression, b: Expression) -> Expression:
-        return when(compare(b, a), b, a)
+    def total(left: Expression, right: Expression) -> Expression:
+        return when(compare(right, left), right, left)
 
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
     RULES(name, Kind.INT, Kind.INT)(total)
     RULES(name, Kind.STR, Kind.STR)(total)
 
 
-pick("max", operator.gt)
-pick("min", operator.lt)
+register_extremum("max", operator.gt)
+register_extremum("min", operator.lt)
 
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
-RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda a, b: power(floating(a), b))
-RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda a, b: power(a, floating(b)))
+RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda base, exponent: power(cast_float64(base), exponent))
+RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda base, exponent: power(base, cast_float64(exponent)))
 RULES("math.sqrt", Kind.FLOAT)(root)
-RULES("math.sqrt", Kind.INT)(lambda a: root(floating(a)))
-RULES("math.ceil", Kind.FLOAT)(lambda a: float_int(function("ceil", a)))
-RULES("math.floor", Kind.FLOAT)(lambda a: float_int(function("floor", a)))
+RULES("math.sqrt", Kind.INT)(lambda value: root(cast_float64(value)))
+RULES("math.ceil", Kind.FLOAT)(lambda value: float_int(function("ceil", value)))
+RULES("math.floor", Kind.FLOAT)(lambda value: float_int(function("floor", value)))
 RULES("math.ceil", Kind.INT)(identity)
 RULES("math.floor", Kind.INT)(identity)
-RULES("round", Kind.FLOAT)(lambda a: float_int(half_even(a)))
+RULES("round", Kind.FLOAT)(lambda value: float_int(half_even(value)))
 
 
 @RULES("pow_overflows", Kind.FLOAT, Kind.FLOAT)
-def pow_overflows(a: Expression, b: Expression) -> Lowered[Expression]:
-    result = power(a, b)
-    finite = function("isfinite", a) & function("isfinite", b) & (a != constant(0.0))
+def pow_overflows(base: Expression, exponent: Expression) -> Lowered[Expression]:
+    result = power(base, exponent)
+    finite = function("isfinite", base) & function("isfinite", exponent) & (base != constant(0.0))
     return Lowered(function("isinf", result.expr) & finite, result.exact)
 
 
 @RULES("round", Kind.FLOAT, Kind.INT)
-def round_digits(a: Expression, digits: Expression) -> Lowered[Expression]:
-    scale = function("pow", constant(10.0), floating(digits))
-    scaled = a * scale
+def round_digits(value: Expression, digits: Expression) -> Lowered[Expression]:
+    scale = function("pow", constant(10.0), cast_float64(digits))
+    scaled = value * scale
     tie = scaled - function("floor", scaled) == constant(0.5)
     exact = (
         digits.between(constant(0), constant(EXACT_POWERS_OF_TEN))
@@ -81,6 +81,6 @@ def round_digits(a: Expression, digits: Expression) -> Lowered[Expression]:
 
 
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
-def round_overflows(a: Expression, digits: Expression) -> Lowered[Expression]:
-    safe = (digits >= constant(0)) | (function("abs", a) < constant(ROUND_OVERFLOW_LIMIT))
+def round_overflows(value: Expression, digits: Expression) -> Lowered[Expression]:
+    safe = (digits >= constant(0)) | (function("abs", value) < constant(ROUND_OVERFLOW_LIMIT))
     return Lowered(constant(False), safe)

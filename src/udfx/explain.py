@@ -14,12 +14,12 @@ def render(node: Node) -> str:
             return f"col {node.name}"
         case Lit():
             return repr(node.value)
-        case Call(op=op, args=(container, index)) if op.name == "__getitem__":
+        case Call(op=op, arguments=(container, index)) if op.name == "__getitem__":
             return f"{render(container)}[{render(index)}]"
         case Call():
-            return f"{node.op.name}({', '.join(render(argument) for argument in node.args)})"
+            return f"{node.op.name}({', '.join(render(argument) for argument in node.arguments)})"
         case If():
-            return f"if({render(node.cond)}, {render(node.then)}, {render(node.orelse)})"
+            return f"if({render(node.condition)}, {render(node.then)}, {render(node.orelse)})"
 
 
 def explain[E](

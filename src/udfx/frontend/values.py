@@ -19,7 +19,7 @@ class Method:
 
 @dataclass(frozen=True)
 class Opaque:
-    obj: object
+    value: object
 
 
 @dataclass(frozen=True)
@@ -44,16 +44,16 @@ NULL = Null()
 Item = Value | Method | Opaque | Null | Function
 
 
-def named(obj: object) -> str:
-    qualname = getattr(obj, "__qualname__", None)
+def named(value: object) -> str:
+    qualname = getattr(value, "__qualname__", None)
     if isinstance(qualname, str):
-        module = getattr(obj, "__module__", None)
-        if module is None or getattr(builtins, qualname, None) is obj:
+        module = getattr(value, "__module__", None)
+        if module is None or getattr(builtins, qualname, None) is value:
             return qualname
         return f"{module}.{qualname}"
-    if isinstance(obj, ModuleType):
-        return f"module {obj.__name__}"
-    return f"a {type(obj).__qualname__} object"
+    if isinstance(value, ModuleType):
+        return f"module {value.__name__}"
+    return f"a {type(value).__qualname__} object"
 
 
 def describe(item: Item) -> str:
@@ -66,8 +66,8 @@ def describe(item: Item) -> str:
             return f"a {node.type} value"
         case Method(name=name):
             return f"method .{name}"
-        case Opaque(obj=obj):
-            return named(obj)
+        case Opaque(value=value):
+            return named(value)
         case Function(code=code):
             return f"helper {code.co_qualname}"
         case Null():
