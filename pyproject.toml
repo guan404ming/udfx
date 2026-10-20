@@ -47,4 +47,5 @@ reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m \"not corpus\""
+markers = ["corpus: acceptance corpus, run with -m corpus"]
