@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import dis
 
-from udfx.errors import Unsupported
 from udfx.frontend.calls import node_of, none_test, truth
 from udfx.frontend.constants import constant
 from udfx.frontend.context import Context
 from udfx.frontend.logic import conjunction, negate
-from udfx.frontend.machine import handles
+from udfx.frontend.machine import handles, unsupported
 from udfx.frontend.state import Return, State, Step
 from udfx.ir import FALSE
 
@@ -38,7 +37,7 @@ def jump_forward(context: Context, state: State, instruction: dis.Instruction) -
 
 @handles("JUMP_BACKWARD", "JUMP_BACKWARD_NO_INTERRUPT")
 def jump_backward(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    raise Unsupported("loops", context.where(state))
+    raise unsupported(context, state)
 
 
 @handles("RETURN_VALUE")

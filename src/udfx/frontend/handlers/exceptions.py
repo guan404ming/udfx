@@ -6,7 +6,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.context import Context
 from udfx.frontend.machine import handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Item, Opaque, Value
+from udfx.frontend.values import Item, Opaque, Value, describe
 from udfx.ir import lit
 
 
@@ -19,7 +19,7 @@ def exception_classes(item: Item) -> tuple[type[BaseException], ...]:
         if isinstance(member, type) and issubclass(member, BaseException)
     )
     if not classes or len(classes) != len(members):
-        raise Unsupported(f"exception match against {item}")
+        raise Unsupported(f"exception match against {describe(item)}")
     return classes
 
 
@@ -28,7 +28,7 @@ def exception_kind(item: Item) -> type[Exception]:
         case Opaque(obj=type() as kind) if issubclass(kind, Exception):
             return kind
         case _:
-            raise Unsupported(f"expected an exception, got {item}")
+            raise Unsupported(f"expected an exception, got {describe(item)}")
 
 
 @handles("PUSH_EXC_INFO")

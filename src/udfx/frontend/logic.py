@@ -86,7 +86,10 @@ def unified(values: Sequence[Node]) -> Type:
     for value in values[1:]:
         joined = unify(result, value.type)
         if joined is None:
-            raise Unsupported(f"types {result} and {value.type} differ")
+            raise Unsupported(
+                f"return types differ: returns {result} on one path and {value.type} "
+                "on another; return one type"
+            )
         result = joined
     return result
 

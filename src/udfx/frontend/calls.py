@@ -4,7 +4,7 @@ import math
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
-from udfx.frontend.values import Item, Method, Opaque, Value
+from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, apply, resolve
 from udfx.types import BOOL, Kind
@@ -30,7 +30,7 @@ CALLABLES: tuple[tuple[object, str], ...] = (
 
 def node_of(item: Item) -> Node:
     if not isinstance(item, Value):
-        raise Unsupported(f"expected a value, got {item}")
+        raise Unsupported(f"expected a value, got {describe(item)}")
     if isinstance(item.node, Lit) and item.node.type.kind is Kind.LIST:
         raise Unsupported(f"constant container {item.node.value!r} outside an in test")
     return item.node
@@ -40,7 +40,7 @@ def op_name(callee: object) -> str:
     for known, name in CALLABLES:
         if known is callee:
             return name
-    raise Unsupported(f"unknown callable {callee!r}")
+    raise Unsupported(f"unknown callable {named(callee)}")
 
 
 def invoke(
@@ -67,7 +67,7 @@ def call(callee: Item, arguments: Sequence[Item]) -> tuple[Call, list[Fault]]:
         case Opaque(obj=obj):
             return invoke(op_name(obj), nodes, TypeError)
         case _:
-            raise Unsupported(f"cannot call {callee}")
+            raise Unsupported(f"cannot call {describe(callee)}")
 
 
 def truth(item: Item) -> tuple[Node, list[Fault]]:
@@ -79,7 +79,7 @@ def truth(item: Item) -> tuple[Node, list[Fault]]:
         case Value(node=node):
             return invoke("bool", [node], TypeError)
         case _:
-            raise Unsupported(f"truth of {item}")
+            raise Unsupported(f"truth of {describe(item)}")
 
 
 def none_test(item: Item) -> Node:
@@ -93,4 +93,4 @@ def none_test(item: Item) -> Node:
         case Opaque(obj=obj):
             return lit(obj is None)
         case _:
-            raise Unsupported(f"None test of {item}")
+            raise Unsupported(f"None test of {describe(item)}")

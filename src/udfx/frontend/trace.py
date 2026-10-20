@@ -12,7 +12,7 @@ from udfx.frontend.handlers import explore
 from udfx.frontend.logic import disjunction
 from udfx.frontend.merge import merge
 from udfx.frontend.state import Outcome, Raise, Return, State
-from udfx.frontend.values import Item, Value
+from udfx.frontend.values import Item, Value, named
 from udfx.ir import FALSE, TRUE, Col
 from udfx.program import Program
 from udfx.types import Type
@@ -20,7 +20,12 @@ from udfx.types import Type
 
 def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Program:
     if not inspect.isfunction(function):
-        raise Unsupported(f"{function!r} is not a Python function")
+        raise Unsupported(f"{named(function)} is not a Python function")
+    for name, column_type in schema.items():
+        if not isinstance(column_type, Type):  # pyright: ignore[reportUnnecessaryIsInstance]
+            raise Unsupported(
+                f"schema value for {name!r} must be a udfx.types.Type such as STR or INT.or_none()"
+            )
     if function.__defaults__ or function.__kwdefaults__:
         raise Unsupported(f"{function.__qualname__} has parameter defaults")
     names = parameters(function.__code__)

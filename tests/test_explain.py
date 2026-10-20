@@ -35,8 +35,8 @@ def test_unsupported_report() -> None:
 
     assert "Function: loop" in report
     assert "Schema: {value: int}" in report
-    assert "Unsupported: loops at loop+" in report
-    assert "JUMP_BACKWARD" in report
+    assert "Unsupported: loops and comprehensions at loop+" in report
+    assert "JUMP_BACKWARD" not in report
 
 
 def test_render() -> None:

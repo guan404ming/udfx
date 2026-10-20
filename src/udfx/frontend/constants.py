@@ -6,7 +6,7 @@ from types import GenericAlias, UnionType
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke
 from udfx.frontend.logic import choose, conjunction, negate
-from udfx.frontend.values import Item, Opaque, Value
+from udfx.frontend.values import Item, Opaque, Value, describe, named
 from udfx.ir import TRUE, Lit, Node, lit
 from udfx.ops import Fault
 from udfx.types import list_of
@@ -43,7 +43,7 @@ def literal(item: Item) -> object:
         case Opaque(obj=obj):
             return obj
         case _:
-            raise Unsupported(f"expected a constant, got {item}")
+            raise Unsupported(f"expected a constant, got {describe(item)}")
 
 
 def is_annotation(value: object) -> bool:
@@ -73,7 +73,7 @@ def scalar_map(pairs: Iterable[tuple[object, object]]) -> dict[object, object]:
 
 def lookup(mapping: object, key: Node) -> tuple[Node, list[Fault]]:
     if not isinstance(mapping, dict):
-        raise Unsupported(f"subscript of {mapping!r}")
+        raise Unsupported(f"subscript of {named(mapping)}")
     entries = scalar_map(mapping.items())
     if isinstance(key, Lit) or not entries:
         if isinstance(key, Lit) and key.value in entries:

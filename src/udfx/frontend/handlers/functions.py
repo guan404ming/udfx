@@ -10,7 +10,7 @@ from udfx.frontend.constants import constant
 from udfx.frontend.context import Context, parameters
 from udfx.frontend.machine import emit, explore, handles
 from udfx.frontend.state import Return, State, Step
-from udfx.frontend.values import NULL, Cell, Function, Item, Method, Null, Opaque, Value
+from udfx.frontend.values import NULL, Cell, Function, Item, Method, Null, Opaque, Value, describe
 
 CLOSURE = 0x08
 ANNOTATIONS = 0x04
@@ -43,8 +43,13 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             return [(rest.push(NULL, attribute) if method else rest.push(attribute)).advance()]
         case Value() if method:
             return [rest.push(Method(name), owner).advance()]
+        case Value():
+            raise Unsupported(
+                f"attribute access on a column value (attribute load {name})",
+                context.where(state),
+            )
         case _:
-            raise Unsupported(f"attribute load {name} of {owner}", context.where(state))
+            raise Unsupported(f"attribute load {name} of {describe(owner)}", context.where(state))
 
 
 @handles("KW_NAMES")
@@ -101,17 +106,17 @@ def make_function(context: Context, state: State, instruction: dis.Instruction) 
     if flags & ANNOTATIONS:
         rest = rest.pop()[1]
     if not isinstance(code, Opaque) or not isinstance(code.obj, CodeType):
-        raise Unsupported(f"function from {code}", context.where(state))
+        raise Unsupported(f"function from {describe(code)}", context.where(state))
     return [rest.push(Function(code.obj, cells, context)).advance()]
 
 
 def cell_names(item: Item) -> tuple[str, ...]:
     members = item.obj if isinstance(item, Opaque) else None
     if not isinstance(members, tuple):
-        raise Unsupported(f"closure {item}")
+        raise Unsupported(f"closure {describe(item)}")
     names = tuple(member.name for member in members if isinstance(member, Cell))
     if len(names) != len(members):
-        raise Unsupported(f"closure {item}")
+        raise Unsupported(f"closure {describe(item)}")
     return names
 
 

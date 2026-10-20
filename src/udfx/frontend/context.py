@@ -74,8 +74,7 @@ class Context:
         return context.frame(outer, home)
 
     def where(self, state: State) -> str:
-        instruction = self.instructions[state.index]
-        return f"{self.code.co_qualname}+{instruction.offset} {instruction.opname}"
+        return f"{self.code.co_qualname}+{self.instructions[state.index].offset}"
 
     def target(self, instruction: dis.Instruction) -> int:
         if instruction.opname not in JUMPS or not isinstance(instruction.argval, int):

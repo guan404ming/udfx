@@ -15,6 +15,31 @@ HANDLERS: dict[str, Handler] = {}
 
 MAX_STEPS = 10_000
 
+FEATURES: dict[str, str] = {
+    "GET_ITER": "loops and comprehensions",
+    "FOR_ITER": "loops and comprehensions",
+    "JUMP_BACKWARD": "loops and comprehensions",
+    "JUMP_BACKWARD_NO_INTERRUPT": "loops and comprehensions",
+    "FORMAT_VALUE": "f-strings",
+    "FORMAT_SIMPLE": "f-strings",
+    "FORMAT_WITH_SPEC": "f-strings",
+    "CONVERT_VALUE": "f-strings",
+    "BUILD_STRING": "f-strings",
+    "BUILD_LIST": "list and set literals",
+    "BUILD_SET": "list and set literals",
+    "LIST_APPEND": "list and set literals",
+    "LIST_EXTEND": "list and set literals",
+    "STORE_GLOBAL": "global assignment",
+    "DELETE_GLOBAL": "global assignment",
+    "IMPORT_NAME": "imports",
+    "BEFORE_WITH": "with blocks",
+    "LOAD_SPECIAL": "with blocks",
+    "WITH_EXCEPT_START": "with blocks",
+    "RAISE_VARARGS": "raise statements",
+    "YIELD_VALUE": "generators",
+    "RETURN_GENERATOR": "generators",
+}
+
 
 def handles(*opnames: str) -> Callable[[Handler], Handler]:
     def register(handler: Handler) -> Handler:
@@ -34,6 +59,11 @@ def emit(context: Context, state: State, result: Value, faults: Sequence[Fault])
     return steps
 
 
+def unsupported(context: Context, state: State) -> Unsupported:
+    opname = context.instructions[state.index].opname
+    return Unsupported(FEATURES.get(opname, f"opcode {opname}"), context.where(state))
+
+
 def explore(context: Context, start: State) -> list[Outcome]:
     pending: list[State] = [start]
     outcomes: list[Outcome] = []
@@ -46,7 +76,7 @@ def explore(context: Context, start: State) -> list[Outcome]:
         instruction = context.instructions[state.index]
         handler = HANDLERS.get(instruction.opname)
         if handler is None:
-            raise Unsupported(f"opcode {instruction.opname}", context.where(state))
+            raise unsupported(context, state)
         produced = handler(context, state, instruction)
         outcomes.extend(step for step in produced if not isinstance(step, State))
         pending.extend(reversed([step for step in produced if isinstance(step, State)]))
