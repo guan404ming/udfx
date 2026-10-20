@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -70,7 +70,7 @@ def apply(name: str, *args: Node) -> Call:
 
 
 @contextmanager
-def scoped() -> Iterator[None]:
+def scoped() -> Generator[None]:
     saved = dict(_OPS)
     try:
         yield
