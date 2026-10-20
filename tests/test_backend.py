@@ -61,6 +61,10 @@ def difference(a: int, A: int) -> int:  # noqa: N803
     return a - A
 
 
+def split(s: str | None) -> list[str] | None:
+    return s.split(",") if s else None
+
+
 @pytest.mark.parametrize("backend", backend_params())
 def test_evaluate_keeps_row_count_without_columns(backend: Backend[Any]) -> None:
     program = Program(lambda: 1, {}, Lit(1, INT))
@@ -143,6 +147,12 @@ def test_column_names_that_need_quoting(backend: Backend[Any], name: str) -> Non
     native = backend.build(program)
     slow = backend.fallback(backend.literal(Lit(0, INT)), backend.literal(FALSE), program)
     assert backend.evaluate([native, slow], {name: INT}, [(5,)]) == [[5], [5]]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_nullable_list_literal(backend: Backend[Any]) -> None:
+    rows = [("a,b",), ("",), (None,)]
+    assert check_function(split, {"s": STR.or_none()}, backend, rows) == []
 
 
 @pytest.mark.xdist_group("duckdb")

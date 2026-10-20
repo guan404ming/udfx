@@ -67,7 +67,7 @@ class SparkBackend(Backend[Column]):
     def literal(self, node: Lit) -> Column:
         self.session()
         value = node.value
-        if node.type.kind is Kind.LIST:
+        if node.type.kind is Kind.LIST and value is not None:
             value = list(cast("Iterable[object]", value))
         return functions.lit(value).cast(dtype(node.type))
 

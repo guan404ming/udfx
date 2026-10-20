@@ -15,6 +15,8 @@ def column(name: str) -> Expr:
 
 
 def typed(value: object, type: Type) -> Expr:
+    if value is None:
+        return lit(None).cast(dtype(type))
     return lit(pa.scalar(value, type=dtype(type)))
 
 
