@@ -62,6 +62,10 @@ def constant_branch(value: int) -> int:
     return 2
 
 
+def exclaim(s: str) -> str:
+    return s.lower() + "!"
+
+
 def literal_after_division(x: int) -> int:
     _ = 1 // x
     return 7
@@ -241,6 +245,12 @@ def test_duckdb_explicit_connection_registers_each_program_once() -> None:
     again = backend.build(translation.program)
     for expr in (translation.expr, again):
         assert connection.sql(YEARS).select(expr).fetchall() == [(2025,), (1235,)]
+
+
+@pytest.mark.xdist_group("spark")
+def test_spark_explicit_session_runs_fallback_rows() -> None:
+    backend = SparkBackend(SparkSession.getActiveSession() or SparkSession.builder.getOrCreate())
+    assert check_function(exclaim, {"s": STR}, backend, [("İ",), ("a",)]) == []
 
 
 @pytest.mark.xdist_group("spark")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import builtins
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import ClassVar, cast
 
 import pyarrow as pa
@@ -30,6 +30,17 @@ def decode_fallback_exception(text: str) -> Exception | None:
         return kind(message.partition("\n")[0])
     except TypeError:
         return None
+
+
+def fallback_patch(program: Program) -> Callable[[pa.Array], pa.Array]:
+    result = arrow.dtype(program.result)
+
+    def patch(batch: pa.Array) -> pa.Array:
+        packed = cast(pa.StructArray, batch)
+        columns = [packed.field(name) for name in program.schema]
+        return arrow.fallback(SparkBackend(), program, packed.field(EXACT), columns, result)
+
+    return patch
 
 
 class SparkBackend(Backend[Column]):
@@ -76,21 +87,13 @@ class SparkBackend(Backend[Column]):
         return functions.when(condition, then).otherwise(orelse)
 
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
-        names = list(program.schema)
         result = dtype(program.result)
-        arrow_type = arrow.dtype(program.result)
-
-        def patch(batch: pa.Array) -> pa.Array:
-            packed = cast(pa.StructArray, batch)
-            columns = [packed.field(name) for name in names]
-            return arrow.fallback(self, program, packed.field(EXACT), columns, arrow_type)
-
         flag = functions.coalesce(exact, functions.lit(False))
         packed = functions.struct(
             flag.alias(EXACT),
             *(self.column(Col(name, type)) for name, type in program.schema.items()),
         )
-        slow = functions.arrow_udf(patch, result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        slow = functions.arrow_udf(fallback_patch(program), result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
         return functions.when(flag, native).otherwise(slow)
 
     def evaluate(
