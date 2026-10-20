@@ -8,7 +8,7 @@ from typing import cast
 import pyspark
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.spark.backend import SparkBackend
 from udfx.backends.spark.rules import RULES
 from udfx.ir import Col
@@ -32,7 +32,7 @@ def case_drift(method: str) -> CaseDrift:
     return text.case_drift(method, native, f"spark {pyspark.__version__}")
 
 
-def recase(value: Column, method: str) -> Column | Lowered[Column]:
+def recase(value: Column, method: str) -> RuleResult[Column]:
     expr = getattr(functions, method)(value)
     found = case_drift(method)
     guards = [~value.rlike(found.alone)] if found.alone else []
@@ -66,12 +66,12 @@ def join(words: Column, separator: Column) -> Column:
 
 
 @RULES(".lower", Kind.STR)
-def lower(value: Column) -> Column | Lowered[Column]:
+def lower(value: Column) -> RuleResult[Column]:
     return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(value: Column) -> Column | Lowered[Column]:
+def upper(value: Column) -> RuleResult[Column]:
     return recase(value, "upper")
 
 

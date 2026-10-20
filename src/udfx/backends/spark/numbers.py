@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import BinaryRule, Lowered
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import (
     TextPrimitives,
@@ -23,8 +23,6 @@ from udfx.semantics.numbers import (
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
-Rule = Callable[[Column, Column], Column | Lowered[Column]]
-
 CHECKED: dict[str, Callable[[Column, Column], Column]] = {
     "__add__": functions.try_add,
     "__sub__": functions.try_subtract,
@@ -40,7 +38,7 @@ def representable(value: Column) -> Column:
     return value.between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
-def checked(operation: Callable[[Column, Column], Column]) -> Rule:
+def checked(operation: Callable[[Column, Column], Column]) -> BinaryRule[Column]:
     def rule(left: Column, right: Column) -> Lowered[Column]:
         result = operation(left, right)
         return Lowered(result, result.isNotNull())
@@ -48,7 +46,7 @@ def checked(operation: Callable[[Column, Column], Column]) -> Rule:
     return rule
 
 
-def floating(name: str, rule: Rule) -> None:
+def floating(name: str, rule: BinaryRule[Column]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
     RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(left.cast("double"), right))
     RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, right.cast("double")))

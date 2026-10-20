@@ -8,7 +8,7 @@ import duckdb
 import pyarrow as pa
 from duckdb import Expression
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.duckdb.rules import (
     RULES,
     column,
@@ -37,7 +37,7 @@ def case_drift(method: str) -> CaseDrift:
     return text.case_drift(method, native, f"duckdb {duckdb.__version__}")
 
 
-def recase(value: Expression, method: str) -> Expression | Lowered[Expression]:
+def recase(value: Expression, method: str) -> RuleResult[Expression]:
     expr = function(method, value)
     found = case_drift(method)
     guards = [~function("regexp_matches", value, constant(found.alone))] if found.alone else []
@@ -48,12 +48,12 @@ def recase(value: Expression, method: str) -> Expression | Lowered[Expression]:
 
 
 @RULES(".lower", Kind.STR)
-def lower(value: Expression) -> Expression | Lowered[Expression]:
+def lower(value: Expression) -> RuleResult[Expression]:
     return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(value: Expression) -> Expression | Lowered[Expression]:
+def upper(value: Expression) -> RuleResult[Expression]:
     return recase(value, "upper")
 
 

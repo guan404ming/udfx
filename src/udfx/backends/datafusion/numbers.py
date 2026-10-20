@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
 
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import BinaryRule, Lowered
 from udfx.backends.datafusion.rules import RULES, length, not_distinct, when
 from udfx.ops.numbers import REPR_FIXED_MAX, REPR_FIXED_MIN
 from udfx.semantics.literals import (
@@ -26,7 +25,6 @@ from udfx.semantics.numbers import (
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
-Rule = Callable[[Expr, Expr], Expr | Lowered[Expr]]
 WIDE = pa.decimal128(19, 0)
 INFINITY = float("inf")
 
@@ -43,7 +41,7 @@ def floating(value: Expr) -> Expr:
     return value.cast(pa.float64())
 
 
-def checked(operation: Binary) -> Rule:
+def checked(operation: Binary) -> BinaryRule[Expr]:
     def rule(left: Expr, right: Expr) -> Lowered[Expr]:
         wide = operation(left.cast(WIDE), right.cast(WIDE))
         return Lowered(operation(left, right), fits_int64(wide))
@@ -51,7 +49,7 @@ def checked(operation: Binary) -> Rule:
     return rule
 
 
-def mixed(name: str, rule: Rule) -> None:
+def mixed(name: str, rule: BinaryRule[Expr]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
     RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(floating(left), right))
     RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, floating(right)))

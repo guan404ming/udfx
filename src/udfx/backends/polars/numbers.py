@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
 
 import polars as pl
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import BinaryRule, Lowered
 from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.ops.numbers import REPR_FIXED_MAX, REPR_FIXED_MIN
 from udfx.semantics.literals import (
@@ -25,8 +24,6 @@ from udfx.semantics.numbers import (
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
-Rule = Callable[[pl.Expr, pl.Expr], pl.Expr | Lowered[pl.Expr]]
-
 
 def fits_int64(wide: pl.Expr) -> pl.Expr:
     return wide.is_between(INT64_MIN, INT64_MAX)
@@ -36,7 +33,7 @@ def representable(value: pl.Expr) -> pl.Expr:
     return value.is_between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
-def checked(operation: Binary) -> Rule:
+def checked(operation: Binary) -> BinaryRule[pl.Expr]:
     def rule(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
         wide = operation(left.cast(pl.Int128), right.cast(pl.Int128))
         return Lowered(operation(left, right), fits_int64(wide))
@@ -44,7 +41,7 @@ def checked(operation: Binary) -> Rule:
     return rule
 
 
-def floating(name: str, rule: Rule) -> None:
+def floating(name: str, rule: BinaryRule[pl.Expr]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
     RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(left.cast(pl.Float64), right))
     RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, right.cast(pl.Float64)))
@@ -130,7 +127,7 @@ floating("__mod__", float_mod)
 
 RULES("__eq__", Kind.INT, Kind.INT)(pl.Expr.eq_missing)
 RULES("__ne__", Kind.INT, Kind.INT)(pl.Expr.ne_missing)
-RULES("__mod__", Kind.INT, Kind.INT)(operator.mod)
+RULES("__mod__", Kind.INT, Kind.INT)(pl.Expr.__mod__)
 RULES("__neg__", Kind.FLOAT)(pl.Expr.__neg__)
 RULES("abs", Kind.FLOAT)(pl.Expr.abs)
 RULES("math.isnan", Kind.FLOAT)(pl.Expr.is_nan)

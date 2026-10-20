@@ -6,7 +6,7 @@ from functools import cache, reduce
 
 import polars as pl
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
 from udfx.semantics import text
 from udfx.semantics.text import CLUSTER_JOINERS, SIGMA, CaseDrift, has_border, whitespace, word
@@ -21,7 +21,7 @@ def case_drift(method: str) -> CaseDrift:
     return text.case_drift(method, native, f"polars {pl.__version__}")
 
 
-def recase(value: pl.Expr, method: str) -> pl.Expr | Lowered[pl.Expr]:
+def recase(value: pl.Expr, method: str) -> RuleResult[pl.Expr]:
     expr = getattr(value.str, f"to_{method}case")()
     found = case_drift(method)
     guards = [~value.str.contains(found.alone)] if found.alone else []
@@ -31,12 +31,12 @@ def recase(value: pl.Expr, method: str) -> pl.Expr | Lowered[pl.Expr]:
 
 
 @RULES(".lower", Kind.STR)
-def lower(value: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
+def lower(value: pl.Expr) -> RuleResult[pl.Expr]:
     return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(value: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
+def upper(value: pl.Expr) -> RuleResult[pl.Expr]:
     return recase(value, "upper")
 
 
@@ -90,7 +90,7 @@ def single_code_point_clusters(text: pl.Expr) -> pl.Expr:
 
 
 @RULES(".rfind", Kind.STR, Kind.STR)
-def rfind(text: pl.Expr, pattern: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
+def rfind(text: pl.Expr, pattern: pl.Expr) -> RuleResult[pl.Expr]:
     known = literal_value(pattern)
     if isinstance(known, str) and known and not has_border(known):
         suffix = length(text.str.split(pattern).list.last())

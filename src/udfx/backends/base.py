@@ -21,16 +21,21 @@ class Lowered[E]:
     exact: E | None = None
 
 
+type RuleResult[E] = E | Lowered[E]
+type Rule[E] = Callable[..., RuleResult[E]]
+type BinaryRule[E] = Callable[[E, E], RuleResult[E]]
+
+
 class RuleSet[E]:
     def __init__(self) -> None:
-        self._rules: dict[OpKey, Callable[..., E | Lowered[E]]] = {}
+        self._rules: dict[OpKey, Rule[E]] = {}
 
-    def __call__(
+    def __call__[**P](
         self, name: str, *kinds: Kind
-    ) -> Callable[[Callable[..., E | Lowered[E]]], Callable[..., E | Lowered[E]]]:
+    ) -> Callable[[Callable[P, RuleResult[E]]], Callable[P, RuleResult[E]]]:
         key = OpKey(name, kinds)
 
-        def decorate(rule: Callable[..., E | Lowered[E]]) -> Callable[..., E | Lowered[E]]:
+        def decorate(rule: Callable[P, RuleResult[E]]) -> Callable[P, RuleResult[E]]:
             if key in self._rules:
                 raise ValueError(f"duplicate rule {key}")
             self._rules[key] = rule
@@ -38,7 +43,7 @@ class RuleSet[E]:
 
         return decorate
 
-    def get(self, key: OpKey) -> Callable[..., E | Lowered[E]] | None:
+    def get(self, key: OpKey) -> Rule[E] | None:
         return self._rules.get(key)
 
     def keys(self) -> frozenset[OpKey]:
@@ -156,7 +161,7 @@ class Backend[E](ABC):
         if rule is None:
             raise Unsupported(f"{self.name} has no rule for {node.op.key}")
         args = [self.lower(arg) for arg in node.args]
-        result: E | Lowered[E] = rule(*(arg.expr for arg in args))
+        result: RuleResult[E] = rule(*(arg.expr for arg in args))
         lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
         return Lowered(lowered.expr, self._all(*(arg.exact for arg in args), lowered.exact))
 

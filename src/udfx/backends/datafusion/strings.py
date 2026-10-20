@@ -9,7 +9,7 @@ import datafusion
 import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.rules import RULES, length, not_distinct, typed
 from udfx.semantics import text
@@ -31,7 +31,7 @@ def case_drift(method: str) -> CaseDrift:
     return text.case_drift(method, native, f"datafusion {datafusion.__version__}")
 
 
-def recase(value: Expr, method: str) -> Expr | Lowered[Expr]:
+def recase(value: Expr, method: str) -> RuleResult[Expr]:
     expr = getattr(functions, method)(value)
     found = case_drift(method)
     guards = [~functions.regexp_like(value, lit(found.alone))] if found.alone else []
@@ -42,12 +42,12 @@ def recase(value: Expr, method: str) -> Expr | Lowered[Expr]:
 
 
 @RULES(".lower", Kind.STR)
-def lower(value: Expr) -> Expr | Lowered[Expr]:
+def lower(value: Expr) -> RuleResult[Expr]:
     return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(value: Expr) -> Expr | Lowered[Expr]:
+def upper(value: Expr) -> RuleResult[Expr]:
     return recase(value, "upper")
 
 

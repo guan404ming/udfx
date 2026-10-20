@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
 
 import duckdb
 from duckdb import Expression, sqltypes
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import BinaryRule, Lowered
 from udfx.backends.duckdb.rules import (
     NAN,
     NULL,
@@ -36,8 +35,6 @@ from udfx.semantics.numbers import (
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
-Rule = Callable[[Expression, Expression], Expression | Lowered[Expression]]
-
 INT64_LIMIT = 2.0**63
 
 
@@ -58,14 +55,14 @@ def floating(value: Expression) -> Expression:
     return value.cast(sqltypes.DOUBLE)
 
 
-def checked(operation: Binary) -> Rule:
+def checked(operation: Binary) -> BinaryRule[Expression]:
     def rule(left: Expression, right: Expression) -> Lowered[Expression]:
         return narrow(operation(wide(left), wide(right)))
 
     return rule
 
 
-def mixed(name: str, rule: Rule) -> None:
+def mixed(name: str, rule: BinaryRule[Expression]) -> None:
     RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
     RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(floating(left), right))
     RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, floating(right)))
