@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import dis
 from collections.abc import Sequence
-from types import CodeType
+from types import CodeType, ModuleType
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import call
+from udfx.frontend.constants import constant
 from udfx.frontend.context import Context, parameters
 from udfx.frontend.machine import emit, explore, handles
 from udfx.frontend.state import Return, State, Step
@@ -33,10 +34,17 @@ def load_global(context: Context, state: State, instruction: dis.Instruction) ->
 
 @handles("LOAD_ATTR")
 def load_attr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    if instruction.arg is None or not instruction.arg & 1:
-        raise Unsupported(f"attribute load {instruction.argval}", context.where(state))
+    name = instruction.argval
+    method = instruction.arg is not None and instruction.arg & 1
     (owner,), rest = state.pop()
-    return [rest.push(Method(instruction.argval), owner).advance()]
+    match owner:
+        case Opaque(obj=ModuleType() as module) if name in vars(module):
+            attribute = constant(vars(module)[name])
+            return [(rest.push(NULL, attribute) if method else rest.push(attribute)).advance()]
+        case Value() if method:
+            return [rest.push(Method(name), owner).advance()]
+        case _:
+            raise Unsupported(f"attribute load {name} of {owner}", context.where(state))
 
 
 @handles("KW_NAMES")

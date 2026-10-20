@@ -21,6 +21,8 @@ CALLABLES: tuple[tuple[object, str], ...] = (
     (str, "str"),
     (math.ceil, "math.ceil"),
     (math.floor, "math.floor"),
+    (math.isinf, "math.isinf"),
+    (math.isnan, "math.isnan"),
     (math.log10, "math.log10"),
     (math.sqrt, "math.sqrt"),
 )
