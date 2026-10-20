@@ -64,7 +64,6 @@ class PolarsBackend(Backend[pl.Expr]):
             ]
         )
         names = [f"{OUT} {index}" for index in range(len(exprs))]
-        outputs = frame.with_columns(
-            *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
-        )
+        aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
+        outputs = self.execute(lambda: frame.with_columns(*aliased))
         return [outputs.get_column(name).to_list() for name in names]

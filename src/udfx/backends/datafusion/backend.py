@@ -74,11 +74,9 @@ class DataFusionBackend(Backend[Expr]):
             }
         )
         names = [f"{OUT} {index}" for index in range(len(exprs))]
-        frame = self.context.from_arrow(table).select(
-            col(ROW), *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
+        aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
+        frame = self.context.from_arrow(table)
+        outputs = self.execute(
+            lambda: frame.select(col(ROW), *aliased).sort(col(ROW)).to_arrow_table()
         )
-        try:
-            outputs = frame.sort(col(ROW)).to_arrow_table()
-        except Exception as wrapped:
-            raise self.unwrap(wrapped) from None
         return [cast("list[object]", outputs.column(name).to_pylist()) for name in names]

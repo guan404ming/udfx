@@ -42,6 +42,15 @@ def test_fallback_raises_the_python_exception(backend: Backend[Any]) -> None:
 
 
 @pytest.mark.parametrize("backend", BACKENDS, ids=case_id)
+def test_evaluate_forgets_earlier_python_exception(backend: Backend[Any]) -> None:
+    with pytest.raises((ZeroDivisionError, RuntimeError)):
+        backend.patch(Program(inverse, {"x": INT}, Col("x", INT)), [(0,)])
+    with pytest.raises(Exception) as error:
+        backend.evaluate([backend.column(Col("missing", INT))], {"x": INT}, [(1,)])
+    assert not isinstance(error.value, ZeroDivisionError)
+
+
+@pytest.mark.parametrize("backend", BACKENDS, ids=case_id)
 def test_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
     rows = [("2024-01",), (" 123",), ("\uff11\uff12\uff13\uff14",), ("9223372036854775807",)]
     assert check_function(year, {"text": STR}, backend, rows) == []

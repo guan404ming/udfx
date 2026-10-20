@@ -97,11 +97,6 @@ class DuckDBBackend(Backend[Expression]):
             *(column(name).cast(dtype(type)).alias(name) for name, type in schema.items()),
         )
         names = [f"{OUT} {index}" for index in range(len(exprs))]
-        selected = typed.select(
-            *(expr.alias(name) for expr, name in zip(exprs, names, strict=True))
-        )
-        try:
-            outputs = selected.fetchall()
-        except Exception as wrapped:
-            raise self.unwrap(wrapped) from None
+        aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
+        outputs = self.execute(lambda: typed.select(*aliased).fetchall())
         return [list(values) for values in zip(*outputs, strict=True)] or [[] for _ in exprs]

@@ -66,9 +66,17 @@ class Backend[E](ABC):
             values[index] = value
         return values
 
+    def execute[T](self, run: Callable[[], T]) -> T:
+        self.raised = None
+        try:
+            return run()
+        except Exception as error:
+            raise self.unwrap(error) from None
+        finally:
+            self.raised = None
+
     def unwrap(self, error: BaseException) -> BaseException:
-        raised, self.raised = self.raised, None
-        return raised or error
+        return self.raised or error
 
     @abstractmethod
     def column(self, node: Col) -> E: ...

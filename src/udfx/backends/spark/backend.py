@@ -97,9 +97,6 @@ class SparkBackend(Backend[Column]):
         struct = StructType([StructField(name, dtype(type)) for name, type in schema.items()])
         frame = session().createDataFrame(list(rows), struct)
         names = [f"{OUT} {index}" for index in range(len(exprs))]
-        query = frame.select(*(expr.alias(name) for expr, name in zip(exprs, names, strict=True)))
-        try:
-            collected = query.collect()
-        except Exception as wrapped:
-            raise self.unwrap(wrapped) from None
+        aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
+        collected = self.execute(lambda: frame.select(*aliased).collect())
         return [[row[index] for row in collected] for index in range(len(exprs))]
