@@ -21,6 +21,7 @@ from udfx.semantics.numbers import (
 from udfx.types import Kind, Type, fits
 
 RESERVED = "udfx "
+OUT = f"{RESERVED}out"
 Row = tuple[object, ...]
 Gather = Callable[[list[int]], Sequence[Sequence[object]]]
 
@@ -41,6 +42,14 @@ BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
     OpKey("and", (Kind.BOOL, Kind.BOOL)): operator.and_,
     OpKey("or", (Kind.BOOL, Kind.BOOL)): operator.or_,
 }
+
+
+def transpose_rows(rows: Sequence[Row], width: int) -> list[tuple[object, ...]]:
+    return list(zip(*rows, strict=True)) if rows else [() for _ in range(width)]
+
+
+def output_names(count: int) -> list[str]:
+    return [f"{OUT} {index}" for index in range(count)]
 
 
 class RuleSet[E]:

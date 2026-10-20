@@ -9,7 +9,7 @@ from pyspark.sql import Column, SparkSession, functions
 from pyspark.sql.types import StructField, StructType
 
 from udfx.backends import arrow
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet
+from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
 from udfx.ir import Col, Lit
@@ -17,7 +17,6 @@ from udfx.program import Program
 from udfx.types import Kind, Type
 
 EXACT = f"{RESERVED}exact"
-OUT = f"{RESERVED}out"
 RAISED = "udfx raised "
 
 
@@ -100,7 +99,7 @@ class SparkBackend(Backend[Column]):
         self.check_names(schema)
         struct = StructType([StructField(name, dtype(type)) for name, type in schema.items()])
         frame = self.session().createDataFrame(list(rows), struct)
-        names = [f"{OUT} {index}" for index in range(len(exprs))]
+        names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         collected = self.execute(lambda: frame.select(*aliased).collect())
         return [[row[index] for row in collected] for index in range(len(exprs))]

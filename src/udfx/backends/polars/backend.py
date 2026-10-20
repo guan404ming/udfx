@@ -5,14 +5,13 @@ from typing import ClassVar
 
 import polars as pl
 
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet
+from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names, transpose_rows
 from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Type
 
-OUT = f"{RESERVED}out"
 ROW = f"{RESERVED}row"
 
 
@@ -52,7 +51,7 @@ class PolarsBackend(Backend[pl.Expr]):
         self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]:
         self.check_names(schema)
-        columns = list(zip(*rows, strict=True)) if rows else [() for _ in schema]
+        columns = transpose_rows(rows, len(schema))
         frame = pl.DataFrame(
             [
                 pl.Series(ROW, range(len(rows))),
@@ -62,7 +61,7 @@ class PolarsBackend(Backend[pl.Expr]):
                 ),
             ]
         )
-        names = [f"{OUT} {index}" for index in range(len(exprs))]
+        names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         outputs = self.execute(lambda: frame.with_columns(*aliased))
         return [outputs.get_column(name).to_list() for name in names]

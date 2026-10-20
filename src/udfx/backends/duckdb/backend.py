@@ -11,7 +11,7 @@ from duckdb import Expression, sqltypes
 from duckdb.func import ARROW, SPECIAL
 
 from udfx.backends import arrow
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet
+from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names, transpose_rows
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import NAN, RULES, column, constant, function, when
 from udfx.ir import Col, Lit
@@ -19,7 +19,6 @@ from udfx.program import Program
 from udfx.types import Type
 
 EXACT = f"{RESERVED}exact"
-OUT = f"{RESERVED}out"
 ROW = f"{RESERVED}row"
 FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
@@ -87,7 +86,7 @@ class DuckDBBackend(Backend[Expression]):
         self, exprs: Sequence[Expression], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]:
         self.check_names(schema)
-        columns = list(zip(*rows, strict=True)) if rows else [() for _ in schema]
+        columns = transpose_rows(rows, len(schema))
         table = pa.table(
             {
                 ROW: pa.array(range(len(rows)), pa.int64()),
@@ -101,7 +100,7 @@ class DuckDBBackend(Backend[Expression]):
             column(ROW),
             *(column(name).cast(dtype(type)).alias(name) for name, type in schema.items()),
         )
-        names = [f"{OUT} {index}" for index in range(len(exprs))]
+        names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         outputs = self.execute(lambda: typed.select(*aliased).fetchall())
         return [list(values) for values in zip(*outputs, strict=True)] or [[] for _ in exprs]
