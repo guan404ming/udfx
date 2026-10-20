@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from conftest import backend_params
 from hypothesis import given
 from hypothesis import strategies as st
 
 from udfx import compile
-from udfx.backends import installed
 from udfx.backends.base import Backend
 from udfx.testing import batches, check_function
 
@@ -15,10 +15,8 @@ from .cases import CASES, Case
 
 pytestmark = pytest.mark.corpus
 
-BACKENDS = installed()
 
-
-@pytest.mark.parametrize("backend", BACKENDS, ids=lambda backend: backend.name)
+@pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.name)
 def test_case(case: Case, backend: Backend[Any]) -> None:
     translation = compile(case.function, case.schema, backend)

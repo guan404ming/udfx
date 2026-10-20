@@ -43,6 +43,7 @@ dev = [
     "ruff>=0.7",
     "pyright>=1.1.390",
     "pyarrow-stubs>=20.0.0.20260819",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
@@ -74,5 +75,5 @@ reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q -m \"not corpus\""
+addopts = "-n auto --dist loadgroup -m \"not corpus\" --durations=5"
 markers = ["corpus: acceptance corpus, run with -m corpus"]
