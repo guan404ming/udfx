@@ -37,7 +37,9 @@ def same(a: object, b: object) -> bool:
     if isinstance(a, bool) or isinstance(b, bool):
         return type(a) is type(b) and a == b
     if isinstance(a, float) and isinstance(b, float):
-        return (math.isnan(a) and math.isnan(b)) or a == b
+        if math.isnan(a) or math.isnan(b):
+            return math.isnan(a) and math.isnan(b)
+        return a == b and math.copysign(1.0, a) == math.copysign(1.0, b)
     if isinstance(a, list) and isinstance(b, list):
         left = cast("list[object]", a)
         right = cast("list[object]", b)

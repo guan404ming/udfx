@@ -72,9 +72,8 @@ def float_divmod(a: Column, b: Column) -> tuple[Column, Column]:
     remainder = a % divisor
     quotient = (a - remainder) / divisor
     adjust = (remainder != 0.0) & ((divisor < 0.0) != (remainder < 0.0))
-    signed_zero = functions.when(b < 0.0, -0.0).otherwise(0.0)
     modulo = (
-        functions.when(remainder == 0.0, signed_zero)
+        functions.when(remainder == 0.0, functions.signum(b) * 0.0)
         .when(adjust, remainder + divisor)
         .otherwise(remainder)
     )
