@@ -10,6 +10,7 @@ from udfx.types import BOOL, INT, STR
 STAND_INS = (
     Op("__neg__", (INT,), INT, operator.neg),
     Op("__contains__", (STR, STR), BOOL, operator.contains),
+    Op(".find", (STR, STR), INT, str.find),
     Op("__getitem__", (STR, INT), STR, operator.getitem),
     Op("slice", (STR, INT.or_none(), INT.or_none()), STR, lambda s, a, b: s[a:b]),
 )

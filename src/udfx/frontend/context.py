@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import builtins
 import dis
-from collections.abc import Callable, Mapping, Sequence
+import inspect
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import CodeType
 
 from udfx.errors import Unsupported
 from udfx.frontend.logic import conj, neg
@@ -11,43 +12,54 @@ from udfx.frontend.state import Raise, State, Step
 from udfx.frontend.values import Item, Opaque, Value
 from udfx.ir import FALSE, lit
 from udfx.ops import Fault
-from udfx.types import type_of
 
 JUMPS = frozenset(dis.hasjrel) | frozenset(dis.hasjabs)
+
+SCALARS = (str, int, float, bool)
+
+
+def constant(value: object) -> Item:
+    return Value(lit(value)) if value is None or type(value) in SCALARS else Opaque(value)
+
+
+def parameters(code: CodeType) -> list[str]:
+    if code.co_flags & (inspect.CO_VARARGS | inspect.CO_VARKEYWORDS) or code.co_kwonlyargcount:
+        raise Unsupported(f"{code.co_qualname} takes variable or keyword-only parameters")
+    return list(code.co_varnames[: code.co_argcount])
 
 
 @dataclass(frozen=True)
 class Context:
-    function: Callable[..., object]
+    code: CodeType
+    scope: Mapping[str, object]
+    builtins: Mapping[str, object]
     instructions: tuple[dis.Instruction, ...]
     index_of: Mapping[int, int]
 
     @classmethod
-    def of(cls, function: Callable[..., object]) -> Context:
-        instructions = tuple(dis.get_instructions(function))
-        index_of = {inst.offset: index for index, inst in enumerate(instructions)}
-        return cls(function, instructions, index_of)
+    def of(
+        cls, code: CodeType, scope: Mapping[str, object], builtins: Mapping[str, object]
+    ) -> Context:
+        instructions = tuple(dis.get_instructions(code))
+        index_of = {instruction.offset: index for index, instruction in enumerate(instructions)}
+        return cls(code, scope, builtins, instructions, index_of)
 
     def where(self, state: State) -> str:
-        inst = self.instructions[state.index]
-        return f"{self.function.__qualname__}+{inst.offset} {inst.opname}"
+        instruction = self.instructions[state.index]
+        return f"{self.code.co_qualname}+{instruction.offset} {instruction.opname}"
 
-    def target(self, inst: dis.Instruction) -> int:
-        if inst.opcode not in JUMPS or not isinstance(inst.argval, int):
-            raise Unsupported(f"{inst.opname} has no jump target")
-        if inst.argval <= inst.offset:
+    def target(self, instruction: dis.Instruction) -> int:
+        if instruction.opcode not in JUMPS or not isinstance(instruction.argval, int):
+            raise Unsupported(f"{instruction.opname} has no jump target")
+        if instruction.argval <= instruction.offset:
             raise Unsupported("loops")
-        return self.index_of[inst.argval]
-
-    def constant(self, value: object) -> Item:
-        return Value(lit(value)) if type_of(value) is not None else Opaque(value)
+        return self.index_of[instruction.argval]
 
     def global_(self, name: str) -> Item:
-        scope = getattr(self.function, "__globals__", {})
-        if name in scope:
-            return self.constant(scope[name])
-        if hasattr(builtins, name):
-            return Opaque(getattr(builtins, name))
+        if name in self.scope:
+            return constant(self.scope[name])
+        if name in self.builtins:
+            return Opaque(self.builtins[name])
         raise Unsupported(f"unknown global {name}")
 
     def guard(self, state: State, faults: Sequence[Fault]) -> tuple[State | None, list[Step]]:

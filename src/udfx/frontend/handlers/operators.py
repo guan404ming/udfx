@@ -33,71 +33,71 @@ COMPARE_OPS: dict[str, str] = {
 
 
 @handles("BINARY_OP")
-def binary_op(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
-    symbol = inst.argrepr.removesuffix("=")
+def binary_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    symbol = instruction.argrepr.removesuffix("=")
     name = BINARY_OPS.get(symbol)
     if name is None:
-        raise Unsupported(f"binary operator {inst.argrepr}", ctx.where(state))
-    (lhs, rhs), rest = state.pop(2)
-    node, faults = invoke(name, [node_of(lhs), node_of(rhs)], TypeError)
-    return emit(ctx, rest, Value(node), faults)
+        raise Unsupported(f"binary operator {instruction.argrepr}", context.where(state))
+    (left, right), rest = state.pop(2)
+    node, faults = invoke(name, [node_of(left), node_of(right)], TypeError)
+    return emit(context, rest, Value(node), faults)
 
 
 @handles("COMPARE_OP")
-def compare_op(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
-    name = COMPARE_OPS.get(str(inst.argval))
+def compare_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    name = COMPARE_OPS.get(str(instruction.argval))
     if name is None:
-        raise Unsupported(f"comparison {inst.argval}", ctx.where(state))
-    (lhs, rhs), rest = state.pop(2)
-    node, faults = invoke(name, [node_of(lhs), node_of(rhs)], TypeError)
-    return emit(ctx, rest, Value(node), faults)
+        raise Unsupported(f"comparison {instruction.argval}", context.where(state))
+    (left, right), rest = state.pop(2)
+    node, faults = invoke(name, [node_of(left), node_of(right)], TypeError)
+    return emit(context, rest, Value(node), faults)
 
 
 @handles("UNARY_NOT")
-def unary_not(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+def unary_not(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item,), rest = state.pop()
     test, faults = truth(item)
-    return emit(ctx, rest, Value(neg(test)), faults)
+    return emit(context, rest, Value(neg(test)), faults)
 
 
 @handles("UNARY_NEGATIVE")
-def unary_negative(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+def unary_negative(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item,), rest = state.pop()
     node, faults = invoke("__neg__", [node_of(item)], TypeError)
-    return emit(ctx, rest, Value(node), faults)
+    return emit(context, rest, Value(node), faults)
 
 
 @handles("IS_OP")
-def is_op(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
-    (lhs, rhs), rest = state.pop(2)
-    if is_none_constant(rhs):
-        test = none_test(lhs)
-    elif is_none_constant(lhs):
-        test = none_test(rhs)
+def is_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    (left, right), rest = state.pop(2)
+    if is_none_constant(right):
+        test = none_test(left)
+    elif is_none_constant(left):
+        test = none_test(right)
     else:
-        raise Unsupported("identity check against a value other than None", ctx.where(state))
-    return [rest.push(Value(neg(test) if inst.arg else test)).advance()]
+        raise Unsupported("identity check against a value other than None", context.where(state))
+    return [rest.push(Value(neg(test) if instruction.arg else test)).advance()]
 
 
 @handles("CONTAINS_OP")
-def contains_op(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+def contains_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item, container), rest = state.pop(2)
     node, faults = invoke("__contains__", [node_of(container), node_of(item)], TypeError)
-    return emit(ctx, rest, Value(neg(node) if inst.arg else node), faults)
+    return emit(context, rest, Value(neg(node) if instruction.arg else node), faults)
 
 
 @handles("BINARY_SUBSCR")
-def binary_subscr(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+def binary_subscr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, index), rest = state.pop(2)
     node, faults = invoke("__getitem__", [node_of(container), node_of(index)], TypeError)
-    return emit(ctx, rest, Value(node), faults)
+    return emit(context, rest, Value(node), faults)
 
 
 @handles("BINARY_SLICE")
-def binary_slice(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+def binary_slice(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, start, stop), rest = state.pop(3)
     node, faults = invoke("slice", [node_of(container), bound(start), bound(stop)], TypeError)
-    return emit(ctx, rest, Value(node), faults)
+    return emit(context, rest, Value(node), faults)
 
 
 def bound(item: Item) -> Node:

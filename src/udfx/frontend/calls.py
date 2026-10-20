@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
@@ -8,6 +9,22 @@ from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, apply, resolve
 from udfx.types import BOOL
 
+CALLABLES: tuple[tuple[object, str], ...] = (
+    (abs, "abs"),
+    (bool, "bool"),
+    (float, "float"),
+    (int, "int"),
+    (len, "len"),
+    (max, "max"),
+    (min, "min"),
+    (round, "round"),
+    (str, "str"),
+    (math.ceil, "math.ceil"),
+    (math.floor, "math.floor"),
+    (math.log10, "math.log10"),
+    (math.sqrt, "math.sqrt"),
+)
+
 
 def node_of(item: Item) -> Node:
     if not isinstance(item, Value):
@@ -15,35 +32,36 @@ def node_of(item: Item) -> Node:
     return item.node
 
 
-def qualified(obj: object) -> str:
-    module = getattr(obj, "__module__", None)
-    name = getattr(obj, "__qualname__", None) or getattr(obj, "__name__", None)
-    if name is None:
-        raise Unsupported(f"cannot name callable {obj!r}")
-    return name if module in (None, "builtins") else f"{module}.{name}"
+def op_name(callee: object) -> str:
+    for known, name in CALLABLES:
+        if known is callee:
+            return name
+    raise Unsupported(f"unknown callable {callee!r}")
 
 
-def invoke(name: str, args: Sequence[Node], null_kind: type[Exception]) -> tuple[Call, list[Fault]]:
-    kinds = tuple(arg.type.kind for arg in args)
+def invoke(
+    name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
+) -> tuple[Call, list[Fault]]:
+    kinds = tuple(argument.type.kind for argument in arguments)
     op = resolve(name, kinds)
     if op is None:
         raise Unsupported(f"no op {name}({', '.join(kinds)})")
     faults = [
-        Fault(null_kind, apply("is_none", arg))
-        for arg, param in zip(args, op.params, strict=True)
-        if arg.type.nullable and not param.nullable
+        Fault(first_null_kind if index == 0 else TypeError, apply("is_none", argument))
+        for index, (argument, parameter) in enumerate(zip(arguments, op.params, strict=True))
+        if argument.type.nullable and not parameter.nullable
     ]
-    faults.extend(op.faults(*args))
-    return Call(op, tuple(args)), faults
+    faults.extend(op.faults(*arguments))
+    return Call(op, tuple(arguments)), faults
 
 
-def call(callee: Item, args: Sequence[Item]) -> tuple[Call, list[Fault]]:
-    nodes = [node_of(arg) for arg in args]
+def call(callee: Item, arguments: Sequence[Item]) -> tuple[Call, list[Fault]]:
+    nodes = [node_of(argument) for argument in arguments]
     match callee:
         case Method(name=name):
             return invoke(f".{name}", nodes, AttributeError)
-        case Opaque(obj=obj) if callable(obj):
-            return invoke(qualified(obj), nodes, TypeError)
+        case Opaque(obj=obj):
+            return invoke(op_name(obj), nodes, TypeError)
         case _:
             raise Unsupported(f"cannot call {callee}")
 
@@ -56,8 +74,6 @@ def truth(item: Item) -> tuple[Node, list[Fault]]:
             return node, []
         case Value(node=node):
             return invoke("bool", [node], TypeError)
-        case Opaque(obj=obj):
-            return lit(bool(obj)), []
         case _:
             raise Unsupported(f"truth of {item}")
 

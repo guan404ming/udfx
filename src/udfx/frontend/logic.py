@@ -77,8 +77,8 @@ def choose(cases: Sequence[tuple[Node, Node]]) -> Node:
         result = unified
     *rest, (_, value) = cases
     node = _retype(value, result)
-    for cond, then in reversed(rest):
-        node = If(cond, _retype(then, result), node, result)
+    for condition, then in reversed(rest):
+        node = If(condition, _retype(then, result), node, result)
     return node
 
 

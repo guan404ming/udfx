@@ -11,30 +11,34 @@ from udfx.frontend.values import NULL, Method, Null, Value
 
 
 @handles("PUSH_NULL")
-def push_null(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
+def push_null(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     return [state.push(NULL).advance()]
 
 
 @handles("LOAD_GLOBAL")
-def load_global(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
-    item = ctx.global_(inst.argval)
-    pushed = state.push(NULL, item) if inst.arg is not None and inst.arg & 1 else state.push(item)
+def load_global(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    item = context.global_(instruction.argval)
+    pushed = (
+        state.push(NULL, item)
+        if instruction.arg is not None and instruction.arg & 1
+        else state.push(item)
+    )
     return [pushed.advance()]
 
 
 @handles("LOAD_ATTR")
-def load_attr(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
-    if inst.arg is None or not inst.arg & 1:
-        raise Unsupported(f"attribute load {inst.argval}", ctx.where(state))
+def load_attr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    if instruction.arg is None or not instruction.arg & 1:
+        raise Unsupported(f"attribute load {instruction.argval}", context.where(state))
     (owner,), rest = state.pop()
-    return [rest.push(Method(inst.argval), owner).advance()]
+    return [rest.push(Method(instruction.argval), owner).advance()]
 
 
 @handles("CALL")
-def call_(ctx: Context, state: State, inst: dis.Instruction) -> list[Step]:
-    argc = inst.arg or 0
-    items, rest = state.pop(argc + 2)
-    head, second, *args = items
-    callee, arguments = (second, args) if isinstance(head, Null) else (head, [second, *args])
+def call_(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    count = instruction.arg or 0
+    items, rest = state.pop(count + 2)
+    head, second, *others = items
+    callee, arguments = (second, others) if isinstance(head, Null) else (head, [second, *others])
     node, faults = call(callee, arguments)
-    return emit(ctx, rest, Value(node), faults)
+    return emit(context, rest, Value(node), faults)

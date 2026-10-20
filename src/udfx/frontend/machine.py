@@ -27,14 +27,14 @@ def handles(*opnames: str) -> Callable[[Handler], Handler]:
     return register
 
 
-def emit(ctx: Context, state: State, result: Value, faults: Sequence[Fault]) -> list[Step]:
-    survivor, steps = ctx.guard(state, faults)
+def emit(context: Context, state: State, result: Value, faults: Sequence[Fault]) -> list[Step]:
+    survivor, steps = context.guard(state, faults)
     if survivor is not None:
         steps.append(survivor.push(result).advance())
     return steps
 
 
-def explore(ctx: Context, start: State) -> list[Outcome]:
+def explore(context: Context, start: State) -> list[Outcome]:
     pending: list[State] = [start]
     outcomes: list[Outcome] = []
     steps = 0
@@ -43,11 +43,11 @@ def explore(ctx: Context, start: State) -> list[Outcome]:
         if steps > MAX_STEPS:
             raise Unsupported("path explosion")
         state = pending.pop()
-        inst = ctx.instructions[state.index]
-        handler = HANDLERS.get(inst.opname)
+        instruction = context.instructions[state.index]
+        handler = HANDLERS.get(instruction.opname)
         if handler is None:
-            raise Unsupported(f"opcode {inst.opname}", ctx.where(state))
-        for step in reversed(handler(ctx, state, inst)):
+            raise Unsupported(f"opcode {instruction.opname}", context.where(state))
+        for step in reversed(handler(context, state, instruction)):
             if isinstance(step, State):
                 pending.append(step)
             else:
