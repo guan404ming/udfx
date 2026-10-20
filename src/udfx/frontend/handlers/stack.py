@@ -64,3 +64,14 @@ def build_map(context: Context, state: State, instruction: dis.Instruction) -> l
     constants = [literal(item) for item in items]
     entries = scalar_map(zip(constants[::2], constants[1::2], strict=True))
     return [rest.push(Opaque(entries)).advance()]
+
+
+@handles("DELETE_FAST")
+def delete_fast(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    return [state.delete(instruction.argval).advance()]
+
+
+@handles("BUILD_TUPLE")
+def build_tuple(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    items, rest = state.pop(instruction.argval)
+    return [rest.push(constant(tuple(literal(item) for item in items))).advance()]

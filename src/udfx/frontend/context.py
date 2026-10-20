@@ -5,16 +5,25 @@ import inspect
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import CodeType
+from typing import NamedTuple
 
 from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
 from udfx.frontend.logic import conj, neg
 from udfx.frontend.state import Raise, State, Step
-from udfx.frontend.values import Item, Opaque
-from udfx.ir import FALSE
+from udfx.frontend.values import Item, Opaque, Value
+from udfx.ir import FALSE, lit
 from udfx.ops import Fault
 
 JUMPS = frozenset(dis.hasjrel) | frozenset(dis.hasjabs)
+
+
+class Protected(NamedTuple):
+    start: int
+    end: int
+    target: int
+    depth: int
+    lasti: bool
 
 
 def parameters(code: CodeType) -> list[str]:
@@ -30,6 +39,7 @@ class Context:
     builtins: Mapping[str, object]
     instructions: tuple[dis.Instruction, ...]
     index_of: Mapping[int, int]
+    protected: tuple[Protected, ...]
 
     @classmethod
     def of(
@@ -37,7 +47,11 @@ class Context:
     ) -> Context:
         instructions = tuple(dis.get_instructions(code))
         index_of = {instruction.offset: index for index, instruction in enumerate(instructions)}
-        return cls(code, scope, builtins, instructions, index_of)
+        protected = tuple(
+            Protected(entry.start, entry.end, entry.target, entry.depth, entry.lasti)
+            for entry in dis.Bytecode(code).exception_entries  # pyright: ignore[reportAttributeAccessIssue]
+        )
+        return cls(code, scope, builtins, instructions, index_of, protected)
 
     def where(self, state: State) -> str:
         instruction = self.instructions[state.index]
@@ -68,4 +82,11 @@ class Context:
         return (state.under(path) if path != FALSE else None), steps
 
     def raised(self, state: State, kind: type[Exception]) -> Step:
+        offset = self.instructions[state.index].offset
+        for entry in self.protected:
+            if entry.start <= offset < entry.end:
+                kept = state.stack[: entry.depth]
+                pushed = (Value(lit(offset)), Opaque(kind)) if entry.lasti else (Opaque(kind),)
+                index = self.index_of[entry.target]
+                return State(index, (*kept, *pushed), state.names, state.path)
         return Raise(state.path, kind)

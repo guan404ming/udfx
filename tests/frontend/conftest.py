@@ -3,11 +3,18 @@ from collections.abc import Iterator
 
 import pytest
 
-from udfx.ops import Op, register, resolve
+from udfx.ir import Node
+from udfx.ops import Fault, Op, apply, register, resolve
 from udfx.ops.registry import scoped
 from udfx.types import BOOL, INT, STR, list_of
 
+
+def empty(s: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("not", apply("bool", s))),)
+
+
 STAND_INS = (
+    Op("int", (STR,), INT, int, empty),
     Op("__neg__", (INT,), INT, operator.neg),
     Op("__contains__", (STR, STR), BOOL, operator.contains),
     Op("__contains__", (list_of(STR), STR), BOOL, operator.contains),

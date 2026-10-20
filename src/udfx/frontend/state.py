@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
+from udfx.errors import Unsupported
 from udfx.frontend.values import Item
 from udfx.ir import Node
 
@@ -30,7 +31,12 @@ class State:
         return replace(self, names={**self.names, name: item})
 
     def load(self, name: str) -> Item:
+        if name not in self.names:
+            raise Unsupported(f"unbound local {name}")
         return self.names[name]
+
+    def delete(self, name: str) -> State:
+        return replace(self, names={key: item for key, item in self.names.items() if key != name})
 
     def goto(self, index: int) -> State:
         return replace(self, index=index)
