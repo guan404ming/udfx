@@ -49,8 +49,8 @@ def guarded(s: str) -> str:
         return "none"
 
 
-def middle(t: str, a: int) -> str:
-    return t[1:a]
+def middle(t: str) -> str:
+    return t[1:3]
 
 
 def first(t: str) -> str:
@@ -76,7 +76,7 @@ CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
     (helper, {"t": STR}, apply(".upper", T), FALSE),
     (closure, {"a": INT}, apply("__gt__", A, ZERO), FALSE),
     (guarded, {"s": S.type}, If(MISSING, Lit("none", STR), apply(".lower", S), STR), FALSE),
-    (middle, {"t": STR, "a": INT}, apply("slice", T, Lit(1, INT), A), FALSE),
+    (middle, {"t": STR}, apply("slice", T, Lit(1, INT), Lit(3, INT)), FALSE),
     (first, {"t": STR}, apply("__getitem__", T, ZERO), fold(OUT_OF_RANGE.when)),
     (has_colons, {"t": STR}, apply("__contains__", T, Lit("::", STR)), FALSE),
     (unpack, {"a": INT, "b": INT}, apply("__add__", A, B), FALSE),
@@ -86,7 +86,7 @@ CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
 def codes(code: CodeType) -> Iterator[CodeType]:
     yield code
     for constant in code.co_consts:
-        if isinstance(constant, CodeType):
+        if isinstance(constant, CodeType) and constant.co_name != "__annotate__":
             yield from codes(constant)
 
 
