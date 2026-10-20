@@ -26,6 +26,8 @@ NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
 CASE_INSENSITIVE = {"duckdb", "spark"}
 FLOATS = [(1.0,), (-1.0,), (0.0,), (-0.0,), (float("inf"),), (float("-inf"),), (float("nan"),)]
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
+ZERO = "SELECT 0::BIGINT AS x"
+FALLBACKS = "SELECT count(*) FROM duckdb_functions() WHERE function_name LIKE 'udfx fallback %'"
 
 
 class CustomError(Exception):
@@ -245,6 +247,17 @@ def test_duckdb_explicit_connection_registers_each_program_once() -> None:
     again = backend.build(translation.program)
     for expr in (translation.expr, again):
         assert connection.sql(YEARS).select(expr).fetchall() == [(2025,), (1235,)]
+
+
+@pytest.mark.xdist_group("duckdb")
+def test_duckdb_recompiling_reuses_the_fallback_function() -> None:
+    connection = duckdb.connect()
+    for _ in range(3):
+        assert compile(year, {"text": STR}, DuckDBBackend(connection)).ok
+    assert connection.sql(FALLBACKS).fetchall() == [(1,)]
+    expr = compile(inverse, {"x": INT}, DuckDBBackend(connection)).expr
+    with pytest.raises(ZeroDivisionError):
+        DuckDBBackend(connection).execute(lambda: connection.sql(ZERO).select(expr).fetchall())
 
 
 @pytest.mark.xdist_group("spark")

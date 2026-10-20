@@ -103,8 +103,9 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 - On Polars, a `LazyFrame` gives the best speed.
 - Spark pickles the user function by reference, so executors need the same modules and the same
   udfx version.
-- DuckDB expressions must run on the connection the backend holds. Pass your connection with
-  `DuckDBBackend(connection)` and run the query on it.
+- DuckDB expressions are bound to the connection they were built on. Pass your connection with
+  `DuckDBBackend(connection)` and run the query on it. Compiling the same function again reuses
+  its fallback function on that connection.
 - `requires-python` stops before 3.15 on purpose: bytecode support is per CPython version.
 
 ## Performance
