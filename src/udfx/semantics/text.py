@@ -99,3 +99,7 @@ def write_cache(key: str, value: dict[str, str | None]) -> None:
         path.write_text(json.dumps(value))
     except OSError:
         return
+
+
+def has_border(pattern: str) -> bool:
+    return any(pattern[:size] == pattern[-size:] for size in range(1, len(pattern)))

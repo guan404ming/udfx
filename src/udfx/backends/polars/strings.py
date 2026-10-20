@@ -7,9 +7,9 @@ from functools import cache, reduce
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.rules import RULES, broadcast, when
+from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
 from udfx.semantics import text
-from udfx.semantics.text import CLUSTER_JOINERS, SIGMA, CaseDrift, whitespace, word
+from udfx.semantics.text import CLUSTER_JOINERS, SIGMA, CaseDrift, has_border, whitespace, word
 from udfx.types import Kind
 
 
@@ -88,7 +88,12 @@ def single_code_point_clusters(text: pl.Expr) -> pl.Expr:
 
 
 @RULES(".rfind", Kind.STR, Kind.STR)
-def rfind(text: pl.Expr, pattern: pl.Expr) -> Lowered[pl.Expr]:
+def rfind(text: pl.Expr, pattern: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
+    known = literal_value(pattern)
+    if isinstance(known, str) and known and not has_border(known):
+        suffix = length(text.str.split(pattern).list.last())
+        found = length(text) - length(pattern) - suffix
+        return when(text.str.contains(pattern, literal=True), found, pl.lit(-1))
     position = find(text.str.reverse(), pattern.str.reverse())
     found = when(position < 0, pl.lit(-1), length(text) - length(pattern) - position)
     return Lowered(found, single_code_point_clusters(text) & single_code_point_clusters(pattern))
