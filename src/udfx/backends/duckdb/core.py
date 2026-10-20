@@ -6,22 +6,6 @@ from duckdb import Expression
 from udfx.backends.duckdb.rules import RULES, constant, length
 from udfx.types import Kind
 
-
-@RULES("not", Kind.BOOL)
-def not_(value: Expression) -> Expression:
-    return ~value
-
-
-@RULES("and", Kind.BOOL, Kind.BOOL)
-def and_(left: Expression, right: Expression) -> Expression:
-    return left & right
-
-
-@RULES("or", Kind.BOOL, Kind.BOOL)
-def or_(left: Expression, right: Expression) -> Expression:
-    return left | right
-
-
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(Expression.isnull)
 

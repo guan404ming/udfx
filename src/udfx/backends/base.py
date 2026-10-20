@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import operator
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -27,9 +28,16 @@ type Rule[E] = Callable[..., RuleResult[E]]
 type BinaryRule[E] = Callable[[E, E], RuleResult[E]]
 
 
+BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
+    OpKey("not", (Kind.BOOL,)): operator.invert,
+    OpKey("and", (Kind.BOOL, Kind.BOOL)): operator.and_,
+    OpKey("or", (Kind.BOOL, Kind.BOOL)): operator.or_,
+}
+
+
 class RuleSet[E]:
     def __init__(self) -> None:
-        self._rules: dict[OpKey, Rule[E]] = {}
+        self._rules: dict[OpKey, Rule[E]] = dict(BOOLEAN_RULES)
 
     def __call__[**P](
         self, name: str, *kinds: Kind
@@ -103,11 +111,11 @@ class Backend[E](ABC):
     @abstractmethod
     def select(self, condition: E, then: E, orelse: E) -> E: ...
 
-    @abstractmethod
-    def both(self, left: E, right: E) -> E: ...
+    def both(self, left: E, right: E) -> E:
+        return cast("Any", left) & right
 
-    @abstractmethod
-    def negate(self, value: E) -> E: ...
+    def negate(self, value: E) -> E:
+        return ~cast("Any", value)
 
     @abstractmethod
     def fallback(self, native: E, exact: E, program: Program) -> E: ...

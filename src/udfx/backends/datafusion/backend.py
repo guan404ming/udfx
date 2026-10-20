@@ -42,12 +42,6 @@ class DataFusionBackend(Backend[Expr]):
     def select(self, condition: Expr, then: Expr, orelse: Expr) -> Expr:
         return functions.when(condition, then).otherwise(orelse)
 
-    def both(self, left: Expr, right: Expr) -> Expr:
-        return left & right
-
-    def negate(self, value: Expr) -> Expr:
-        return ~value
-
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)
 

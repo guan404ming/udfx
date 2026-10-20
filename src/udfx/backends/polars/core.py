@@ -5,22 +5,6 @@ import polars as pl
 from udfx.backends.polars.rules import RULES
 from udfx.types import Kind
 
-
-@RULES("not", Kind.BOOL)
-def not_(value: pl.Expr) -> pl.Expr:
-    return ~value
-
-
-@RULES("and", Kind.BOOL, Kind.BOOL)
-def and_(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-    return left & right
-
-
-@RULES("or", Kind.BOOL, Kind.BOOL)
-def or_(left: pl.Expr, right: pl.Expr) -> pl.Expr:
-    return left | right
-
-
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(pl.Expr.is_null)
 

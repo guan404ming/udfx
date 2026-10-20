@@ -76,12 +76,6 @@ class SparkBackend(Backend[Column]):
     def select(self, condition: Column, then: Column, orelse: Column) -> Column:
         return functions.when(condition, then).otherwise(orelse)
 
-    def both(self, left: Column, right: Column) -> Column:
-        return left & right
-
-    def negate(self, value: Column) -> Column:
-        return ~value
-
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
         names = list(program.schema)
         result = dtype(program.result)

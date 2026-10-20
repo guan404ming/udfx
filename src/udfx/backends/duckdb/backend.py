@@ -51,12 +51,6 @@ class DuckDBBackend(Backend[Expression]):
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:
         return when(condition, then, orelse)
 
-    def both(self, left: Expression, right: Expression) -> Expression:
-        return left & right
-
-    def negate(self, value: Expression) -> Expression:
-        return ~value
-
     def fallback(self, native: Expression, exact: Expression, program: Program) -> Expression:
         name = f"{FALLBACK} {id(self)} {id(program)}"
         fields = {

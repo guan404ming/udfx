@@ -29,12 +29,6 @@ class PolarsBackend(Backend[pl.Expr]):
     def select(self, condition: pl.Expr, then: pl.Expr, orelse: pl.Expr) -> pl.Expr:
         return pl.when(condition).then(then).otherwise(orelse)
 
-    def both(self, left: pl.Expr, right: pl.Expr) -> pl.Expr:
-        return left & right
-
-    def negate(self, value: pl.Expr) -> pl.Expr:
-        return ~value
-
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         result = dtype(program.result)
 
