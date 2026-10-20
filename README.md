@@ -5,18 +5,15 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 udfx compiles Python UDFs into native expressions for Polars, DuckDB, DataFusion, and Spark. It
-traces the function bytecode, keeps Python semantics in the generated expression, and runs the
-original function on any row where it cannot show that the native result is the same. It is for
-data engineers who have row-wise Python functions and want engine speed with Python results.
+traces the function bytecode and keeps Python semantics in the generated expression. Rows where
+udfx cannot show the same result run the original Python function.
 
 ## Features
 
 - One expression per function for Polars, DuckDB, DataFusion, and Spark.
-- Python semantics for truthiness, exceptions, int64 overflow, Unicode case mapping, and literal
-  parsing.
+- Python semantics for truthiness, exceptions, int64 overflow, Unicode case, and literal parsing.
 - Row-level fallback to the original Python function.
 - `udfx.explain` prints the traced program and the native expression.
-- Conformance tests check every op against Python on every backend.
 
 ## Install
 
@@ -53,8 +50,7 @@ print(df.select(year=translation.expr)["year"].to_list())
 ```
 
 `compile(function, schema, backend="polars")` returns a `Translation`: `ok`, `expr`, `program`,
-`backend` (the backend name), and `unsupported` (the reason when the function cannot be
-compiled). `udfx.explain(function, schema)` prints the traced IR and the native expression.
+`backend`, and `unsupported` (the reason when the function cannot be compiled).
 
 ## How it works
 
@@ -98,15 +94,13 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 ## Guarantees and limits
 
 - Each row equals the Python result, or the row runs the Python function. Checked by tests, not
-  by proof. Hand written rewrites can change results on edge cases such as `int(" 7")` or
-  `x is None`; udfx keeps the Python result for them.
+  by proof.
 - A raising row fails the query. Polars raises the original exception type. DuckDB, DataFusion,
   and Spark wrap it in their UDF error. To get the original type, run the query through the
   backend object's `execute`, for example `backend.execute(lambda: relation.fetchall())`.
 - Globals and closure constants are read once at compile time.
 - udfx does not validate data against the schema. Declare nullable columns with `.or_none()`.
-- On Polars, a `LazyFrame` gives the best speed, because eager mode does not share repeated
-  subexpressions.
+- On Polars, a `LazyFrame` gives the best speed.
 - Spark pickles the user function by reference, so executors need the same modules and the same
   udfx version.
 - DuckDB expressions must run on the connection the backend holds. Pass your connection with
