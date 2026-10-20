@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import dis
+import operator
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, node_of, none_test, truth
-from udfx.frontend.constants import lookup
+from udfx.frontend.constants import GENERICS, annotation, lookup
 from udfx.frontend.context import Context
 from udfx.frontend.logic import neg
 from udfx.frontend.machine import emit, handles
@@ -36,10 +37,12 @@ COMPARE_OPS: dict[str, str] = {
 @handles("BINARY_OP")
 def binary_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     symbol = instruction.argrepr.removesuffix("=")
+    (left, right), rest = state.pop(2)
+    if symbol == "|":
+        return [rest.push(annotation(operator.or_, left, right)).advance()]
     name = BINARY_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"binary operator {instruction.argrepr}", context.where(state))
-    (left, right), rest = state.pop(2)
     node, faults = invoke(name, [node_of(left), node_of(right)], TypeError)
     return emit(context, rest, Value(node), faults)
 
@@ -91,6 +94,8 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
 @handles("BINARY_SUBSCR")
 def binary_subscr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, index), rest = state.pop(2)
+    if isinstance(container, Opaque) and any(container.obj is generic for generic in GENERICS):
+        return [rest.push(annotation(operator.getitem, container, index)).advance()]
     if isinstance(container, Opaque):
         node, faults = lookup(container.obj, node_of(index))
     else:

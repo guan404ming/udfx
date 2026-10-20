@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from types import GenericAlias, UnionType
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke
@@ -13,6 +14,10 @@ from udfx.types import list_of
 SCALARS = (str, int, float, bool)
 
 ITEMS = (str, int)
+
+ANNOTATIONS = (type, UnionType, GenericAlias)
+
+GENERICS = (list, dict, tuple, set, frozenset, type)
 
 
 def is_scalar(value: object) -> bool:
@@ -39,6 +44,22 @@ def literal(item: Item) -> object:
             return obj
         case _:
             raise Unsupported(f"expected a constant, got {item}")
+
+
+def is_annotation(value: object) -> bool:
+    if isinstance(value, tuple):
+        return all(is_annotation(member) for member in value)
+    return value is None or type(value) in ANNOTATIONS
+
+
+def annotation(operation: Callable[..., object], *items: Item) -> Opaque:
+    values = [literal(item) for item in items]
+    if not all(is_annotation(value) for value in values):
+        raise Unsupported(f"static {operation.__name__} of {values!r}")
+    try:
+        return Opaque(operation(*values))
+    except TypeError as error:
+        raise Unsupported(f"static {operation.__name__} of {values!r}") from error
 
 
 def scalar_map(pairs: Iterable[tuple[object, object]]) -> dict[object, object]:

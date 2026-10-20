@@ -40,10 +40,15 @@ class Context:
     instructions: tuple[dis.Instruction, ...]
     index_of: Mapping[int, int]
     protected: tuple[Protected, ...]
+    caller: tuple[Context, State] | None
 
     @classmethod
     def of(
-        cls, code: CodeType, scope: Mapping[str, object], builtins: Mapping[str, object]
+        cls,
+        code: CodeType,
+        scope: Mapping[str, object],
+        builtins: Mapping[str, object],
+        caller: tuple[Context, State] | None,
     ) -> Context:
         instructions = tuple(dis.get_instructions(code))
         index_of = {instruction.offset: index for index, instruction in enumerate(instructions)}
@@ -51,7 +56,21 @@ class Context:
             Protected(entry.start, entry.end, entry.target, entry.depth, entry.lasti)
             for entry in dis.Bytecode(code).exception_entries  # pyright: ignore[reportAttributeAccessIssue]
         )
-        return cls(code, scope, builtins, instructions, index_of, protected)
+        return cls(code, scope, builtins, instructions, index_of, protected, caller)
+
+    def nested(self, code: CodeType, state: State) -> Context:
+        return Context.of(code, self.scope, self.builtins, (self, state))
+
+    def encloses(self, code: CodeType) -> bool:
+        return self.code is code or (self.caller is not None and self.caller[0].encloses(code))
+
+    def frame(self, state: State, home: object) -> State:
+        if self is home:
+            return state
+        if self.caller is None:
+            raise Unsupported("helper escapes its defining function")
+        context, outer = self.caller
+        return context.frame(outer, home)
 
     def where(self, state: State) -> str:
         instruction = self.instructions[state.index]

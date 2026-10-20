@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import CodeType
 
 from udfx.ir import Node
 
@@ -25,6 +26,18 @@ class Null:
     pass
 
 
+@dataclass(frozen=True)
+class Function:
+    code: CodeType
+    cells: tuple[str, ...]
+    home: object = field(repr=False)
+
+
+@dataclass(frozen=True)
+class Cell:
+    name: str
+
+
 NULL = Null()
 
-Item = Value | Method | Opaque | Null
+Item = Value | Method | Opaque | Null | Function
