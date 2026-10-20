@@ -14,34 +14,51 @@ from udfx.semantics.text import char_class, drift, whitespace
 from udfx.types import STR, Kind
 
 POINT = "udfx point"
+SIGMA = "Σ"
+SIGMA_CONTEXTS = (f"A{SIGMA}{{}}b", f"A{{}}{SIGMA}", f"{{}}{SIGMA}", f"A{SIGMA}{{}}")
 
 
-@cache
-def case_drift(method: str) -> str | None:
+def drifted(method: str, context: str) -> frozenset[str]:
+    def reference(point: str) -> str:
+        return getattr(context.format(point), method)()
+
     def native(points: Sequence[str]) -> list[str]:
         expr = getattr(functions, method)(col(POINT))
         (recased,) = DataFusionBackend().evaluate(
-            [expr], {POINT: STR}, [(point,) for point in points]
+            [expr], {POINT: STR}, [(context.format(point),) for point in points]
         )
         return cast("list[str]", recased)
 
-    drifted = drift(getattr(str, method), native)
-    return char_class(drifted) if drifted else None
+    return frozenset(drift(reference, native))
 
 
-def recase(value: Expr, method: str) -> Expr | Lowered[Expr]:
+@cache
+def case_drift(method: str) -> tuple[str | None, str | None]:
+    alone = drifted(method, "{}")
+    nearby = frozenset[str]().union(*(drifted(method, context) for context in SIGMA_CONTEXTS))
+    nearby -= alone
+    return (char_class(alone) if alone else None, char_class(nearby) if nearby else None)
+
+
+def recase(value: Expr, method: str) -> Lowered[Expr]:
     expr = getattr(functions, method)(value)
-    drifted = case_drift(method)
-    return expr if drifted is None else Lowered(expr, ~functions.regexp_like(value, lit(drifted)))
+    alone, nearby = case_drift(method)
+    exact = lit(True)
+    if alone is not None:
+        exact = exact & ~functions.regexp_like(value, lit(alone))
+    if nearby is not None:
+        sigma = functions.strpos(value, lit(SIGMA)) > lit(0)
+        exact = exact & ~(sigma & functions.regexp_like(value, lit(nearby)))
+    return Lowered(expr, exact)
 
 
 @RULES(".lower", Kind.STR)
-def lower(value: Expr) -> Expr | Lowered[Expr]:
+def lower(value: Expr) -> Lowered[Expr]:
     return recase(value, "lower")
 
 
 @RULES(".upper", Kind.STR)
-def upper(value: Expr) -> Expr | Lowered[Expr]:
+def upper(value: Expr) -> Lowered[Expr]:
     return recase(value, "upper")
 
 
