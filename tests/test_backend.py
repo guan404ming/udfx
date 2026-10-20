@@ -157,7 +157,7 @@ def test_spark_case_sensitive_session_keeps_case() -> None:
 
 
 @pytest.mark.parametrize("backend", backend_params())
-@pytest.mark.parametrize("name", ["Amount", "first name", "select", "order"])
+@pytest.mark.parametrize("name", ["Amount", "first name", "select", "order", 'a"b', "a.b", "a`b"])
 def test_column_names_that_need_quoting(backend: Backend[Any], name: str) -> None:
     program = Program(lambda value: value, {name: INT}, Col(name, INT))
     native = backend.build(program)

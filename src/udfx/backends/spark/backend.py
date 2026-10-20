@@ -64,7 +64,7 @@ class SparkBackend(Backend[Column]):
 
     def column(self, node: Col) -> Column:
         self.session()
-        return functions.col(node.name)
+        return functions.col("`" + node.name.replace("`", "``") + "`")
 
     def literal(self, node: Lit) -> Column:
         self.session()

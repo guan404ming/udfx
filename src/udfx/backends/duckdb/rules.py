@@ -9,9 +9,12 @@ from udfx.backends.base import RuleSet
 
 RULES: RuleSet[Expression] = RuleSet()
 
-column = duckdb.ColumnExpression
 function = duckdb.FunctionExpression
 NAN = duckdb.SQLExpression("'nan'::DOUBLE")
+
+
+def column(name: str) -> Expression:
+    return duckdb.SQLExpression('"' + name.replace('"', '""') + '"')
 
 
 def constant(value: object) -> Expression:
