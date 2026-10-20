@@ -426,11 +426,13 @@ datafusion = [
 duckdb = [
     { name = "duckdb" },
     { name = "numpy" },
+    { name = "pyarrow" },
 ]
 polars = [
     { name = "polars" },
 ]
 spark = [
+    { name = "pyarrow" },
     { name = "pyspark" },
 ]
 testing = [
@@ -458,7 +460,9 @@ requires-dist = [
     { name = "hypothesis", marker = "extra == 'testing'", specifier = ">=6.100" },
     { name = "numpy", marker = "extra == 'duckdb'", specifier = ">=2.0" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=2.0" },
-    { name = "pyspark", marker = "extra == 'spark'", specifier = ">=4.0" },
+    { name = "pyarrow", marker = "extra == 'duckdb'", specifier = ">=18" },
+    { name = "pyarrow", marker = "extra == 'spark'", specifier = ">=18" },
+    { name = "pyspark", marker = "extra == 'spark'", specifier = ">=4.1" },
 ]
 provides-extras = ["polars", "duckdb", "datafusion", "spark", "testing"]
 
@@ -471,7 +475,7 @@ dev = [
     { name = "polars", specifier = ">=2.0" },
     { name = "pyarrow-stubs", specifier = ">=20.0.0.20260819" },
     { name = "pyright", specifier = ">=1.1.390" },
-    { name = "pyspark", specifier = ">=4.0" },
+    { name = "pyspark", specifier = ">=4.1" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "ruff", specifier = ">=0.7" },
 ]
