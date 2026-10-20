@@ -16,10 +16,11 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function, check_translation
-from udfx.types import INT, INT64_MAX, INT64_MIN, STR
+from udfx.types import FLOAT, INT, INT64_MAX, INT64_MIN, STR
 
 NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
 CASE_INSENSITIVE = {"duckdb", "spark"}
+FLOATS = [(1.0,), (-1.0,), (0.0,), (-0.0,), (float("inf"),), (float("-inf"),), (float("nan"),)]
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 
 
@@ -153,6 +154,20 @@ def test_column_names_that_need_quoting(backend: Backend[Any], name: str) -> Non
 def test_nullable_list_literal(backend: Backend[Any]) -> None:
     rows = [("a,b",), ("",), (None,)]
     assert check_function(split, {"s": STR.or_none()}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda x: x if x > 0.0 else -0.0,
+        lambda x: x == float("inf"),
+        lambda x: x != float("nan"),  # noqa: PLW0177
+    ],
+    ids=["negative_zero", "infinity", "nan"],
+)
+def test_float_literals(backend: Backend[Any], function: Callable[[float], object]) -> None:
+    assert check_function(function, {"x": FLOAT}, backend, FLOATS) == []
 
 
 @pytest.mark.xdist_group("duckdb")
