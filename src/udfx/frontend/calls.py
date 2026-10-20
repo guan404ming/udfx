@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from udfx.errors import Unsupported
 from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
-from udfx.ops import Fault, apply, resolve
+from udfx.ops import Fault, Op, all_ops, apply, resolve
 from udfx.types import BOOL, Kind
 
 CALLABLES: tuple[tuple[object, str], ...] = (
@@ -43,13 +43,32 @@ def op_name(callee: object) -> str:
     raise Unsupported(f"unknown callable {named(callee)}")
 
 
-def invoke(
-    name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
-) -> tuple[Call, list[Fault]]:
+def accepts(op: Op, kinds: tuple[Kind, ...]) -> bool:
+    return len(op.params) == len(kinds) and all(
+        kind is parameter.kind or (kind is Kind.NONE and parameter.nullable)
+        for kind, parameter in zip(kinds, op.params, strict=True)
+    )
+
+
+def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
     kinds = tuple(argument.type.kind for argument in arguments)
     op = resolve(name, kinds)
     if op is None:
-        raise Unsupported(f"no op {name}({', '.join(kinds)})")
+        candidates = [op for op in all_ops() if op.name == name and accepts(op, kinds)]
+        if len(candidates) != 1:
+            raise Unsupported(f"no op {name}({', '.join(kinds)})")
+        (op,) = candidates
+    typed = [
+        Lit(None, parameter) if argument.type.kind is Kind.NONE else argument
+        for argument, parameter in zip(arguments, op.params, strict=True)
+    ]
+    return op, typed
+
+
+def invoke(
+    name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
+) -> tuple[Call, list[Fault]]:
+    op, arguments = overload(name, arguments)
     faults = [
         Fault(first_null_kind if index == 0 else TypeError, apply("is_none", argument))
         for index, (argument, parameter) in enumerate(zip(arguments, op.params, strict=True))

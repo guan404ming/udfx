@@ -10,7 +10,7 @@ STRINGS = list_of(STR)
 
 
 def empty_separator(_: Node, separator: Node) -> tuple[Fault, ...]:
-    return (Fault(ValueError, apply("not", apply("bool", separator))),)
+    return (Fault(ValueError, apply("__eq__", separator, lit(""))),)
 
 
 def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
@@ -30,7 +30,7 @@ register(Op(".strip", (STR,), STR, str.strip))
 register(Op(".lstrip", (STR,), STR, str.lstrip))
 register(Op(".rstrip", (STR,), STR, str.rstrip))
 register(Op(".split", (STR,), STRINGS, str.split))
-register(Op(".split", (STR, STR), STRINGS, str.split, empty_separator))
+register(Op(".split", (STR, STR.or_none()), STRINGS, str.split, empty_separator))
 register(Op(".find", (STR, STR), INT, str.find))
 register(Op(".rfind", (STR, STR), INT, str.rfind))
 register(Op(".count", (STR, STR), INT, str.count))

@@ -66,16 +66,20 @@ def rstrip(text: Expr) -> Expr:
     return functions.rtrim(text, lit(whitespace()))
 
 
-@RULES(".split", Kind.STR)
 def split_words(text: Expr) -> Expr:
     spaced = functions.regexp_replace(text, lit(char_class(whitespace()) + "+"), lit(" "), lit("g"))
     return functions.string_to_array(functions.btrim(spaced, lit(" ")), lit(" "))
 
 
+RULES(".split", Kind.STR)(split_words)
+
+
 @RULES(".split", Kind.STR, Kind.STR)
 def split(text: Expr, separator: Expr) -> Expr:
-    return functions.when(text == lit(""), functions.make_array(lit(""))).otherwise(
-        functions.string_to_array(text, separator)
+    return (
+        functions.when(separator.is_null(), split_words(text))
+        .when(text == lit(""), functions.make_array(lit("")))
+        .otherwise(functions.string_to_array(text, separator))
     )
 
 

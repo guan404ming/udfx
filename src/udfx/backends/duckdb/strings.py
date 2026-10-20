@@ -72,14 +72,16 @@ def rstrip(text: Expression) -> Expression:
     return function("rtrim", text, constant(whitespace()))
 
 
-@RULES(".split", Kind.STR)
 def split_words(text: Expression) -> Expression:
     return function("regexp_extract_all", text, constant(word()))
 
 
+RULES(".split", Kind.STR)(split_words)
+
+
 @RULES(".split", Kind.STR, Kind.STR)
 def split(text: Expression, separator: Expression) -> Expression:
-    return function("string_split", text, separator)
+    return when(separator.isnull(), split_words(text), function("string_split", text, separator))
 
 
 def find(text: Expression, pattern: Expression) -> Expression:

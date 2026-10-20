@@ -90,14 +90,17 @@ def rstrip(text: Column) -> Column:
     return functions.rtrim(text, functions.lit(whitespace()))
 
 
-@RULES(".split", Kind.STR)
 def split_words(text: Column) -> Column:
     return functions.regexp_extract_all(text, functions.lit(word()), functions.lit(0))
 
 
+RULES(".split", Kind.STR)(split_words)
+
+
 @RULES(".split", Kind.STR, Kind.STR)
 def split(text: Column, separator: Column) -> Column:
-    return functions.split(text, quoted(separator), -1)
+    pieces = functions.split(text, quoted(separator), -1)
+    return functions.when(separator.isNull(), split_words(text)).otherwise(pieces)
 
 
 def find(text: Column, pattern: Column) -> Column:

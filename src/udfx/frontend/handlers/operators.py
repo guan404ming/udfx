@@ -11,8 +11,7 @@ from udfx.frontend.logic import negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Value
-from udfx.ir import Lit, Node
-from udfx.types import INT, Kind
+from udfx.ir import Lit
 
 BINARY_OPS: dict[str, str] = {
     "+": "__add__",
@@ -106,13 +105,8 @@ def binary_subscr(context: Context, state: State, instruction: dis.Instruction) 
 @handles("BINARY_SLICE")
 def binary_slice(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, start, stop), rest = state.pop(3)
-    node, faults = invoke("slice", [node_of(container), bound(start), bound(stop)], TypeError)
+    node, faults = invoke("slice", [node_of(container), node_of(start), node_of(stop)], TypeError)
     return emit(context, rest, Value(node), faults)
-
-
-def bound(item: Item) -> Node:
-    node = node_of(item)
-    return Lit(None, INT.or_none()) if node.type.kind is Kind.NONE else node
 
 
 def is_none_constant(item: Item) -> bool:

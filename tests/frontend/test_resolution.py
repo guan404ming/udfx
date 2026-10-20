@@ -139,6 +139,16 @@ def test_none_argument_of_method_raises_type_error() -> None:
     assert [fault.kind for fault in faults] == [AttributeError, TypeError]
 
 
+def split_on_none(s: str) -> list[str]:
+    return s.split(None)
+
+
+def test_none_argument_takes_the_nullable_parameter() -> None:
+    program = trace(split_on_none, {"s": STR})
+    assert program.value == apply(".split", Col("s", STR), Lit(None, STR.or_none()))
+    assert program.fault == FALSE
+
+
 def test_str_of_none_does_not_raise() -> None:
     program = trace(text_or_empty, {"x": INT.or_none()})
     assert program.value == apply("str", Col("x", INT.or_none()))

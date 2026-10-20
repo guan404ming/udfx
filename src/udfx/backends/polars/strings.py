@@ -55,14 +55,16 @@ def rstrip(text: pl.Expr) -> pl.Expr:
     return text.str.strip_chars_end(whitespace())
 
 
-@RULES(".split", Kind.STR)
 def split_words(text: pl.Expr) -> pl.Expr:
     return text.str.extract_all(word())
 
 
+RULES(".split", Kind.STR)(split_words)
+
+
 @RULES(".split", Kind.STR, Kind.STR)
 def split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
-    return text.str.split(separator)
+    return when(separator.is_null(), split_words(text), text.str.split(separator))
 
 
 def length(text: pl.Expr) -> pl.Expr:
