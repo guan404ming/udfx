@@ -12,12 +12,14 @@ from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.spark import SparkBackend
+from udfx.errors import Unsupported
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
-from udfx.testing import check_function
+from udfx.testing import check_function, check_translation
 from udfx.types import INT, INT64_MAX, INT64_MIN, STR
 
 NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
+CASE_INSENSITIVE = {"duckdb", "spark"}
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 
 
@@ -53,6 +55,10 @@ def constant_branch(value: int) -> int:
     if value == 0:
         return 1 // 0
     return 2
+
+
+def difference(a: int, A: int) -> int:  # noqa: N803
+    return a - A
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -116,6 +122,27 @@ def test_fallback_runs_literals_outside_int64(
 ) -> None:
     rows = [(0,), (INT64_MAX,), (INT64_MIN,)]
     assert check_function(function, {"x": INT}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_column_names_that_differ_only_by_case(backend: Backend[Any]) -> None:
+    translation = compile(difference, {"a": INT, "A": INT}, backend)
+    if backend.name in CASE_INSENSITIVE:
+        assert isinstance(translation.unsupported, Unsupported)
+        assert str(translation.unsupported) == (
+            f"{backend.name} column names are case-insensitive: 'a' and 'A' collide"
+        )
+    else:
+        assert check_translation(translation, backend, [(5, 3)]) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("name", ["Amount", "first name", "select", "order"])
+def test_column_names_that_need_quoting(backend: Backend[Any], name: str) -> None:
+    program = Program(lambda value: value, {name: INT}, Col(name, INT))
+    native = backend.build(program)
+    slow = backend.fallback(backend.literal(Lit(0, INT)), backend.literal(FALSE), program)
+    assert backend.evaluate([native, slow], {name: INT}, [(5,)]) == [[5], [5]]
 
 
 @pytest.mark.xdist_group("duckdb")

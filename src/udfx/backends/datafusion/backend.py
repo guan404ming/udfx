@@ -5,12 +5,12 @@ from itertools import count
 from typing import ClassVar, cast
 
 import pyarrow as pa
-from datafusion import Expr, SessionContext, col, functions, udf
+from datafusion import Expr, SessionContext, functions, udf
 
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
 from udfx.backends.base import Backend, Row, RuleSet
-from udfx.backends.datafusion.rules import RULES, typed
+from udfx.backends.datafusion.rules import RULES, column, typed
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import BOOL, Type
@@ -34,7 +34,7 @@ class DataFusionBackend(Backend[Expr]):
         return self._context
 
     def column(self, node: Col) -> Expr:
-        return col(node.name)
+        return column(node.name)
 
     def literal(self, node: Lit) -> Expr:
         return typed(node.value, node.type)
@@ -62,7 +62,7 @@ class DataFusionBackend(Backend[Expr]):
             f"udfx fallback {next(FALLBACKS)}",
         )
         return functions.when(exact, native).otherwise(
-            slow(exact, *(col(name) for name in program.schema))
+            slow(exact, *(column(name) for name in program.schema))
         )
 
     def evaluate(
@@ -82,6 +82,6 @@ class DataFusionBackend(Backend[Expr]):
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         frame = self.context.from_arrow(table)
         outputs = self.execute(
-            lambda: frame.select(col(ROW), *aliased).sort(col(ROW)).to_arrow_table()
+            lambda: frame.select(column(ROW), *aliased).sort(column(ROW)).to_arrow_table()
         )
         return [cast("list[object]", outputs.column(name).to_pylist()) for name in names]

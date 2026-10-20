@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import pyarrow as pa
-from datafusion import Expr, functions, lit
+from datafusion import Expr, col, functions, lit
 
 from udfx.backends.arrow import dtype
 from udfx.backends.base import RuleSet
 from udfx.types import Type
 
 RULES: RuleSet[Expr] = RuleSet()
+
+
+def column(name: str) -> Expr:
+    return col('"' + name.replace('"', '""') + '"')
 
 
 def typed(value: object, type: Type) -> Expr:

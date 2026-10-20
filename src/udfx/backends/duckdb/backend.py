@@ -35,6 +35,9 @@ class DuckDBBackend(Backend[Expression]):
     def connection(self) -> duckdb.DuckDBPyConnection:
         return duckdb.default_connection() if self._connection is None else self._connection
 
+    def case_sensitive(self) -> bool:
+        return False
+
     def column(self, node: Col) -> Expression:
         return column(node.name)
 

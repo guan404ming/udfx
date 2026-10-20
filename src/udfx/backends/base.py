@@ -120,7 +120,19 @@ class Backend[E](ABC):
             case Call():
                 return self._lower_call(node)
 
+    def case_sensitive(self) -> bool:
+        return True
+
     def build(self, program: Program) -> E:
+        if not self.case_sensitive():
+            seen: dict[str, str] = {}
+            for name in program.schema:
+                first = seen.setdefault(name.casefold(), name)
+                if first != name:
+                    raise Unsupported(
+                        f"{self.name} column names are case-insensitive:"
+                        f" {first!r} and {name!r} collide"
+                    )
         value = self.lower(program.value)
         exact = value.exact
         if program.fault != FALSE:
