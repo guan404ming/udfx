@@ -9,14 +9,14 @@ from datafusion import Expr, SessionContext, functions, udf
 
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
-from udfx.backends.base import Backend, Row, RuleSet
+from udfx.backends.base import RESERVED, Backend, Row, RuleSet
 from udfx.backends.datafusion.rules import RULES, column, typed
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import BOOL, Type
 
-OUT = "udfx out"
-ROW = "udfx row"
+OUT = f"{RESERVED}out"
+ROW = f"{RESERVED}row"
 FALLBACKS = count()
 
 
@@ -68,6 +68,7 @@ class DataFusionBackend(Backend[Expr]):
     def evaluate(
         self, exprs: Sequence[Expr], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]:
+        self.check_names(schema)
         columns = list(zip(*rows, strict=True)) if rows else [() for _ in schema]
         table = pa.table(
             {

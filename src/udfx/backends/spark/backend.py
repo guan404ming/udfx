@@ -9,15 +9,15 @@ from pyspark.sql import Column, SparkSession, functions
 from pyspark.sql.types import StructField, StructType
 
 from udfx.backends import arrow
-from udfx.backends.base import Backend, Row, RuleSet
+from udfx.backends.base import RESERVED, Backend, Row, RuleSet
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Kind, Type
 
-EXACT = "udfx exact"
-OUT = "udfx out"
+EXACT = f"{RESERVED}exact"
+OUT = f"{RESERVED}out"
 RAISED = "udfx raised "
 
 
@@ -103,6 +103,7 @@ class SparkBackend(Backend[Column]):
     def evaluate(
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]:
+        self.check_names(schema)
         struct = StructType([StructField(name, dtype(type)) for name, type in schema.items()])
         frame = self.session().createDataFrame(list(rows), struct)
         names = [f"{OUT} {index}" for index in range(len(exprs))]

@@ -11,6 +11,7 @@ from udfx.ops.registry import OpKey
 from udfx.program import Program
 from udfx.types import Kind, Type, fits
 
+RESERVED = "udfx "
 Row = tuple[object, ...]
 Gather = Callable[[list[int]], Sequence[Sequence[object]]]
 
@@ -128,14 +129,20 @@ class Backend[E](ABC):
     def fold_name(self, name: str) -> str:
         return name
 
-    def build(self, program: Program) -> E:
+    def check_names(self, names: Iterable[str]) -> None:
         seen: dict[str, str] = {}
-        for name in program.schema:
-            first = seen.setdefault(self.fold_name(name), name)
+        for name in names:
+            folded = self.fold_name(name)
+            if folded.startswith(RESERVED):
+                raise Unsupported(f"column names starting with {RESERVED!r} are reserved")
+            first = seen.setdefault(folded, name)
             if first != name:
                 raise Unsupported(
                     f"{self.name} column names are case-insensitive: {first!r} and {name!r} collide"
                 )
+
+    def build(self, program: Program) -> E:
+        self.check_names(program.schema)
         value = self.lower(program.value)
         exact = value.exact
         if program.fault != FALSE:

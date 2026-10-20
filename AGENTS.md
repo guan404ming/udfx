@@ -76,7 +76,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `rules.py`: `RULES = RuleSet()` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type.
 - `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`: rules, one file per op family.
-- Internal column names contain a space, for example `"udfx exact"`, so they cannot collide with user columns.
+- Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
 - `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception. Spark carries the type through the error message.
 - `fold_name(name)` returns the name as the engine compares it: identity for Polars and DataFusion, ASCII lower for DuckDB, and `str.lower` for Spark when `spark.sql.caseSensitive` is false. `build` rejects schemas whose folded names collide.

@@ -5,15 +5,15 @@ from typing import ClassVar
 
 import polars as pl
 
-from udfx.backends.base import Backend, Row, RuleSet
+from udfx.backends.base import RESERVED, Backend, Row, RuleSet
 from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Type
 
-OUT = "udfx out"
-ROW = "udfx row"
+OUT = f"{RESERVED}out"
+ROW = f"{RESERVED}row"
 
 
 class PolarsBackend(Backend[pl.Expr]):
@@ -57,6 +57,7 @@ class PolarsBackend(Backend[pl.Expr]):
     def evaluate(
         self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]:
+        self.check_names(schema)
         columns = list(zip(*rows, strict=True)) if rows else [() for _ in schema]
         frame = pl.DataFrame(
             [
