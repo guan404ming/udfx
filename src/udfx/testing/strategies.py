@@ -36,11 +36,42 @@ STRING_TRAPS = (
     "aaa",
     "$0",
     "a😀b",
+    "1__2",
+    "_1",
+    "1_0.0_1e1_0",
+    "1.5",
+    ".5",
+    "5.",
+    "1e5",
+    "1e",
+    "-Infinity",
+    "nan",
+    "\x1c12",
+    "１２",
+    "9223372036854775808",
 )
 
-INT_TRAPS = (0, 1, -1, 2, -2, INT64_MIN, INT64_MAX, 10, 1000)
+INT_TRAPS = (0, 1, -1, 2, -2, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
 
-FLOAT_TRAPS = (0.0, -0.0, 1.0, -1.0, 0.5, float("nan"), float("inf"), float("-inf"), 1e308, 5e-324)
+FLOAT_TRAPS = (
+    0.0,
+    -0.0,
+    1.0,
+    -1.0,
+    0.5,
+    0.1,
+    0.7,
+    2.5,
+    -7.0,
+    2.0**53,
+    2.0**63,
+    -(2.0**63),
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    1e308,
+    5e-324,
+)
 
 
 def values(type: Type) -> st.SearchStrategy[object]:
