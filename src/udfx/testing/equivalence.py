@@ -7,7 +7,7 @@ from typing import Any
 from udfx.api import compile
 from udfx.backends.base import Backend, Row
 from udfx.errors import Unsupported
-from udfx.ir import TRUE, Call, Col
+from udfx.ir import TRUE, Call, Col, Lit
 from udfx.ops import Op
 from udfx.testing.outcome import Outcome, Raised, Returned, run, same
 from udfx.types import Type
@@ -51,11 +51,22 @@ def check_function(
     return mismatches
 
 
-def check_op(op: Op, backend: Backend[Any], rows: Sequence[Row]) -> list[Mismatch]:
+def check_op(
+    op: Op,
+    backend: Backend[Any],
+    rows: Sequence[Row],
+    constants: Mapping[int, object] | None = None,
+) -> list[Mismatch]:
+    constants = constants or {}
     columns = tuple(Col(f"arg{index}", param) for index, param in enumerate(op.params))
     schema = {column.name: column.type for column in columns}
-    value = backend.lower(Call(op, columns))
-    faults = op.faults(*columns)
+    args = tuple(
+        Lit(constants[index], column.type) if index in constants else column
+        for index, column in enumerate(columns)
+    )
+    rows = [tuple(constants.get(index, item) for index, item in enumerate(row)) for row in rows]
+    value = backend.lower(Call(op, args))
+    faults = op.faults(*args)
     lowered = [backend.lower(fault.when) for fault in faults]
     exact_parts = [value.exact, *(item.exact for item in lowered)]
     exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]

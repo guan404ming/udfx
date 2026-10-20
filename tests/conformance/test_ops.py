@@ -7,7 +7,7 @@ from hypothesis import strategies as st
 from udfx.backends import installed
 from udfx.backends.base import Backend
 from udfx.ops import Op, all_ops
-from udfx.testing import batches, check_op
+from udfx.testing import batches, check_op, values
 
 BACKENDS: tuple[Backend[Any], ...] = installed()
 CASES = [(backend, op) for backend in BACKENDS for op in all_ops()]
@@ -28,4 +28,6 @@ def test_every_op_has_a_rule(backend: Backend[Any]) -> None:
 def test_op_matches_python(backend: Backend[Any], op: Op, data: st.DataObject) -> None:
     schema = {f"arg{index}": param for index, param in enumerate(op.params)}
     rows = data.draw(batches(schema))
-    assert check_op(op, backend, rows) == []
+    constant = data.draw(st.sampled_from([None, *range(len(op.params))]))
+    constants = {} if constant is None else {constant: data.draw(values(op.params[constant]))}
+    assert check_op(op, backend, rows, constants) == []

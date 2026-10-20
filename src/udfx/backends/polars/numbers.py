@@ -8,16 +8,10 @@ import polars as pl
 
 from udfx.backends.base import Lowered
 from udfx.backends.polars.rules import RULES
+from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 FLOAT_INT_MAX = 2**53
-SPACE = "\t\n\x0b\x0c\r "
-DIGITS = "[0-9](_?[0-9])*"
-INT_LITERAL = f"^[{SPACE}]*[+-]?{DIGITS}[{SPACE}]*$"
-FLOAT_LITERAL = (
-    f"(?i)^[{SPACE}]*[+-]?(({DIGITS}(\\.({DIGITS})?)?|\\.{DIGITS})(e[+-]?{DIGITS})?|inf|infinity|nan)"
-    f"[{SPACE}]*$"
-)
 
 Binary = Callable[[pl.Expr, pl.Expr], pl.Expr]
 Rule = Callable[[pl.Expr, pl.Expr], pl.Expr | Lowered[pl.Expr]]
@@ -72,6 +66,14 @@ def comparison(name: str, compare: Binary) -> None:
     )
 
 
+def dense(value: pl.Expr) -> pl.Expr:
+    return pl.int_range(pl.len()).cast(pl.Float64) * -0.0 + value
+
+
+def divide(a: pl.Expr, b: pl.Expr) -> pl.Expr:
+    return a / dense(b)
+
+
 def either_nan(a: pl.Expr, b: pl.Expr) -> pl.Expr:
     return a.is_nan().fill_null(False) | b.is_nan().fill_null(False)
 
@@ -103,7 +105,7 @@ def truncated_remainder(a: pl.Expr, b: pl.Expr) -> tuple[pl.Expr, pl.Expr]:
 
 def divmod_(a: pl.Expr, b: pl.Expr) -> tuple[pl.Expr, pl.Expr, pl.Expr]:
     remainder, exact = truncated_remainder(a, b)
-    quotient = (a - remainder) / b
+    quotient = divide(a - remainder, b)
     adjust = (remainder != 0.0) & ((b < 0.0) != (remainder < 0.0))
     remainder = (
         pl.when(remainder == 0.0)
@@ -115,7 +117,7 @@ def divmod_(a: pl.Expr, b: pl.Expr) -> tuple[pl.Expr, pl.Expr, pl.Expr]:
     quotient = pl.when(adjust).then(quotient - 1.0).otherwise(quotient)
     floored = quotient.floor()
     snapped = pl.when(quotient - floored > 0.5).then(floored + 1.0).otherwise(floored)
-    quotient = pl.when(quotient != 0.0).then(snapped).otherwise((a / b) * 0.0)
+    quotient = pl.when(quotient != 0.0).then(snapped).otherwise(divide(a, b) * 0.0)
     return quotient, remainder, exact
 
 
@@ -134,7 +136,7 @@ def is_ascii(a: pl.Expr) -> pl.Expr:
 
 
 def cleaned(a: pl.Expr) -> pl.Expr:
-    return a.str.strip_chars(SPACE).str.replace_all("_", "", literal=True)
+    return a.str.strip_chars(ASCII_SPACE).str.replace_all("_", "", literal=True)
 
 
 for _name, _operation in ARITHMETIC.items():
@@ -144,7 +146,7 @@ for _name, _operation in ARITHMETIC.items():
 for _name, _compare in COMPARISONS.items():
     comparison(_name, _compare)
 
-floating("__truediv__", operator.truediv)
+floating("__truediv__", divide)
 floating("__floordiv__", float_floordiv)
 floating("__mod__", float_mod)
 
@@ -159,7 +161,7 @@ RULES("math.isinf", Kind.FLOAT)(pl.Expr.is_infinite)
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(a / b, representable(a) & representable(b))
+    return Lowered(divide(a, b), representable(a) & representable(b))
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)

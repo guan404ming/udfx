@@ -1,27 +1,26 @@
 from __future__ import annotations
 
-from functools import cache
+from collections.abc import Sequence
 
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.rules import RULES
-from udfx.ops.strings import WHITESPACE
+from udfx.backends.polars.rules import RULES, broadcast
+from udfx.semantics.text import char_class, drift, whitespace, word
 from udfx.types import Kind
 
-WORDS = "[^" + "".join(f"\\x{{{ord(char):x}}}" for char in WHITESPACE) + "]+"
+CASE_DRIFT: dict[str, str | None] = {}
 
 
-@cache
 def case_drift(method: str) -> str | None:
-    points = [chr(point) for point in range(0x110000) if not 0xD800 <= point <= 0xDFFF]
-    native = getattr(pl.Series(points).str, f"to_{method}case")().to_list()
-    drift = [
-        point
-        for point, mapped in zip(points, native, strict=True)
-        if getattr(point, method)() != mapped
-    ]
-    return "[" + "".join(f"\\x{{{ord(point):X}}}" for point in drift) + "]" if drift else None
+    if method not in CASE_DRIFT:
+
+        def native(points: Sequence[str]) -> list[str]:
+            return getattr(pl.Series(points).str, f"to_{method}case")().to_list()
+
+        drifted = drift(getattr(str, method), native)
+        CASE_DRIFT[method] = char_class(drifted) if drifted else None
+    return CASE_DRIFT[method]
 
 
 def recase(value: pl.Expr, method: str) -> pl.Expr | Lowered[pl.Expr]:
@@ -42,22 +41,22 @@ def upper(value: pl.Expr) -> pl.Expr | Lowered[pl.Expr]:
 
 @RULES(".strip", Kind.STR)
 def strip(a: pl.Expr) -> pl.Expr:
-    return a.str.strip_chars(WHITESPACE)
+    return a.str.strip_chars(whitespace())
 
 
 @RULES(".lstrip", Kind.STR)
 def lstrip(a: pl.Expr) -> pl.Expr:
-    return a.str.strip_chars_start(WHITESPACE)
+    return a.str.strip_chars_start(whitespace())
 
 
 @RULES(".rstrip", Kind.STR)
 def rstrip(a: pl.Expr) -> pl.Expr:
-    return a.str.strip_chars_end(WHITESPACE)
+    return a.str.strip_chars_end(whitespace())
 
 
 @RULES(".split", Kind.STR)
 def split_words(a: pl.Expr) -> pl.Expr:
-    return a.str.extract_all(WORDS)
+    return a.str.extract_all(word())
 
 
 @RULES(".split", Kind.STR, Kind.STR)
@@ -77,15 +76,19 @@ def find(a: pl.Expr, b: pl.Expr) -> pl.Expr:
 RULES(".find", Kind.STR, Kind.STR)(find)
 
 
+def reverse(text: pl.Expr) -> pl.Expr:
+    return text.str.split("").list.reverse().list.join("")
+
+
 @RULES(".rfind", Kind.STR, Kind.STR)
-def rfind(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    reversed_find = find(a.str.reverse(), b.str.reverse())
-    return pl.when(reversed_find < 0).then(-1).otherwise(length(a) - length(b) - reversed_find)
+def rfind(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
+    position = find(reverse(text), reverse(pattern))
+    return pl.when(position < 0).then(-1).otherwise(length(text) - length(pattern) - position)
 
 
 @RULES(".count", Kind.STR, Kind.STR)
-def count(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return a.str.count_matches(b, literal=True).cast(pl.Int64)
+def count(text: pl.Expr, pattern: pl.Expr) -> pl.Expr:
+    return broadcast(text).str.count_matches(pattern, literal=True).cast(pl.Int64)
 
 
 @RULES(".startswith", Kind.STR, Kind.STR)
@@ -99,14 +102,17 @@ def endswith(a: pl.Expr, b: pl.Expr) -> pl.Expr:
 
 
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
-def replace(a: pl.Expr, b: pl.Expr, c: pl.Expr) -> pl.Expr:
-    padded = pl.concat_list([pl.lit(""), a.str.split(""), pl.lit("")])
-    return pl.when(b == "").then(padded.list.join(c)).otherwise(a.str.split(b).list.join(c))
+def replace(text: pl.Expr, old: pl.Expr, new: pl.Expr) -> pl.Expr:
+    text = broadcast(text)
+    padded = pl.concat_list([pl.lit(""), text.str.split(""), pl.lit("")])
+    return (
+        pl.when(old == "").then(padded.list.join(new)).otherwise(text.str.split(old).list.join(new))
+    )
 
 
 @RULES(".join", Kind.STR, Kind.LIST)
-def join(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return b.list.join(a)
+def join(separator: pl.Expr, words: pl.Expr) -> pl.Expr:
+    return broadcast(words).list.join(separator)
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
