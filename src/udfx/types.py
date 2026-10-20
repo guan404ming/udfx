@@ -77,6 +77,8 @@ def fits(value: object, type: Type) -> bool:
     match type.kind:
         case Kind.INT:
             return isinstance(value, int) and INT64_MIN <= value <= INT64_MAX
+        case Kind.FLOAT:
+            return isinstance(value, int | float)
         case Kind.LIST if type.item is not None and isinstance(value, list):
             item = type.item
             return all(fits(element, item) for element in cast("list[object]", value))

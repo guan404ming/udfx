@@ -186,6 +186,10 @@ def safe_division(a, b):
         return 0
 
 
+def compound(principal, rate):
+    return principal * (1.0 + rate) ** 12.0
+
+
 def nested_helper(s):
     def clean(part):
         return part.strip().lower()
@@ -253,6 +257,7 @@ CASES = [
     Case("float_division", float_division, {"a": FLOAT, "b": FLOAT}, "native"),
     Case("float_arithmetic", float_arithmetic, {"a": FLOAT, "b": FLOAT}, "native"),
     Case("safe_division", safe_division, {"a": INT, "b": INT}, "native"),
+    Case("compound", compound, {"principal": FLOAT, "rate": FLOAT}, "native"),
     Case("nested_helper", nested_helper, {"s": STR.or_none()}, "native"),
     Case("conditional_expression", conditional_expression, {"n": INT}, "native"),
     Case("loop_total", loop_total, {"s": STR}, "fallback"),
