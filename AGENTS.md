@@ -77,6 +77,10 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `dtypes.py`: `Type` to engine type.
 - `core.py`, `strings.py`, `numbers.py`: rules, one file per op family.
 - Internal column names contain a space, for example `"udfx exact"`, so they cannot collide with user columns.
+- Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
+- `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception. Spark carries the type through the error message.
+- `case_sensitive()` says whether the engine keeps column name case. `build` rejects schemas whose names collide when it is false.
+- Arrow backends implement the fallback UDF with `arrow.fallback`; only batch unpacking and UDF registration stay in the backend.
 
 ## Tests
 
