@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Sequence
+from functools import cache, reduce
 from typing import cast
 
 from pyspark.sql import Column, functions
@@ -9,33 +11,33 @@ from udfx.backends.base import Lowered
 from udfx.backends.spark.backend import SparkBackend
 from udfx.backends.spark.rules import RULES
 from udfx.ir import Col
-from udfx.semantics.text import char_class, drift, whitespace, word
+from udfx.semantics import text
+from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
 from udfx.types import STR, Kind
 
-CASE_DRIFT: dict[str, str | None] = {}
-
 INT32_MAX = 2**31 - 1
+POINT = "udfx point"
 
 
-def case_drift(method: str) -> str | None:
-    if method not in CASE_DRIFT:
-        backend = SparkBackend()
-        point = Col("point", STR)
+@cache
+def case_drift(method: str) -> CaseDrift:
+    backend = SparkBackend()
 
-        def native(points: Sequence[str]) -> list[str]:
-            expr = getattr(functions, method)(backend.column(point))
-            rows = [(item,) for item in points]
-            return cast("list[str]", backend.evaluate([expr], {point.name: STR}, rows)[0])
+    def native(samples: Sequence[str]) -> list[str]:
+        expr = getattr(functions, method)(backend.column(Col(POINT, STR)))
+        (recased,) = backend.evaluate([expr], {POINT: STR}, [(sample,) for sample in samples])
+        return cast("list[str]", recased)
 
-        drifted = drift(getattr(str, method), native)
-        CASE_DRIFT[method] = char_class(drifted) if drifted else None
-    return CASE_DRIFT[method]
+    return text.case_drift(method, native)
 
 
 def recase(value: Column, method: str) -> Column | Lowered[Column]:
     expr = getattr(functions, method)(value)
-    drift = case_drift(method)
-    return expr if drift is None else Lowered(expr, ~value.rlike(drift))
+    found = case_drift(method)
+    guards = [~value.rlike(found.alone)] if found.alone else []
+    if found.nearby:
+        guards.append(~(value.contains(SIGMA) & value.rlike(found.nearby)))
+    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
 
 
 def length(a: Column) -> Column:

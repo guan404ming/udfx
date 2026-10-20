@@ -158,21 +158,23 @@ Not supported. For these, `compile` returns `ok == False`:
 
 ## Backends
 
-| Backend | Status | Extra |
-|---|---|---|
-| Polars | Available | `udfx[polars]` |
-| DuckDB | In progress | `udfx[duckdb]` |
-| DataFusion | In progress | `udfx[datafusion]` |
-| Spark | In progress | `udfx[spark]` |
+| Backend | Expression type | Extra | Notes |
+|---|---|---|---|
+| Polars | `polars.Expr` | `udfx[polars]` | Use a `LazyFrame` to get common subexpression elimination |
+| DuckDB | `duckdb.Expression` | `udfx[duckdb]` | One connection per backend; the fallback is a vectorized Python function on it |
+| DataFusion | `datafusion.Expr` | `udfx[datafusion]` | One `SessionContext` per backend |
+| Spark | `pyspark.sql.Column` | `udfx[spark]` | `pyspark.sql.functions` only, so classic Spark and Spark Connect both work |
 
-`udfx.backends.installed()` returns the backends whose engine imports. The extras exist in
-`pyproject.toml`, but the in-progress backend packages are not on `main` yet.
+`udfx.backends.installed()` returns the backends whose engine imports. Every op has a rule on every
+backend, and `tests/conformance` checks each pair against Python.
 [CONTRIBUTING.md](CONTRIBUTING.md) describes the backend contract.
 
 ## Guarantees
 
 For every row, the result equals what the Python function returns, or the row runs the Python
-function itself. That includes rows where the function raises. Conformance tests enforce this:
+function itself. That includes rows where the function raises: the query fails with the same
+exception type. On Spark the function runs in a worker process, so the type travels in the error
+message and only builtin exception types are restored. Conformance tests enforce this:
 - [`tests/conformance/test_ops.py`](tests/conformance/test_ops.py) checks every registered op
   against its Python `reference` on every installed backend, with Hypothesis. It checks values on
   rows where the guard holds. It checks that predicted faults match the exception Python raises.

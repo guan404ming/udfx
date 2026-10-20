@@ -6,11 +6,10 @@ from functools import cache
 from typing import ClassVar, cast
 
 import pyarrow as pa
-from pyspark.errors import PythonException
 from pyspark.sql import Column, SparkSession, functions
-from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructField, StructType
 
+from udfx.backends import arrow
 from udfx.backends.base import Backend, Row, RuleSet
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
@@ -20,6 +19,7 @@ from udfx.types import Kind, Type
 
 EXACT = "udfx exact"
 OUT = "udfx out"
+RAISED = "udfx raised "
 
 
 @cache
@@ -34,15 +34,23 @@ def session() -> SparkSession:
     )
 
 
-def raised(error: PythonException) -> type[Exception] | None:
-    name = str(error).rstrip().rpartition("\n")[2].partition(":")[0]
-    kind = getattr(builtins, name, None)
-    return kind if isinstance(kind, type) and issubclass(kind, Exception) else None
-
-
 class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
+
+    def patch(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+        try:
+            return program.run(rows)
+        except Exception as error:
+            raise RuntimeError(f"{RAISED}{type(error).__name__}: {error}") from error
+
+    def unwrap(self, error: BaseException) -> BaseException:
+        _, found, detail = str(error).partition(RAISED)
+        name, _, message = detail.partition(": ")
+        kind = getattr(builtins, name.strip(), None)
+        if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
+            return error
+        return kind(message.partition("\n")[0])
 
     def column(self, node: Col) -> Column:
         session()
@@ -67,15 +75,16 @@ class SparkBackend(Backend[Column]):
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
         names = list(program.schema)
         result = dtype(program.result)
-        arrow_type = to_arrow_type(result)
+        arrow_type = arrow.dtype(program.result)
 
-        def run(batch: pa.Array) -> pa.Array:  # pyright: ignore[reportUnknownParameterType]
-            flags = batch.field(EXACT).to_pylist()
-            columns = [batch.field(name).to_pylist() for name in names]
+        def patch(batch: pa.Array) -> pa.Array:
+            packed = cast(pa.StructArray, batch)
+            flags = packed.field(EXACT).to_pylist()
+            columns = [packed.field(name).to_pylist() for name in names]
             pending = [index for index, flag in enumerate(flags) if not flag]
             rows = ([column[index] for column in columns] for index in pending)
             values: list[object] = [None] * len(flags)
-            for index, value in zip(pending, program.run(rows), strict=True):
+            for index, value in zip(pending, self.patch(program, rows), strict=True):
                 values[index] = value
             return pa.array(values, type=arrow_type)
 
@@ -84,7 +93,7 @@ class SparkBackend(Backend[Column]):
             flag.alias(EXACT),
             *(self.column(Col(name, type)) for name, type in program.schema.items()),
         )
-        slow = functions.arrow_udf(run, result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        slow = functions.arrow_udf(patch, result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
         return functions.when(flag, native).otherwise(slow)
 
     def evaluate(
@@ -96,9 +105,6 @@ class SparkBackend(Backend[Column]):
         query = frame.select(*(expr.alias(name) for expr, name in zip(exprs, names, strict=True)))
         try:
             collected = query.collect()
-        except PythonException as error:
-            kind = raised(error)
-            if kind is None:
-                raise
-            raise kind(str(error)) from error
+        except Exception as wrapped:
+            raise self.unwrap(wrapped) from None
         return [[row[index] for row in collected] for index in range(len(exprs))]
