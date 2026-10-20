@@ -3,9 +3,15 @@ from __future__ import annotations
 import operator
 
 from udfx.ops.registry import Op, register
-from udfx.types import BOOL, FLOAT, INT, STR, Type
+from udfx.types import BOOL, FLOAT, INT, STR, Type, list_of
 
-NULLABLE_SCALARS: tuple[Type, ...] = (STR.or_none(), INT.or_none(), FLOAT.or_none(), BOOL.or_none())
+NULLABLE_TYPES: tuple[Type, ...] = (
+    STR.or_none(),
+    INT.or_none(),
+    FLOAT.or_none(),
+    BOOL.or_none(),
+    list_of(STR.or_none()).or_none(),
+)
 
 
 def is_none(value: object) -> bool:
@@ -16,6 +22,6 @@ register(Op("not", (BOOL,), BOOL, operator.not_))
 register(Op("and", (BOOL, BOOL), BOOL, operator.and_))
 register(Op("or", (BOOL, BOOL), BOOL, operator.or_))
 
-for scalar in NULLABLE_SCALARS:
-    register(Op("is_none", (scalar,), BOOL, is_none))
-    register(Op("bool", (scalar,), BOOL, bool))
+for nullable in NULLABLE_TYPES:
+    register(Op("is_none", (nullable,), BOOL, is_none))
+    register(Op("bool", (nullable,), BOOL, bool))

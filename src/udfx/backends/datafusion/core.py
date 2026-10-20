@@ -21,7 +21,7 @@ def or_(left: Expr, right: Expr) -> Expr:
     return left | right
 
 
-for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
+for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(Expr.is_null)
 
 
@@ -43,3 +43,8 @@ def float_truth(value: Expr) -> Expr:
 @RULES("bool", Kind.BOOL)
 def bool_truth(value: Expr) -> Expr:
     return functions.coalesce(value, lit(False))
+
+
+@RULES("bool", Kind.LIST)
+def list_truth(value: Expr) -> Expr:
+    return value.is_not_null() & (functions.cardinality(value) > lit(0))

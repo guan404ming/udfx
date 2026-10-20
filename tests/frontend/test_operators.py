@@ -7,13 +7,14 @@ from udfx.frontend import trace
 from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
-from udfx.types import BOOL, INT, STR
+from udfx.types import BOOL, INT, STR, list_of
 
 POLARS = PolarsBackend()
 
 S = Col("s", STR.or_none())
 A = Col("a", INT)
 B = Col("b", INT)
+ITEMS = {"item": STR, "items": list_of(STR).or_none()}
 
 
 def upper_and(s: str | None) -> str | None:
@@ -54,6 +55,14 @@ def lacks_colons(s: str) -> bool:
 
 def same(s: str | None, t: str | None) -> bool:
     return s is t
+
+
+def member(item: str, items: list[str] | None) -> bool:
+    return item in items  # pyright: ignore[reportOperatorIssue]
+
+
+def nonempty(item: str, items: list[str] | None) -> bool:
+    return bool(items)
 
 
 def test_and_returns_operand() -> None:
@@ -98,6 +107,20 @@ def test_contains_puts_container_first() -> None:
     found = apply("__contains__", s, Lit("::", STR))
     assert trace(has_colons, {"s": STR}).value == found
     assert trace(lacks_colons, {"s": STR}).value == apply("not", found)
+
+
+def test_optional_list_tests_for_none() -> None:
+    item, items = Col("item", STR), Col("items", ITEMS["items"])
+    program = trace(member, ITEMS)
+    assert program.value == apply("__contains__", items, item)
+    assert program.fault == apply("is_none", items)
+    assert trace(nonempty, ITEMS).value == apply("bool", items)
+
+
+@given(batches(ITEMS))
+def test_optional_list_matches_python(rows: list[tuple[object, ...]]) -> None:
+    assert check_function(member, ITEMS, POLARS, rows) == []
+    assert check_function(nonempty, ITEMS, POLARS, rows) == []
 
 
 def test_identity_check_is_unsupported() -> None:

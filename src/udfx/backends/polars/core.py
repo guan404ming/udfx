@@ -21,7 +21,7 @@ def or_(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left | right
 
 
-for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
+for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(pl.Expr.is_null)
 
 
@@ -43,3 +43,8 @@ def float_truth(value: pl.Expr) -> pl.Expr:
 @RULES("bool", Kind.BOOL)
 def bool_truth(value: pl.Expr) -> pl.Expr:
     return value.fill_null(False)
+
+
+@RULES("bool", Kind.LIST)
+def list_truth(value: pl.Expr) -> pl.Expr:
+    return value.is_not_null() & (value.list.len() > 0)

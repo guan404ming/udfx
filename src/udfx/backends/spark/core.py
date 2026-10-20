@@ -21,7 +21,7 @@ def or_(left: Column, right: Column) -> Column:
     return left | right
 
 
-for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
+for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(Column.isNull)
 
 
@@ -43,3 +43,8 @@ def float_truth(value: Column) -> Column:
 @RULES("bool", Kind.BOOL)
 def bool_truth(value: Column) -> Column:
     return functions.coalesce(value, functions.lit(False))
+
+
+@RULES("bool", Kind.LIST)
+def list_truth(value: Column) -> Column:
+    return value.isNotNull() & (functions.size(value) > 0)

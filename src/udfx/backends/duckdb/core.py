@@ -22,7 +22,7 @@ def or_(left: Expression, right: Expression) -> Expression:
     return left | right
 
 
-for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL):
+for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(Expression.isnull)
 
 
@@ -44,3 +44,8 @@ def float_truth(value: Expression) -> Expression:
 @RULES("bool", Kind.BOOL)
 def bool_truth(value: Expression) -> Expression:
     return duckdb.CoalesceOperator(value, constant(False))
+
+
+@RULES("bool", Kind.LIST)
+def list_truth(value: Expression) -> Expression:
+    return value.isnotnull() & (length(value) > constant(0))
