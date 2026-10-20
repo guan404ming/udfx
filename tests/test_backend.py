@@ -7,7 +7,6 @@ from typing import Any
 import duckdb
 import pytest
 from conftest import backend_params, spark_session
-from pyspark.sql import functions
 
 from udfx import compile
 from udfx.backends.base import Backend
@@ -139,10 +138,14 @@ def test_duckdb_explicit_connection_registers_each_program_once() -> None:
 
 @pytest.mark.xdist_group("spark")
 def test_spark_keeps_the_session_config() -> None:
-    expr = functions.lit("x").cast("bigint")
-    assert SparkBackend(spark_session(ansi=False)).evaluate([expr], {}, [()]) == [[None]]
+    ansi_off, ansi_on = (
+        SparkBackend(spark_session(ansi=False)),
+        SparkBackend(spark_session(ansi=True)),
+    )
+    expr = ansi_on.literal(Lit("x", STR)).cast("bigint")
+    assert ansi_off.evaluate([expr], {}, [()]) == [[None]]
     with pytest.raises(Exception, match="CAST_INVALID_INPUT"):
-        SparkBackend(spark_session(ansi=True)).evaluate([expr], {}, [()])
+        ansi_on.evaluate([expr], {}, [()])
 
 
 def test_backends_construct_without_an_engine() -> None:
