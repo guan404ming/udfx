@@ -25,7 +25,13 @@ class DataFusionBackend(Backend[Expr]):
     rules: ClassVar[RuleSet[Expr]] = RULES
 
     def __init__(self, context: SessionContext | None = None) -> None:
-        self.context = context or SessionContext()
+        self._context = context
+
+    @property
+    def context(self) -> SessionContext:
+        if self._context is None:
+            self._context = SessionContext()
+        return self._context
 
     def column(self, node: Col) -> Expr:
         return col(node.name)

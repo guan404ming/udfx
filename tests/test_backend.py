@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +18,7 @@ from udfx.program import Program
 from udfx.testing import check_function
 from udfx.types import INT, INT64_MAX, INT64_MIN, STR
 
+NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 
 
@@ -112,3 +116,22 @@ def test_spark_keeps_the_session_config() -> None:
     assert SparkBackend(spark_session(ansi=False)).evaluate([expr], {}, [()]) == [[None]]
     with pytest.raises(Exception, match="CAST_INVALID_INPUT"):
         SparkBackend(spark_session(ansi=True)).evaluate([expr], {}, [()])
+
+
+def test_backends_construct_without_an_engine() -> None:
+    script = "from udfx.backends import installed; print(*(item.name for item in installed()))"
+    result = subprocess.run(
+        [sys.executable, "-c", script], env=NO_JAVA, capture_output=True, text=True, check=True
+    )
+    assert sorted(result.stdout.split()) == ["datafusion", "duckdb", "polars", "spark"]
+
+
+def test_spark_column_without_java_needs_a_session() -> None:
+    script = (
+        "from udfx.backends.spark import SparkBackend; from udfx.ir import Col; "
+        "from udfx.types import INT; SparkBackend().column(Col('x', INT))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], env=NO_JAVA, capture_output=True, text=True, check=False
+    )
+    assert "RuntimeError: udfx needs a SparkSession to build Spark columns" in result.stderr
