@@ -11,9 +11,6 @@ from udfx.types import BOOL, FLOAT, INT, STR, Kind, Type
 
 PAIRS: tuple[tuple[Type, Type], ...] = ((INT, INT), (FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT))
 
-REPR_FIXED_MIN = 1e-4
-REPR_FIXED_MAX = 1e16
-
 
 def zero(node: Node) -> Node:
     return lit(0 if node.type.kind is Kind.INT else 0.0)

@@ -7,8 +7,12 @@ from duckdb import Expression
 from udfx.backends.base import Lowered
 from udfx.backends.duckdb.numbers import either_nan, float_int, floating
 from udfx.backends.duckdb.rules import RULES, constant, function, when
-from udfx.ops.math import EXACT_POWERS_OF_TEN, HALF_INTEGER_LIMIT, ROUND_OVERFLOW_LIMIT
-from udfx.semantics.numbers import Binary
+from udfx.semantics.numbers import (
+    EXACT_POWERS_OF_TEN,
+    HALF_INTEGER_LIMIT,
+    ROUND_OVERFLOW_LIMIT,
+    Binary,
+)
 from udfx.types import Kind
 
 

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import operator
 from collections.abc import Sequence
-from functools import cache, reduce
+from functools import cache
 from typing import cast
 
 import pyspark
@@ -10,10 +9,18 @@ from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.spark.backend import SparkBackend
-from udfx.backends.spark.rules import RULES
+from udfx.backends.spark.rules import RULES, when
 from udfx.ir import Col
 from udfx.semantics import text
-from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
+from udfx.semantics.text import (
+    SIGMA,
+    CaseDrift,
+    SlicePrimitives,
+    case_guard,
+    slice_bounds,
+    whitespace,
+    word,
+)
 from udfx.types import STR, Kind
 
 INT32_MAX = 2**31 - 1
@@ -34,11 +41,8 @@ def case_drift(method: str) -> CaseDrift:
 
 def recase(value: Column, method: str) -> RuleResult[Column]:
     expr = getattr(functions, method)(value)
-    found = case_drift(method)
-    guards = [~value.rlike(found.alone)] if found.alone else []
-    if found.nearby:
-        guards.append(~(value.contains(SIGMA) & value.rlike(found.nearby)))
-    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
+    exact = case_guard(case_drift(method), value.rlike, value.contains(SIGMA))
+    return expr if exact is None else Lowered(expr, exact)
 
 
 def length(text: Column) -> Column:
@@ -192,16 +196,15 @@ def list_getitem(container: Column, index: Column) -> Column:
     return functions.try_element_at(container, position(index))
 
 
+SLICE = SlicePrimitives(
+    literal=functions.lit,
+    when=when,
+    coalesce=functions.coalesce,
+    clip=lambda value, lower, upper: functions.least(functions.greatest(value, lower), upper),
+)
+
+
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 def str_slice(text: Column, start: Column, stop: Column) -> Column:
-    size = length(text)
-
-    def clamp(bound: Column, default: Column) -> Column:
-        bound = functions.coalesce(bound, default)
-        shifted = functions.when(bound < 0, bound + size).otherwise(bound)
-        return functions.least(functions.greatest(shifted, functions.lit(0)), size)
-
-    begin = clamp(start, functions.lit(0))
-    end = clamp(stop, size)
-    span = functions.greatest(end - begin, functions.lit(0))
-    return functions.substring(text, (begin + 1).cast("int"), span.cast("int"))
+    bounds = slice_bounds(SLICE, length(text), start, stop)
+    return functions.substring(text, (bounds.start + 1).cast("int"), bounds.length.cast("int"))

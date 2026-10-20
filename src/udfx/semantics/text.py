@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import operator
 import os
 import sys
 import unicodedata
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
-from functools import cache
+from functools import cache, reduce
 from pathlib import Path
+from typing import Any, NamedTuple
 
 SIGMA = "\u03a3"
 SIGMA_CONTEXTS = (f"A{SIGMA}{{}}b", f"A{{}}{SIGMA}", f"{{}}{SIGMA}", f"A{SIGMA}{{}}")
@@ -58,6 +60,15 @@ class CaseDrift:
     nearby: str | None
 
 
+def case_guard(
+    found: CaseDrift, contains_class: Callable[[str], Any], contains_sigma: Any
+) -> Any | None:
+    guards = [~contains_class(found.alone)] if found.alone else []
+    if found.nearby:
+        guards.append(~(contains_sigma & contains_class(found.nearby)))
+    return reduce(operator.and_, guards) if guards else None
+
+
 def case_drift(method: str, native: Recase, engine: str) -> CaseDrift:
     python = (
         f"python {sys.version_info[0]}.{sys.version_info[1]} unicode {unicodedata.unidata_version}"
@@ -103,3 +114,31 @@ def write_cache(key: str, value: dict[str, str | None]) -> None:
 
 def has_border(pattern: str) -> bool:
     return any(pattern[:size] == pattern[-size:] for size in range(1, len(pattern)))
+
+
+@dataclass(frozen=True)
+class SlicePrimitives:
+    literal: Callable[[int], Any]
+    when: Callable[[Any, Any, Any], Any]
+    coalesce: Callable[[Any, Any], Any]
+    clip: Callable[[Any, Any, Any], Any]
+
+
+class SliceBounds(NamedTuple):
+    start: Any
+    length: Any
+
+
+def slice_bounds(
+    primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any
+) -> SliceBounds:
+    zero = primitives.literal(0)
+
+    def clamp(bound: Any, default: Any) -> Any:
+        bound = primitives.coalesce(bound, default)
+        shifted = primitives.when(bound < zero, bound + text_length, bound)
+        return primitives.clip(shifted, zero, text_length)
+
+    begin = clamp(start, zero)
+    end = clamp(stop, text_length)
+    return SliceBounds(begin, primitives.clip(end - begin, zero, text_length))

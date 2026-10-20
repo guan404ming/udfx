@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 FLOAT_INT_MAX = 2**53
+EXACT_POWERS_OF_TEN = 22
+HALF_INTEGER_LIMIT = 2.0**52
+ROUND_OVERFLOW_LIMIT = 1e308
+REPR_FIXED_MIN = 1e-4
+REPR_FIXED_MAX = 1e16
 
 Binary = Callable[[Any, Any], Any]
 

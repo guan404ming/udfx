@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import operator
 from collections.abc import Sequence
-from functools import cache, reduce
+from functools import cache
 
 import duckdb
 import pyarrow as pa
@@ -19,7 +18,15 @@ from udfx.backends.duckdb.rules import (
     when,
 )
 from udfx.semantics import text
-from udfx.semantics.text import SIGMA, CaseDrift, whitespace, word
+from udfx.semantics.text import (
+    SIGMA,
+    CaseDrift,
+    SlicePrimitives,
+    case_guard,
+    slice_bounds,
+    whitespace,
+    word,
+)
 from udfx.types import Kind
 
 POINT = "udfx point"
@@ -39,12 +46,13 @@ def case_drift(method: str) -> CaseDrift:
 
 def recase(value: Expression, method: str) -> RuleResult[Expression]:
     expr = function(method, value)
-    found = case_drift(method)
-    guards = [~function("regexp_matches", value, constant(found.alone))] if found.alone else []
-    if found.nearby:
-        sigma = function("contains", value, constant(SIGMA))
-        guards.append(~(sigma & function("regexp_matches", value, constant(found.nearby))))
-    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
+    sigma = function("contains", value, constant(SIGMA))
+    exact = case_guard(
+        case_drift(method),
+        lambda pattern: function("regexp_matches", value, constant(pattern)),
+        sigma,
+    )
+    return expr if exact is None else Lowered(expr, exact)
 
 
 @RULES(".lower", Kind.STR)
@@ -176,16 +184,15 @@ def list_getitem(container: Expression, index: Expression) -> Expression:
     return function("list_extract", container, position(container, index))
 
 
+SLICE = SlicePrimitives(
+    literal=constant,
+    when=when,
+    coalesce=duckdb.CoalesceOperator,
+    clip=lambda value, lower, upper: function("least", function("greatest", value, lower), upper),
+)
+
+
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 def str_slice(text: Expression, start: Expression, stop: Expression) -> Expression:
-    size = length(text)
-
-    def clamp(bound: Expression, default: Expression) -> Expression:
-        bound = duckdb.CoalesceOperator(bound, default)
-        shifted = when(bound < constant(0), bound + size, bound)
-        return function("least", function("greatest", shifted, constant(0)), size)
-
-    begin = clamp(start, constant(0))
-    end = clamp(stop, size)
-    width = function("greatest", end - begin, constant(0))
-    return function("substring", text, begin + constant(1), width)
+    bounds = slice_bounds(SLICE, length(text), start, stop)
+    return function("substring", text, bounds.start + constant(1), bounds.length)

@@ -7,8 +7,12 @@ from datafusion import Expr, functions, lit
 from udfx.backends.base import Lowered
 from udfx.backends.datafusion.numbers import INFINITY, finite, float_int, floating, is_nan
 from udfx.backends.datafusion.rules import RULES
-from udfx.ops.math import EXACT_POWERS_OF_TEN, HALF_INTEGER_LIMIT, ROUND_OVERFLOW_LIMIT
-from udfx.semantics.numbers import Binary
+from udfx.semantics.numbers import (
+    EXACT_POWERS_OF_TEN,
+    HALF_INTEGER_LIMIT,
+    ROUND_OVERFLOW_LIMIT,
+    Binary,
+)
 from udfx.types import Kind
 
 

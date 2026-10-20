@@ -1,15 +1,24 @@
 from __future__ import annotations
 
-import operator
 from collections.abc import Sequence
-from functools import cache, reduce
+from functools import cache
 
 import polars as pl
 
 from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
 from udfx.semantics import text
-from udfx.semantics.text import CLUSTER_JOINERS, SIGMA, CaseDrift, has_border, whitespace, word
+from udfx.semantics.text import (
+    CLUSTER_JOINERS,
+    SIGMA,
+    CaseDrift,
+    SlicePrimitives,
+    case_guard,
+    has_border,
+    slice_bounds,
+    whitespace,
+    word,
+)
 from udfx.types import Kind
 
 
@@ -23,11 +32,9 @@ def case_drift(method: str) -> CaseDrift:
 
 def recase(value: pl.Expr, method: str) -> RuleResult[pl.Expr]:
     expr = getattr(value.str, f"to_{method}case")()
-    found = case_drift(method)
-    guards = [~value.str.contains(found.alone)] if found.alone else []
-    if found.nearby:
-        guards.append(~(value.str.contains(SIGMA, literal=True) & value.str.contains(found.nearby)))
-    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
+    sigma = value.str.contains(SIGMA, literal=True)
+    exact = case_guard(case_drift(method), value.str.contains, sigma)
+    return expr if exact is None else Lowered(expr, exact)
 
 
 @RULES(".lower", Kind.STR)
@@ -175,14 +182,15 @@ def list_getitem(container: pl.Expr, index: pl.Expr) -> pl.Expr:
     return container.list.get(index.clip(-(2**62), None), null_on_oob=True)
 
 
+SLICE = SlicePrimitives(
+    literal=pl.lit,
+    when=when,
+    coalesce=pl.Expr.fill_null,
+    clip=pl.Expr.clip,
+)
+
+
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 def str_slice(text: pl.Expr, start: pl.Expr, stop: pl.Expr) -> pl.Expr:
-    size = length(text)
-
-    def clamp(bound: pl.Expr, default: pl.Expr) -> pl.Expr:
-        bound = bound.fill_null(default)
-        return pl.when(bound < 0).then(bound + size).otherwise(bound).clip(0, size)
-
-    begin = clamp(start, pl.lit(0))
-    end = clamp(stop, size)
-    return text.str.slice(begin, (end - begin).clip(lower_bound=0))
+    bounds = slice_bounds(SLICE, length(text), start, stop)
+    return text.str.slice(bounds.start, bounds.length)

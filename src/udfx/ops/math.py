@@ -9,10 +9,6 @@ from udfx.ops.numbers import not_finite, zero
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.types import BOOL, FLOAT, INT, STR, Kind
 
-EXACT_POWERS_OF_TEN = 22
-HALF_INTEGER_LIMIT = 2.0**52
-ROUND_OVERFLOW_LIMIT = 1e308
-
 
 def overflows(function: Callable[..., object]) -> Callable[..., bool]:
     def check(*args: object) -> bool:

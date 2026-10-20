@@ -7,7 +7,6 @@ from datafusion import Expr, functions, lit
 
 from udfx.backends.base import BinaryRule, Lowered
 from udfx.backends.datafusion.rules import RULES, length, not_distinct, when
-from udfx.ops.numbers import REPR_FIXED_MAX, REPR_FIXED_MIN
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -19,6 +18,8 @@ from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
     FLOAT_INT_MAX,
+    REPR_FIXED_MAX,
+    REPR_FIXED_MIN,
     Binary,
     FloatPrimitives,
     float_divmod,

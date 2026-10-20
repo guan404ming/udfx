@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import operator
 from collections.abc import Sequence
-from functools import cache, reduce
+from functools import cache
 from typing import cast
 
 import datafusion
@@ -11,9 +10,17 @@ from datafusion import Expr, col, functions, lit
 
 from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.datafusion.backend import DataFusionBackend
-from udfx.backends.datafusion.rules import RULES, length, not_distinct, typed
+from udfx.backends.datafusion.rules import RULES, length, not_distinct, typed, when
 from udfx.semantics import text
-from udfx.semantics.text import SIGMA, CaseDrift, char_class, whitespace
+from udfx.semantics.text import (
+    SIGMA,
+    CaseDrift,
+    SlicePrimitives,
+    case_guard,
+    char_class,
+    slice_bounds,
+    whitespace,
+)
 from udfx.types import STR, Kind
 
 POINT = "udfx point"
@@ -33,12 +40,11 @@ def case_drift(method: str) -> CaseDrift:
 
 def recase(value: Expr, method: str) -> RuleResult[Expr]:
     expr = getattr(functions, method)(value)
-    found = case_drift(method)
-    guards = [~functions.regexp_like(value, lit(found.alone))] if found.alone else []
-    if found.nearby:
-        sigma = functions.strpos(value, lit(SIGMA)) > lit(0)
-        guards.append(~(sigma & functions.regexp_like(value, lit(found.nearby))))
-    return Lowered(expr, reduce(operator.and_, guards)) if guards else expr
+    sigma = functions.strpos(value, lit(SIGMA)) > lit(0)
+    exact = case_guard(
+        case_drift(method), lambda pattern: functions.regexp_like(value, lit(pattern)), sigma
+    )
+    return expr if exact is None else Lowered(expr, exact)
 
 
 @RULES(".lower", Kind.STR)
@@ -186,15 +192,15 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
     return functions.array_element(container, position)
 
 
+SLICE = SlicePrimitives(
+    literal=lit,
+    when=when,
+    coalesce=functions.coalesce,
+    clip=lambda value, lower, upper: functions.greatest(functions.least(value, upper), lower),
+)
+
+
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 def str_slice(text: Expr, start: Expr, stop: Expr) -> Expr:
-    total = length(text)
-
-    def clamp(bound: Expr, default: Expr) -> Expr:
-        bound = functions.coalesce(bound, default)
-        shifted = functions.when(bound < lit(0), bound + total).otherwise(bound)
-        return functions.greatest(functions.least(shifted, total), lit(0))
-
-    begin = clamp(start, lit(0))
-    end = clamp(stop, total)
-    return functions.substr(text, begin + lit(1), functions.greatest(end - begin, lit(0)))
+    bounds = slice_bounds(SLICE, length(text), start, stop)
+    return functions.substr(text, bounds.start + lit(1), bounds.length)

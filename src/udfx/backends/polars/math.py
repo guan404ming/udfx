@@ -7,8 +7,12 @@ import polars as pl
 from udfx.backends.base import Lowered
 from udfx.backends.polars.numbers import either_nan, float_int
 from udfx.backends.polars.rules import RULES, broadcast
-from udfx.ops.math import EXACT_POWERS_OF_TEN, HALF_INTEGER_LIMIT, ROUND_OVERFLOW_LIMIT
-from udfx.semantics.numbers import Binary
+from udfx.semantics.numbers import (
+    EXACT_POWERS_OF_TEN,
+    HALF_INTEGER_LIMIT,
+    ROUND_OVERFLOW_LIMIT,
+    Binary,
+)
 from udfx.types import Kind
 
 
