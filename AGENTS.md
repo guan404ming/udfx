@@ -33,7 +33,7 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 - Reuse existing helpers. Do not copy logic between files.
 - Use full words in names. Use no abbreviations except `op`, `ir`, `expr`.
 - Keep Python semantics in `ops/` and backend semantics in `backends/`.
-- Python 3.12 bytecode only.
+- Handlers target CPython 3.12 bytecode. `frontend/opcodes/` normalizes 3.13 and 3.14 streams to that set. Add a new version there, never in a handler.
 
 ## Op contract
 

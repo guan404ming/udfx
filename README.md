@@ -3,7 +3,7 @@
 Compile Python UDFs into native dataframe expressions without changing their results.
 
 [![CI](https://github.com/guan404ming/udfx/actions/workflows/ci.yml/badge.svg)](https://github.com/guan404ming/udfx/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](pyproject.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 ## Why
@@ -183,7 +183,7 @@ function itself. That includes rows where the function raises. Conformance tests
 
 Known limits:
 - The check is testing, not proof. A gap that no generated value hits can ship.
-- Python 3.12 bytecode only. `pyproject.toml` pins `>=3.12,<3.13`.
+- CPython 3.12, 3.13, and 3.14. The handlers read 3.12 bytecode; [`frontend/opcodes/`](src/udfx/frontend/opcodes) rewrites newer streams to that set.
 - Globals, closure cells, and constant containers are read once at compile time. Fallback rows
   call the live function, so the two paths can disagree if those values change later.
 - udfx does not check data against the schema. Declare nullable columns with `.or_none()`.
