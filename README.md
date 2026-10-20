@@ -113,11 +113,11 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 
 | Function | Python UDF | udfx eager | udfx lazy |
 |---|---|---|---|
-| `euro` (dict lookup, `float`, `/`, `try`) | 0.80 s | 29x | 110x |
-| `lower_strip` | 0.58 s | 7.5x | 33x |
-| `split_part` (`split("::")[2]`, `try`) | 0.70 s | 6.2x | 35x |
-| `year` (`int(date[:4])`, `try`) | 0.73 s | 1.3x | 7.5x |
-| `safe_division` | 0.57 s | 123x | 255x |
+| `euro` (dict lookup, `float`, `/`, `try`) | 0.79 s | 164x | 168x |
+| `lower_strip` | 0.57 s | 7.6x | 34x |
+| `split_part` (`split("::")[2]`, `try`) | 0.70 s | 6.4x | 40x |
+| `year` (`int(date[:4])`, `try`) | 0.73 s | 1.6x | 8.8x |
+| `safe_division` | 0.56 s | 140x | 302x |
 
 ## Contributing
 
