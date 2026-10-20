@@ -4,7 +4,7 @@ import operator
 
 import polars as pl
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, register_float_variants
 from udfx.backends.polars.conversions import float_int
 from udfx.backends.polars.numbers import cast_float64, either_nan
 from udfx.backends.polars.rules import RULES, broadcast
@@ -26,7 +26,7 @@ def identity(value: pl.Expr) -> pl.Expr:
 
 
 def power(base: pl.Expr, exponent: pl.Expr) -> Lowered[pl.Expr]:
-    base, exponent = cast_float64(broadcast(base)), cast_float64(broadcast(exponent))
+    base, exponent = broadcast(base), broadcast(exponent)
     complex_result = (base < 0.0) & (exponent.floor() != exponent)
     return Lowered(base.pow(exponent), (pl.len() > 1) & ~complex_result)
 
@@ -46,9 +46,7 @@ def register_extremum(name: str, compare: Binary) -> None:
 register_extremum("max", operator.gt)
 register_extremum("min", operator.lt)
 
-RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
-RULES("__pow__", Kind.INT, Kind.FLOAT)(power)
-RULES("__pow__", Kind.FLOAT, Kind.INT)(power)
+register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(pl.Expr.sqrt)
 RULES("math.sqrt", Kind.INT)(lambda value: cast_float64(value).sqrt())
 RULES("math.ceil", Kind.FLOAT)(lambda value: float_int(value.ceil()))

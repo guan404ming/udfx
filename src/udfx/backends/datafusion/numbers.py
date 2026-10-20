@@ -5,7 +5,13 @@ import operator
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.base import BinaryRule, Lowered
+from udfx.backends.base import (
+    BinaryRule,
+    Lowered,
+    register_comparison,
+    register_float_variants,
+    register_widened_variants,
+)
 from udfx.backends.datafusion.rules import RULES, null_safe_equal, when
 from udfx.semantics.numbers import (
     ARITHMETIC,
@@ -41,12 +47,6 @@ def overflow_checked(operation: Binary) -> BinaryRule[Expr]:
     return rule
 
 
-def register_float_variants(name: str, rule: BinaryRule[Expr]) -> None:
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(cast_float64(left), right))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, cast_float64(right)))
-
-
 def is_nan(value: Expr) -> Expr:
     return functions.coalesce(functions.isnan(value), lit(False))
 
@@ -55,25 +55,12 @@ def either_nan(left: Expr, right: Expr) -> Expr:
     return is_nan(left) | is_nan(right)
 
 
-def register_widened_variants(name: str, rule: Binary) -> None:
-    def exact(value: Expr) -> Expr:
-        return value.is_null() | within_exact_float_range(value)
-
-    RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
-    )
-    RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, cast_float64(right)), exact(right))
-    )
+def widened_exact(value: Expr) -> Expr:
+    return value.is_null() | within_exact_float_range(value)
 
 
-def register_comparison(name: str, compare: Binary) -> None:
-    def ordered(left: Expr, right: Expr) -> Expr:
-        return compare(left, right) & ~either_nan(left, right)
-
-    RULES(name, Kind.INT, Kind.INT)(compare)
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    register_widened_variants(name, ordered)
+def ordered(left: Expr, right: Expr) -> Expr:
+    return ~either_nan(left, right)
 
 
 PRIMITIVES = FloatPrimitives(
@@ -105,14 +92,14 @@ def finite(value: Expr) -> Expr:
 
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
-    register_float_variants(_name, _operation)
+    register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(_name, _compare)
+    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
 
-register_float_variants("__truediv__", operator.truediv)
-register_float_variants("__floordiv__", float_floordiv)
-register_float_variants("__mod__", float_mod)
+register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
+register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
+register_float_variants(RULES, "__mod__", float_mod, cast_float64)
 
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
@@ -155,8 +142,8 @@ def float_ne(left: Expr, right: Expr) -> Expr:
     return ~float_eq(left, right)
 
 
-register_widened_variants("__eq__", float_eq)
-register_widened_variants("__ne__", float_ne)
+register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
 
 
 @RULES("__neg__", Kind.INT)

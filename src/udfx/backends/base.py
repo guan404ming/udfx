@@ -10,6 +10,7 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
 from udfx.ops.registry import OpKey
 from udfx.program import Program
+from udfx.semantics.numbers import Binary
 from udfx.types import Kind, Type, fits
 
 RESERVED = "udfx "
@@ -57,6 +58,47 @@ class RuleSet[E]:
 
     def keys(self) -> frozenset[OpKey]:
         return frozenset(self._rules)
+
+
+def register_float_variants[E](
+    rules: RuleSet[E], name: str, rule: BinaryRule[E], to_float: Callable[[E], E]
+) -> None:
+    rules(name, Kind.FLOAT, Kind.FLOAT)(rule)
+    rules(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(to_float(left), right))
+    rules(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, to_float(right)))
+
+
+def register_widened_variants[E](
+    rules: RuleSet[E],
+    name: str,
+    rule: Binary,
+    *,
+    to_float: Callable[[E], E],
+    exact: Callable[[E], E],
+) -> None:
+    rules(name, Kind.INT, Kind.FLOAT)(
+        lambda left, right: Lowered(rule(to_float(left), right), exact(left))
+    )
+    rules(name, Kind.FLOAT, Kind.INT)(
+        lambda left, right: Lowered(rule(left, to_float(right)), exact(right))
+    )
+
+
+def register_comparison[E](
+    rules: RuleSet[E],
+    name: str,
+    compare: Callable[[E, E], E],
+    ordered: Callable[[E, E], E],
+    *,
+    to_float: Callable[[E], E],
+    exact: Callable[[E], E],
+) -> None:
+    def float_compare(left: E, right: E) -> E:
+        return cast("Any", compare(left, right)) & ordered(left, right)
+
+    rules(name, Kind.INT, Kind.INT)(compare)
+    rules(name, Kind.FLOAT, Kind.FLOAT)(float_compare)
+    register_widened_variants(rules, name, float_compare, to_float=to_float, exact=exact)
 
 
 class Backend[E](ABC):

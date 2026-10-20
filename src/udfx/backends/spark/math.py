@@ -4,7 +4,7 @@ import operator
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, register_float_variants
 from udfx.backends.spark.conversions import float_int
 from udfx.backends.spark.numbers import cast_float64, either_nan, floor
 from udfx.backends.spark.rules import RULES
@@ -42,9 +42,7 @@ def register_extremum(name: str, compare: Binary) -> None:
 register_extremum("max", operator.gt)
 register_extremum("min", operator.lt)
 
-RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
-RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda base, exponent: power(cast_float64(base), exponent))
-RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda base, exponent: power(base, cast_float64(exponent)))
+register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(functions.sqrt)
 RULES("math.sqrt", Kind.INT)(lambda value: functions.sqrt(cast_float64(value)))
 RULES("math.ceil", Kind.FLOAT)(lambda value: float_int(-floor(-value)))

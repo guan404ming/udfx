@@ -4,7 +4,7 @@ import operator
 
 from duckdb import Expression
 
-from udfx.backends.base import Lowered
+from udfx.backends.base import Lowered, register_float_variants
 from udfx.backends.duckdb.conversions import float_int
 from udfx.backends.duckdb.numbers import cast_float64, either_nan
 from udfx.backends.duckdb.rules import RULES, constant, function, when
@@ -49,9 +49,7 @@ def register_extremum(name: str, compare: Binary) -> None:
 register_extremum("max", operator.gt)
 register_extremum("min", operator.lt)
 
-RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
-RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda base, exponent: power(cast_float64(base), exponent))
-RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda base, exponent: power(base, cast_float64(exponent)))
+register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(root)
 RULES("math.sqrt", Kind.INT)(lambda value: root(cast_float64(value)))
 RULES("math.ceil", Kind.FLOAT)(lambda value: float_int(function("ceil", value)))

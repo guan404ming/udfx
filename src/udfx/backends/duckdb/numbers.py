@@ -5,7 +5,13 @@ import operator
 import duckdb
 from duckdb import Expression, sqltypes
 
-from udfx.backends.base import BinaryRule, Lowered
+from udfx.backends.base import (
+    BinaryRule,
+    Lowered,
+    register_comparison,
+    register_float_variants,
+    register_widened_variants,
+)
 from udfx.backends.duckdb.rules import (
     NAN,
     NULL,
@@ -52,12 +58,6 @@ def overflow_checked(operation: Binary) -> BinaryRule[Expression]:
     return rule
 
 
-def register_float_variants(name: str, rule: BinaryRule[Expression]) -> None:
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(cast_float64(left), right))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, cast_float64(right)))
-
-
 def is_nan(value: Expression) -> Expression:
     return function("isnan", value)
 
@@ -68,25 +68,12 @@ def either_nan(left: Expression, right: Expression) -> Expression:
     )
 
 
-def register_widened_variants(name: str, rule: Binary) -> None:
-    def exact(value: Expression) -> Expression:
-        return value.isnull() | within_exact_float_range(value)
-
-    RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
-    )
-    RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, cast_float64(right)), exact(right))
-    )
+def widened_exact(value: Expression) -> Expression:
+    return value.isnull() | within_exact_float_range(value)
 
 
-def register_comparison(name: str, compare: Binary) -> None:
-    def ordered(left: Expression, right: Expression) -> Expression:
-        return compare(left, right) & ~is_nan(left) & ~is_nan(right)
-
-    RULES(name, Kind.INT, Kind.INT)(compare)
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    register_widened_variants(name, ordered)
+def ordered(left: Expression, right: Expression) -> Expression:
+    return ~is_nan(left) & ~is_nan(right)
 
 
 def try_truncate_int64(value: Expression) -> Expression:
@@ -140,14 +127,14 @@ def int_divmod(left: Expression, right: Expression) -> tuple[Expression, Express
 
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
-    register_float_variants(_name, _operation)
+    register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(_name, _compare)
+    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
 
-register_float_variants("__truediv__", operator.truediv)
-register_float_variants("__floordiv__", float_floordiv)
-register_float_variants("__mod__", float_mod)
+register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
+register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
+register_float_variants(RULES, "__mod__", float_mod, cast_float64)
 
 RULES("__eq__", Kind.INT, Kind.INT)(null_safe_equal)
 RULES("__neg__", Kind.FLOAT)(Expression.__neg__)
@@ -195,8 +182,8 @@ def float_ne(left: Expression, right: Expression) -> Expression:
     return ~null_safe_equal(left, right) | either_nan(left, right)
 
 
-register_widened_variants("__eq__", float_eq)
-register_widened_variants("__ne__", float_ne)
+register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
 
 
 @RULES("__neg__", Kind.INT)

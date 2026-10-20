@@ -4,13 +4,18 @@ from collections.abc import Callable
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import BinaryRule, Lowered
+from udfx.backends.base import (
+    BinaryRule,
+    Lowered,
+    register_comparison,
+    register_float_variants,
+    register_widened_variants,
+)
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
     FLOAT_INT_MAX,
-    Binary,
     FloatPrimitives,
     float_divmod,
 )
@@ -41,35 +46,16 @@ def overflow_checked(operation: Callable[[Column, Column], Column]) -> BinaryRul
     return rule
 
 
-def register_float_variants(name: str, rule: BinaryRule[Column]) -> None:
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    RULES(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(cast_float64(left), right))
-    RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, cast_float64(right)))
-
-
 def either_nan(left: Column, right: Column) -> Column:
     return functions.isnan(left) | functions.isnan(right)
 
 
-def register_widened_variants(name: str, rule: Binary) -> None:
-    def exact(value: Column) -> Column:
-        return value.isNull() | within_exact_float_range(value)
-
-    RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(cast_float64(left), right), exact(left))
-    )
-    RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, cast_float64(right)), exact(right))
-    )
+def widened_exact(value: Column) -> Column:
+    return value.isNull() | within_exact_float_range(value)
 
 
-def register_comparison(name: str, compare: Binary) -> None:
-    def ordered(left: Column, right: Column) -> Column:
-        return compare(left, right) & ~either_nan(left, right)
-
-    RULES(name, Kind.INT, Kind.INT)(compare)
-    RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    register_widened_variants(name, ordered)
+def ordered(left: Column, right: Column) -> Column:
+    return ~either_nan(left, right)
 
 
 def nonzero(divisor: Column, undefined: Column) -> Column:
@@ -112,14 +98,14 @@ def float_isinf(value: Column) -> Column:
 
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT)(overflow_checked(CHECKED[_name]))
-    register_float_variants(_name, _operation)
+    register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
-    register_comparison(_name, _compare)
+    register_comparison(RULES, _name, _compare, ordered, to_float=cast_float64, exact=widened_exact)
 
-register_float_variants("__truediv__", functions.try_divide)
-register_float_variants("__floordiv__", float_floordiv)
-register_float_variants("__mod__", float_mod)
+register_float_variants(RULES, "__truediv__", functions.try_divide, cast_float64)
+register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
+register_float_variants(RULES, "__mod__", float_mod, cast_float64)
 
 RULES("__eq__", Kind.INT, Kind.INT)(Column.eqNullSafe)
 RULES("__mod__", Kind.INT, Kind.INT)(lambda left, right: int_divmod(left, right)[1])
@@ -157,8 +143,8 @@ def float_ne(left: Column, right: Column) -> Column:
     return ~left.eqNullSafe(right) | either_nan(left, right)
 
 
-register_widened_variants("__eq__", float_eq)
-register_widened_variants("__ne__", float_ne)
+register_widened_variants(RULES, "__eq__", float_eq, to_float=cast_float64, exact=widened_exact)
+register_widened_variants(RULES, "__ne__", float_ne, to_float=cast_float64, exact=widened_exact)
 
 
 @RULES("__neg__", Kind.INT)
