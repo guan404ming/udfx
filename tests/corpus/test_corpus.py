@@ -9,7 +9,7 @@ from hypothesis import strategies as st
 
 from udfx import compile
 from udfx.backends.base import Backend
-from udfx.testing import batches, check_function
+from udfx.testing import batches, check_translation
 
 from .cases import CASES, Case
 
@@ -28,6 +28,6 @@ def test_case(case: Case, backend: Backend[Any]) -> None:
     @given(st.data())
     def check(data: st.DataObject) -> None:
         rows = data.draw(batches(case.schema))
-        assert check_function(case.function, case.schema, backend, rows) == []
+        assert check_translation(translation, backend, rows) == []
 
     check()

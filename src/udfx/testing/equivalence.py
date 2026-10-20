@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from udfx.api import compile
+from udfx.api import Translation, compile
 from udfx.backends.base import Backend, Row
 from udfx.errors import Unsupported
 from udfx.ir import TRUE, Call, Col, Lit
@@ -26,12 +26,20 @@ def check_function(
     backend: Backend[Any],
     rows: Sequence[Row],
 ) -> list[Mismatch]:
-    translation = compile(function, schema, backend)
-    if translation.unsupported is not None:
-        raise translation.unsupported
-    expr = translation.expr
-    result = translation.program.result if translation.program else None
-    expected = [run(function, row, result) for row in rows]
+    return check_translation(compile(function, schema, backend), backend, rows)
+
+
+def check_translation(
+    translation: Translation[Any], backend: Backend[Any], rows: Sequence[Row]
+) -> list[Mismatch]:
+    if translation.unsupported is not None or translation.program is None:
+        raise translation.unsupported or Unsupported("translation has no program")
+    function, schema, expr = (
+        translation.program.function,
+        translation.program.schema,
+        translation.expr,
+    )
+    expected = [run(function, row, translation.program.result) for row in rows]
     returned = [
         (row, out) for row, out in zip(rows, expected, strict=True) if isinstance(out, Returned)
     ]
