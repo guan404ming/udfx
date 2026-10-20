@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import builtins
 from collections.abc import Iterable, Mapping, Sequence
-from functools import cache
 from typing import ClassVar, cast
 
 import pyarrow as pa
@@ -22,21 +21,20 @@ OUT = "udfx out"
 RAISED = "udfx raised "
 
 
-@cache
-def session() -> SparkSession:
-    return (
-        SparkSession.builder.master("local[1]")
-        .config("spark.sql.shuffle.partitions", "1")
-        .config("spark.ui.enabled", "false")
-        .config("spark.sql.ansi.enabled", "true")
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .getOrCreate()
-    )
-
-
 class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
+
+    def __init__(self, session: SparkSession | None = None) -> None:
+        self._session = session
+
+    def session(self) -> SparkSession:
+        if self._session is not None:
+            return self._session
+        try:
+            return SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
+        except Exception as error:
+            raise RuntimeError("udfx needs a SparkSession to build Spark columns") from error
 
     def patch(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
@@ -53,11 +51,11 @@ class SparkBackend(Backend[Column]):
         return kind(message.partition("\n")[0])
 
     def column(self, node: Col) -> Column:
-        session()
+        self.session()
         return functions.col(node.name)
 
     def literal(self, node: Lit) -> Column:
-        session()
+        self.session()
         value = node.value
         if node.type.kind is Kind.LIST:
             value = list(cast("Iterable[object]", value))
@@ -96,7 +94,7 @@ class SparkBackend(Backend[Column]):
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]:
         struct = StructType([StructField(name, dtype(type)) for name, type in schema.items()])
-        frame = session().createDataFrame(list(rows), struct)
+        frame = self.session().createDataFrame(list(rows), struct)
         names = [f"{OUT} {index}" for index in range(len(exprs))]
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         collected = self.execute(lambda: frame.select(*aliased).collect())

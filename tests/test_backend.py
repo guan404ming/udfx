@@ -3,11 +3,13 @@ from typing import Any
 
 import duckdb
 import pytest
-from conftest import backend_params
+from conftest import backend_params, spark_session
+from pyspark.sql import functions
 
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.duckdb import DuckDBBackend
+from udfx.backends.spark import SparkBackend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function
@@ -102,3 +104,11 @@ def test_duckdb_explicit_connection_registers_each_program_once() -> None:
     again = backend.build(translation.program)
     for expr in (translation.expr, again):
         assert connection.sql(YEARS).select(expr).fetchall() == [(2025,), (1235,)]
+
+
+@pytest.mark.xdist_group("spark")
+def test_spark_keeps_the_session_config() -> None:
+    expr = functions.lit("x").cast("bigint")
+    assert SparkBackend(spark_session(ansi=False)).evaluate([expr], {}, [()]) == [[None]]
+    with pytest.raises(Exception, match="CAST_INVALID_INPUT"):
+        SparkBackend(spark_session(ansi=True)).evaluate([expr], {}, [()])

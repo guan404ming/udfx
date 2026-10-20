@@ -1,21 +1,17 @@
 from typing import Any
 
 import pytest
-from conftest import backend_params
+from conftest import backend_params, backends
 from hypothesis import given
 from hypothesis import strategies as st
 
-from udfx.backends import installed
 from udfx.backends.base import Backend
 from udfx.ops import Op, all_ops
 from udfx.testing import batches, check_op, values
 
-BACKENDS: tuple[Backend[Any], ...] = installed()
 CASES = [
-    pytest.param(
-        backend, op, id=f"{backend.name}-{op}", marks=pytest.mark.xdist_group(backend.name)
-    )
-    for backend in BACKENDS
+    pytest.param(backend, op, id=f"{label}-{op}", marks=pytest.mark.xdist_group(backend.name))
+    for label, backend in backends()
     for op in all_ops()
 ]
 
