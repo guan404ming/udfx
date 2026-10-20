@@ -23,12 +23,22 @@ def smaller(a: str, b: str) -> str:
     return min(a, b)
 
 
+def nearest(x: float) -> int:
+    return round(x)
+
+
+def cents(x: float, digits: int) -> float:
+    return round(x, digits)
+
+
 CASES: list[tuple[Callable[..., object], dict[str, Type], str]] = [
     (power, {"a": FLOAT, "b": FLOAT}, "__pow__"),
     (power, {"a": INT, "b": FLOAT}, "__pow__"),
     (power, {"a": FLOAT, "b": INT}, "__pow__"),
     (larger, {"a": INT, "b": INT}, "max"),
     (smaller, {"a": STR, "b": STR}, "min"),
+    (nearest, {"x": FLOAT}, "round"),
+    (cents, {"x": FLOAT, "digits": INT}, "round"),
 ]
 
 

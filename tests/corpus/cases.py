@@ -190,6 +190,12 @@ def compound(principal, rate):
     return principal * (1.0 + rate) ** 12.0
 
 
+def nearest_whole(x):
+    if math.isnan(x) or math.isinf(x):
+        return 0
+    return round(x)
+
+
 def clamp(x):
     return max(0.0, min(x, 1.0))
 
@@ -262,6 +268,7 @@ CASES = [
     Case("float_arithmetic", float_arithmetic, {"a": FLOAT, "b": FLOAT}, "native"),
     Case("safe_division", safe_division, {"a": INT, "b": INT}, "native"),
     Case("compound", compound, {"principal": FLOAT, "rate": FLOAT}, "native"),
+    Case("nearest_whole", nearest_whole, {"x": FLOAT}, "native"),
     Case("clamp", clamp, {"x": FLOAT}, "native"),
     Case("nested_helper", nested_helper, {"s": STR.or_none()}, "native"),
     Case("conditional_expression", conditional_expression, {"n": INT}, "native"),
