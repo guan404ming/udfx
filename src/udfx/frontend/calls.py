@@ -4,8 +4,9 @@ from collections.abc import Sequence
 
 from udfx.errors import Unsupported
 from udfx.frontend.values import Item, Method, Opaque, Value
-from udfx.ir import Call, Node
+from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, apply, resolve
+from udfx.types import BOOL
 
 
 def node_of(item: Item) -> Node:
@@ -45,3 +46,31 @@ def call(callee: Item, args: Sequence[Item]) -> tuple[Call, list[Fault]]:
             return invoke(qualified(obj), nodes, TypeError)
         case _:
             raise Unsupported(f"cannot call {callee}")
+
+
+def truth(item: Item) -> tuple[Node, list[Fault]]:
+    match item:
+        case Value(node=Lit(value=value)):
+            return lit(bool(value)), []
+        case Value(node=node) if node.type == BOOL:
+            return node, []
+        case Value(node=node):
+            return invoke("bool", [node], TypeError)
+        case Opaque(obj=obj):
+            return lit(bool(obj)), []
+        case _:
+            raise Unsupported(f"truth of {item}")
+
+
+def none_test(item: Item) -> Node:
+    match item:
+        case Value(node=Lit(value=value)):
+            return lit(value is None)
+        case Value(node=node) if node.type.nullable:
+            return apply("is_none", node)
+        case Value():
+            return FALSE
+        case Opaque(obj=obj):
+            return lit(obj is None)
+        case _:
+            raise Unsupported(f"None test of {item}")

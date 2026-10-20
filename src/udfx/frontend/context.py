@@ -35,6 +35,8 @@ class Context:
     def target(self, inst: dis.Instruction) -> int:
         if inst.opcode not in JUMPS or not isinstance(inst.argval, int):
             raise Unsupported(f"{inst.opname} has no jump target")
+        if inst.argval <= inst.offset:
+            raise Unsupported("loops")
         return self.index_of[inst.argval]
 
     def constant(self, value: object) -> Item:
