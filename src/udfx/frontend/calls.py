@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.logic import fold
 from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, Op, all_ops, apply, resolve
-from udfx.types import BOOL, Kind
+from udfx.types import BOOL, Kind, type_of
 
 CALLABLES: tuple[tuple[object, str], ...] = (
     (abs, "abs"),
@@ -56,9 +57,20 @@ def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
     op = resolve(name, kinds)
     if op is None:
         candidates = [op for op in all_ops() if op.name == name and accepts(op, kinds)]
-        if len(candidates) != 1:
+        others = {kind for kind in kinds if kind is not Kind.NONE}
+        preferred = [
+            op
+            for op in candidates
+            if all(
+                parameter.kind in others
+                for kind, parameter in zip(kinds, op.parameters, strict=True)
+                if kind is Kind.NONE
+            )
+        ]
+        chosen = preferred or candidates
+        if not chosen:
             raise Unsupported(f"no op {name}({', '.join(kinds)})")
-        (op,) = candidates
+        op = chosen[0]
     typed = [
         Lit(None, parameter) if argument.type.kind is Kind.NONE else argument
         for argument, parameter in zip(arguments, op.parameters, strict=True)
@@ -83,13 +95,29 @@ def invoke(
     return (call if isinstance(folded, Lit) else folded), faults
 
 
+def evaluated(nodes: Sequence[Node], run: Callable[[list[object]], object]) -> Lit | None:
+    values = [node.value for node in nodes if isinstance(node, Lit)]
+    if len(values) < len(nodes):
+        return None
+    try:
+        value = run(values)
+    except Exception:
+        return None
+    type = type_of(value)
+    return None if type is None else Lit(value, type)
+
+
 def call(callee: Item, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
     nodes = [node_of(argument) for argument in arguments]
     match callee:
         case Method(name=name):
-            return invoke(f".{name}", nodes, AttributeError)
+            folded = evaluated(nodes, lambda values: getattr(values[0], name)(*values[1:]))
+            return (folded, []) if folded is not None else invoke(f".{name}", nodes, AttributeError)
         case Opaque(value=value):
-            return invoke(op_name(value), nodes, TypeError)
+            name = op_name(value)
+            function = cast("Callable[..., object]", value)
+            folded = evaluated(nodes, lambda values: function(*values))
+            return (folded, []) if folded is not None else invoke(name, nodes, TypeError)
         case _:
             raise Unsupported(f"cannot call {describe(callee)}")
 

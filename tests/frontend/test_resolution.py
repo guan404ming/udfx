@@ -1,5 +1,6 @@
 import functools
 import math
+from collections.abc import Callable
 from types import FunctionType
 
 import pytest
@@ -12,7 +13,7 @@ from udfx.frontend.calls import invoke
 from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
-from udfx.types import FLOAT, INT, STR
+from udfx.types import FLOAT, INT, STR, Type
 
 POLARS = PolarsBackend()
 
@@ -147,6 +148,44 @@ def test_none_argument_takes_the_nullable_parameter() -> None:
     program = trace(split_on_none, {"s": STR})
     assert program.value == apply(".split", Col("s", STR), Lit(None, STR.or_none()))
     assert program.fault == FALSE
+
+
+def none_text() -> str:
+    return str(None)
+
+
+def equals_none(x: float | None) -> bool:
+    return x == None  # noqa: E711
+
+
+def differs_from_none(x: float | None) -> bool:
+    return x != None  # noqa: E711
+
+
+def test_literal_call_runs_python() -> None:
+    assert trace(none_text, {}).value == Lit("None", STR)
+
+
+@pytest.mark.parametrize("type", [INT.or_none(), FLOAT.or_none(), STR.or_none()], ids=str)
+@pytest.mark.parametrize(
+    ("function", "name"), [(equals_none, "__eq__"), (differs_from_none, "__ne__")]
+)
+def test_none_operand_takes_the_other_operand_kind(
+    function: Callable[[float | None], bool], name: str, type: Type
+) -> None:
+    x = Col("x", type)
+    program = trace(function, {"x": type})
+    assert program.value == apply(name, x, Lit(None, type))
+    assert program.fault == FALSE
+
+
+@given(batches({"x": INT.or_none(), "s": STR}))
+def test_none_operands_match_python(rows: list[tuple[object, ...]]) -> None:
+    schema = {"x": INT.or_none()}
+    single = [row[:1] for row in rows]
+    assert check_function(equals_none, schema, POLARS, single) == []
+    assert check_function(differs_from_none, schema, POLARS, single) == []
+    assert check_function(split_on_none, {"s": STR}, POLARS, [row[1:] for row in rows]) == []
 
 
 def is_zero(x: float) -> bool:
