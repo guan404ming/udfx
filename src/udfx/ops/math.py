@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import math
 import operator
 from collections.abc import Callable
 
 from udfx.ir import Node, lit
-from udfx.ops.numbers import not_finite
+from udfx.ops.numbers import not_finite, zero
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.types import BOOL, FLOAT, INT, STR, Kind
 
@@ -44,6 +45,10 @@ def round_faults(value: Node, digits: Node) -> tuple[Fault, ...]:
     return (Fault(OverflowError, apply("round_overflows", value, digits)),)
 
 
+def below_zero(x: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("__lt__", x, zero(x))),)
+
+
 register(Op("pow_overflows", (FLOAT, FLOAT), BOOL, overflows(operator.pow)))
 register(Op("round_overflows", (FLOAT, INT), BOOL, overflows(round)))
 
@@ -54,5 +59,12 @@ for scalar in (INT, FLOAT, STR):
     register(Op("max", (scalar, scalar), scalar, max))
     register(Op("min", (scalar, scalar), scalar, min))
 
+for scalar in (INT, FLOAT):
+    register(Op("math.sqrt", (scalar,), FLOAT, math.sqrt, below_zero))
+
 register(Op("round", (FLOAT,), INT, round, not_finite))
 register(Op("round", (FLOAT, INT), FLOAT, round, round_faults))
+register(Op("math.ceil", (FLOAT,), INT, math.ceil, not_finite))
+register(Op("math.floor", (FLOAT,), INT, math.floor, not_finite))
+register(Op("math.ceil", (INT,), INT, math.ceil))
+register(Op("math.floor", (INT,), INT, math.floor))

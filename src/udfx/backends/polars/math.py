@@ -20,6 +20,10 @@ def half_even(value: pl.Expr) -> pl.Expr:
     return value.round(0, mode="half_to_even")
 
 
+def identity(value: pl.Expr) -> pl.Expr:
+    return value
+
+
 def power(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
     base, exponent = real(broadcast(a)), real(broadcast(b))
     complex_result = (base < 0.0) & (exponent.floor() != exponent)
@@ -44,6 +48,12 @@ pick("min", operator.lt)
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
 RULES("__pow__", Kind.INT, Kind.FLOAT)(power)
 RULES("__pow__", Kind.FLOAT, Kind.INT)(power)
+RULES("math.sqrt", Kind.FLOAT)(pl.Expr.sqrt)
+RULES("math.sqrt", Kind.INT)(lambda a: real(a).sqrt())
+RULES("math.ceil", Kind.FLOAT)(lambda a: float_int(a.ceil()))
+RULES("math.floor", Kind.FLOAT)(lambda a: float_int(a.floor()))
+RULES("math.ceil", Kind.INT)(identity)
+RULES("math.floor", Kind.INT)(identity)
 RULES("round", Kind.FLOAT)(lambda a: float_int(half_even(a)))
 
 

@@ -16,9 +16,17 @@ def half_even(value: Expression) -> Expression:
     return function("round_even", value, constant(0))
 
 
+def identity(value: Expression) -> Expression:
+    return value
+
+
 def power(a: Expression, b: Expression) -> Lowered[Expression]:
     complex_result = (a < constant(0.0)) & (function("floor", b) != b)
     return Lowered(function("pow", a, b), ~complex_result)
+
+
+def root(a: Expression) -> Expression:
+    return function("sqrt", when(a < constant(0.0), constant(0.0), a))
 
 
 def pick(name: str, compare: Binary) -> None:
@@ -39,6 +47,12 @@ pick("min", operator.lt)
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
 RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda a, b: power(floating(a), b))
 RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda a, b: power(a, floating(b)))
+RULES("math.sqrt", Kind.FLOAT)(root)
+RULES("math.sqrt", Kind.INT)(lambda a: root(floating(a)))
+RULES("math.ceil", Kind.FLOAT)(lambda a: float_int(function("ceil", a)))
+RULES("math.floor", Kind.FLOAT)(lambda a: float_int(function("floor", a)))
+RULES("math.ceil", Kind.INT)(identity)
+RULES("math.floor", Kind.INT)(identity)
 RULES("round", Kind.FLOAT)(lambda a: float_int(half_even(a)))
 
 

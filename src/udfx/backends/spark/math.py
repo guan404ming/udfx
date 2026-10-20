@@ -16,6 +16,10 @@ def real(value: Column) -> Column:
     return value.cast("double")
 
 
+def identity(value: Column) -> Column:
+    return value
+
+
 def power(a: Column, b: Column) -> Lowered[Column]:
     return Lowered(functions.pow(a, b), functions.lit(False))
 
@@ -38,6 +42,12 @@ pick("min", operator.lt)
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
 RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda a, b: power(real(a), b))
 RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda a, b: power(a, real(b)))
+RULES("math.sqrt", Kind.FLOAT)(functions.sqrt)
+RULES("math.sqrt", Kind.INT)(lambda a: functions.sqrt(real(a)))
+RULES("math.ceil", Kind.FLOAT)(lambda a: float_int(-floor(-a)))
+RULES("math.floor", Kind.FLOAT)(lambda a: float_int(floor(a)))
+RULES("math.ceil", Kind.INT)(identity)
+RULES("math.floor", Kind.INT)(identity)
 RULES("round", Kind.FLOAT)(lambda a: float_int(functions.rint(a)))
 
 

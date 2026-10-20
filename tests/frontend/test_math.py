@@ -1,3 +1,4 @@
+import math
 from collections.abc import Callable
 
 import pytest
@@ -31,6 +32,18 @@ def cents(x: float, digits: int) -> float:
     return round(x, digits)
 
 
+def ceiling(x: float) -> int:
+    return math.ceil(x)
+
+
+def flooring(x: int) -> int:
+    return math.floor(x)
+
+
+def root(x: float) -> float:
+    return math.sqrt(x)
+
+
 CASES: list[tuple[Callable[..., object], dict[str, Type], str]] = [
     (power, {"a": FLOAT, "b": FLOAT}, "__pow__"),
     (power, {"a": INT, "b": FLOAT}, "__pow__"),
@@ -39,6 +52,9 @@ CASES: list[tuple[Callable[..., object], dict[str, Type], str]] = [
     (smaller, {"a": STR, "b": STR}, "min"),
     (nearest, {"x": FLOAT}, "round"),
     (cents, {"x": FLOAT, "digits": INT}, "round"),
+    (ceiling, {"x": FLOAT}, "math.ceil"),
+    (flooring, {"x": INT}, "math.floor"),
+    (root, {"x": FLOAT}, "math.sqrt"),
 ]
 
 

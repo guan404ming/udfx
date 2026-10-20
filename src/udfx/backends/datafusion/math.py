@@ -20,6 +20,10 @@ def half_even(value: Expr) -> Expr:
     return functions.when(up, floored + lit(1.0)).otherwise(floored)
 
 
+def identity(value: Expr) -> Expr:
+    return value
+
+
 def below_zero(value: Expr) -> Expr:
     return (value < lit(0.0)) & ~is_nan(value)
 
@@ -30,6 +34,10 @@ def power(a: Expr, b: Expr) -> Lowered[Expr]:
     value = functions.when(undefined, lit(INFINITY)).otherwise(functions.power(base, b))
     complex_result = below_zero(a) & (functions.floor(b) != b)
     return Lowered(value, ~complex_result)
+
+
+def root(a: Expr) -> Expr:
+    return functions.sqrt(functions.when(below_zero(a), lit(0.0)).otherwise(a))
 
 
 def pick(name: str, compare: Binary) -> None:
@@ -50,6 +58,12 @@ pick("min", operator.lt)
 RULES("__pow__", Kind.FLOAT, Kind.FLOAT)(power)
 RULES("__pow__", Kind.INT, Kind.FLOAT)(lambda a, b: power(floating(a), b))
 RULES("__pow__", Kind.FLOAT, Kind.INT)(lambda a, b: power(a, floating(b)))
+RULES("math.sqrt", Kind.FLOAT)(root)
+RULES("math.sqrt", Kind.INT)(lambda a: root(floating(a)))
+RULES("math.ceil", Kind.FLOAT)(lambda a: float_int(functions.ceil(a)))
+RULES("math.floor", Kind.FLOAT)(lambda a: float_int(functions.floor(a)))
+RULES("math.ceil", Kind.INT)(identity)
+RULES("math.floor", Kind.INT)(identity)
 RULES("round", Kind.FLOAT)(lambda a: float_int(half_even(a)))
 
 
