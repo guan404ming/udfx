@@ -2,7 +2,9 @@ import importlib
 import os
 import subprocess
 import sys
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -258,6 +260,36 @@ def test_duckdb_recompiling_reuses_the_fallback_function() -> None:
     expr = compile(inverse, {"x": INT}, DuckDBBackend(connection)).expr
     with pytest.raises(ZeroDivisionError):
         DuckDBBackend(connection).execute(lambda: connection.sql(ZERO).select(expr).fetchall())
+
+
+def run_years(connection: duckdb.DuckDBPyConnection) -> list[tuple[object, ...]]:
+    expr = compile(year, {"text": STR}, DuckDBBackend(connection)).expr
+    return connection.sql(YEARS).select(expr).fetchall()
+
+
+@pytest.mark.xdist_group("duckdb")
+def test_duckdb_registers_on_each_connection_of_one_database(tmp_path: Path) -> None:
+    same = duckdb.connect()
+    parent = duckdb.connect()
+    path = str(tmp_path / "years.db")
+    pairs = [(same, same), (parent.cursor(), parent), (duckdb.connect(path), duckdb.connect(path))]
+    for first, second in pairs:
+        assert run_years(first) == run_years(second) == [(2025,), (1235,)]
+    assert same.sql(FALLBACKS).fetchall() == [(1,)]
+
+
+@pytest.mark.xdist_group("duckdb")
+def test_duckdb_threads_with_their_own_cursors() -> None:
+    connection = duckdb.connect()
+    barrier = threading.Barrier(8)
+
+    def work(cursor: duckdb.DuckDBPyConnection) -> list[tuple[object, ...]]:
+        barrier.wait()
+        return run_years(cursor)
+
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(work, [connection.cursor() for _ in range(8)]))
+    assert results == [[(2025,), (1235,)]] * 8
 
 
 @pytest.mark.xdist_group("spark")

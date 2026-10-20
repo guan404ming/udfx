@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import math
 import string
+import threading
+import weakref
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from typing import ClassVar, cast
@@ -25,9 +28,17 @@ EXACT = f"{RESERVED}exact"
 ROW = f"{RESERVED}row"
 FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+CONNECTIONS = weakref.WeakKeyDictionary[duckdb.DuckDBPyConnection, int]()
+NUMBERS = itertools.count()
+LOCK = threading.Lock()
 
 
-def fallback_name(program: Program) -> str:
+def connection_number(connection: duckdb.DuckDBPyConnection) -> int:
+    with LOCK:
+        return CONNECTIONS.setdefault(connection, next(NUMBERS))
+
+
+def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> str:
     code = program.function.__code__
     schema = [(name, str(type)) for name, type in program.schema.items()]
     parts = (
@@ -39,7 +50,8 @@ def fallback_name(program: Program) -> str:
         program.value,
         program.fault,
     )
-    return f"{FALLBACK} {hashlib.sha256(repr(parts).encode()).hexdigest()}"
+    digest = hashlib.sha256(repr(parts).encode()).hexdigest()
+    return f"{FALLBACK} {digest} {connection_number(connection)}"
 
 
 class DuckDBBackend(Backend[Expression]):
@@ -68,7 +80,8 @@ class DuckDBBackend(Backend[Expression]):
         return when(condition, then, orelse)
 
     def fallback(self, native: Expression, exact: Expression, program: Program) -> Expression:
-        name = fallback_name(program)
+        connection = self.connection
+        name = fallback_name(program, connection)
         fields = {
             EXACT: sqltypes.BOOLEAN,
             **{field: dtype(type) for field, type in program.schema.items()},
@@ -82,7 +95,7 @@ class DuckDBBackend(Backend[Expression]):
             return arrow.fallback(self, program, batch.field(EXACT), columns, result)
 
         with suppress(duckdb.NotImplementedException):
-            self.connection.create_function(
+            connection.create_function(
                 name,
                 patch,
                 [duckdb.struct_type(fields)],
