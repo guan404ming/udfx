@@ -7,9 +7,16 @@ from collections.abc import Callable
 import polars as pl
 
 from udfx.backends.base import Lowered
-from udfx.backends.polars.rules import RULES
+from udfx.backends.polars.rules import RULES, when
 from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
-from udfx.semantics.numbers import ARITHMETIC, COMPARISONS, FLOAT_INT_MAX, Binary
+from udfx.semantics.numbers import (
+    ARITHMETIC,
+    COMPARISONS,
+    FLOAT_INT_MAX,
+    Binary,
+    FloatPrimitives,
+    float_divmod,
+)
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 Rule = Callable[[pl.Expr, pl.Expr], pl.Expr | Lowered[pl.Expr]]
@@ -63,56 +70,27 @@ def either_nan(a: pl.Expr, b: pl.Expr) -> pl.Expr:
     return a.is_nan().fill_null(False) | b.is_nan().fill_null(False)
 
 
-def signed_zero(b: pl.Expr) -> pl.Expr:
-    return pl.when(b < 0.0).then(-0.0).otherwise(0.0)
-
-
 def truncated_remainder(a: pl.Expr, b: pl.Expr) -> tuple[pl.Expr, pl.Expr]:
     whole_a, whole_b = a.cast(pl.Int64, strict=False), b.cast(pl.Int64, strict=False)
     floored = whole_a % whole_b
-    truncated = (
-        pl.when((floored != 0) & ((a < 0.0) != (b < 0.0)))
-        .then(floored - whole_b)
-        .otherwise(floored)
-    )
+    truncated = when((floored != 0) & ((a < 0.0) != (b < 0.0)), floored - whole_b, floored)
     undefined = ~a.is_finite() | b.is_nan()
     small = a.abs() < b.abs()
     whole = (whole_a.cast(pl.Float64) == a) & (whole_b.cast(pl.Float64) == b)
-    expr = (
-        pl.when(undefined)
-        .then(float("nan"))
-        .when(small)
-        .then(a)
-        .otherwise(truncated.cast(pl.Float64))
-    )
+    expr = when(undefined, pl.lit(float("nan")), when(small, a, truncated.cast(pl.Float64)))
     return expr, undefined | small | whole.fill_null(False)
 
 
-def divmod_(a: pl.Expr, b: pl.Expr) -> tuple[pl.Expr, pl.Expr, pl.Expr]:
-    remainder, exact = truncated_remainder(a, b)
-    quotient = divide(a - remainder, b)
-    adjust = (remainder != 0.0) & ((b < 0.0) != (remainder < 0.0))
-    remainder = (
-        pl.when(remainder == 0.0)
-        .then(signed_zero(b))
-        .when(adjust)
-        .then(remainder + b)
-        .otherwise(remainder)
-    )
-    quotient = pl.when(adjust).then(quotient - 1.0).otherwise(quotient)
-    floored = quotient.floor()
-    snapped = pl.when(quotient - floored > 0.5).then(floored + 1.0).otherwise(floored)
-    quotient = pl.when(quotient != 0.0).then(snapped).otherwise(divide(a, b) * 0.0)
-    return quotient, remainder, exact
+PRIMITIVES = FloatPrimitives(when, pl.Expr.floor, pl.Expr.sign, truncated_remainder)
 
 
 def float_floordiv(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
-    quotient, _, exact = divmod_(a, b)
+    quotient, _, exact = float_divmod(PRIMITIVES, a, dense(b))
     return Lowered(quotient, exact)
 
 
 def float_mod(a: pl.Expr, b: pl.Expr) -> Lowered[pl.Expr]:
-    _, remainder, exact = divmod_(a, b)
+    _, remainder, exact = float_divmod(PRIMITIVES, a, dense(b))
     return Lowered(remainder, exact)
 
 

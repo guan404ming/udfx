@@ -8,9 +8,16 @@ import pyarrow as pa
 from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered
-from udfx.backends.datafusion.rules import RULES, length, not_distinct
+from udfx.backends.datafusion.rules import RULES, length, not_distinct, when
 from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
-from udfx.semantics.numbers import ARITHMETIC, COMPARISONS, FLOAT_INT_MAX, Binary
+from udfx.semantics.numbers import (
+    ARITHMETIC,
+    COMPARISONS,
+    FLOAT_INT_MAX,
+    Binary,
+    FloatPrimitives,
+    float_divmod,
+)
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 Rule = Callable[[Expr, Expr], Expr | Lowered[Expr]]
@@ -62,43 +69,27 @@ def comparison(name: str, compare: Binary) -> None:
     )
 
 
-def signed_zero(sign: Expr) -> Expr:
-    return functions.when(sign < lit(0.0), lit(-0.0)).otherwise(lit(0.0))
+PRIMITIVES = FloatPrimitives(
+    when, functions.floor, functions.signum, lambda left, right: (left % right, None)
+)
 
 
-def float_divmod(a: Expr, b: Expr) -> tuple[Expr, Expr]:
-    remainder = a % b
-    quotient = (a - remainder) / b
-    shift = (remainder != lit(0.0)) & ((b < lit(0.0)) != (remainder < lit(0.0)))
-    quotient = functions.when(shift, quotient - lit(1.0)).otherwise(quotient)
-    remainder = (
-        functions.when(remainder == lit(0.0), signed_zero(b))
-        .when(shift, remainder + b)
-        .otherwise(remainder)
-    )
-    floored = functions.floor(quotient)
-    snapped = functions.when(quotient - floored > lit(0.5), floored + lit(1.0)).otherwise(floored)
-    quotient = functions.when(quotient != lit(0.0), snapped).otherwise((a / b) * lit(0.0))
-    return quotient, remainder
+def float_floordiv(a: Expr, b: Expr) -> Lowered[Expr]:
+    quotient, _, exact = float_divmod(PRIMITIVES, a, b)
+    return Lowered(quotient, exact)
 
 
-def float_floordiv(a: Expr, b: Expr) -> Expr:
-    return float_divmod(a, b)[0]
-
-
-def float_mod(a: Expr, b: Expr) -> Expr:
-    return float_divmod(a, b)[1]
+def float_mod(a: Expr, b: Expr) -> Lowered[Expr]:
+    _, remainder, exact = float_divmod(PRIMITIVES, a, b)
+    return Lowered(remainder, exact)
 
 
 def int_divmod(a: Expr, b: Expr) -> tuple[Expr, Expr]:
     unsafe = (b == lit(0)) | ((a == lit(INT64_MIN)) & (b == lit(-1)))
-    divisor = functions.when(unsafe, lit(1)).otherwise(b)
+    divisor = when(unsafe, lit(1), b)
     quotient, remainder = a / divisor, a % divisor
     shift = (remainder != lit(0)) & ((remainder < lit(0)) != (divisor < lit(0)))
-    return (
-        functions.when(shift, quotient - lit(1)).otherwise(quotient),
-        functions.when(shift, remainder + divisor).otherwise(remainder),
-    )
+    return when(shift, quotient - lit(1), quotient), when(shift, remainder + divisor, remainder)
 
 
 def is_ascii(a: Expr) -> Expr:
@@ -175,7 +166,7 @@ def float_neg(a: Expr) -> Expr:
 @RULES("abs", Kind.INT)
 def int_abs(a: Expr) -> Lowered[Expr]:
     small = a != lit(INT64_MIN)
-    return Lowered(functions.abs(functions.when(small, a).otherwise(lit(0))), small)
+    return Lowered(functions.abs(when(small, a, lit(0))), small)
 
 
 @RULES("abs", Kind.FLOAT)

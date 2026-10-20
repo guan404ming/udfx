@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import operator
 import sys
 from collections.abc import Callable
 
@@ -18,7 +19,14 @@ from udfx.backends.duckdb.rules import (
     when,
 )
 from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
-from udfx.semantics.numbers import ARITHMETIC, COMPARISONS, FLOAT_INT_MAX, Binary
+from udfx.semantics.numbers import (
+    ARITHMETIC,
+    COMPARISONS,
+    FLOAT_INT_MAX,
+    Binary,
+    FloatPrimitives,
+    float_divmod,
+)
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 Rule = Callable[[Expression, Expression], Expression | Lowered[Expression]]
@@ -80,14 +88,6 @@ def comparison(name: str, compare: Binary) -> None:
     )
 
 
-def divide(a: Expression, b: Expression) -> Expression:
-    return a / b
-
-
-def signed_zero(b: Expression) -> Expression:
-    return when(b < constant(0.0), constant(-0.0), constant(0.0))
-
-
 def whole(a: Expression) -> Expression:
     fits = (a >= constant(-INT64_LIMIT)) & (a < constant(INT64_LIMIT))
     return when(fits, function("trunc", a).cast(sqltypes.BIGINT), NULL)
@@ -107,29 +107,21 @@ def truncated_remainder(a: Expression, b: Expression) -> tuple[Expression, Expre
     return expr, undefined | small | duckdb.CoalesceOperator(exact, constant(False))
 
 
-def divmod_(a: Expression, b: Expression) -> tuple[Expression, Expression, Expression]:
-    remainder, exact = truncated_remainder(a, b)
-    quotient = divide(a - remainder, b)
-    adjust = (remainder != constant(0.0)) & ((b < constant(0.0)) != (remainder < constant(0.0)))
-    remainder = when(
-        remainder == constant(0.0),
-        signed_zero(b),
-        when(adjust, remainder + b, remainder),
-    )
-    quotient = when(adjust, quotient - constant(1.0), quotient)
-    floored = function("floor", quotient)
-    snapped = when(quotient - floored > constant(0.5), floored + constant(1.0), floored)
-    quotient = when(quotient != constant(0.0), snapped, divide(a, b) * constant(0.0))
-    return quotient, remainder, exact
+PRIMITIVES = FloatPrimitives(
+    when,
+    lambda value: function("floor", value),
+    lambda value: function("sign", value),
+    truncated_remainder,
+)
 
 
 def float_floordiv(a: Expression, b: Expression) -> Lowered[Expression]:
-    quotient, _, exact = divmod_(a, b)
+    quotient, _, exact = float_divmod(PRIMITIVES, a, b)
     return Lowered(quotient, exact)
 
 
 def float_mod(a: Expression, b: Expression) -> Lowered[Expression]:
-    _, remainder, exact = divmod_(a, b)
+    _, remainder, exact = float_divmod(PRIMITIVES, a, b)
     return Lowered(remainder, exact)
 
 
@@ -165,7 +157,7 @@ for _name, _operation in ARITHMETIC.items():
 for _name, _compare in COMPARISONS.items():
     comparison(_name, _compare)
 
-mixed("__truediv__", divide)
+mixed("__truediv__", operator.truediv)
 mixed("__floordiv__", float_floordiv)
 mixed("__mod__", float_mod)
 
@@ -183,7 +175,7 @@ def int_ne(a: Expression, b: Expression) -> Expression:
 
 @RULES("__truediv__", Kind.INT, Kind.INT)
 def int_truediv(a: Expression, b: Expression) -> Lowered[Expression]:
-    return Lowered(divide(floating(a), floating(b)), representable(a) & representable(b))
+    return Lowered(floating(a) / floating(b), representable(a) & representable(b))
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT)

@@ -6,9 +6,16 @@ from collections.abc import Callable
 from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered
-from udfx.backends.spark.rules import RULES
+from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import ASCII_SPACE, FLOAT_LITERAL, INT_LITERAL
-from udfx.semantics.numbers import ARITHMETIC, COMPARISONS, FLOAT_INT_MAX, Binary
+from udfx.semantics.numbers import (
+    ARITHMETIC,
+    COMPARISONS,
+    FLOAT_INT_MAX,
+    Binary,
+    FloatPrimitives,
+    float_divmod,
+)
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 Rule = Callable[[Column, Column], Column | Lowered[Column]]
@@ -59,37 +66,36 @@ def comparison(name: str, compare: Binary) -> None:
 
 
 def nonzero(divisor: Column, undefined: Column) -> Column:
-    return functions.when((divisor == 0) | undefined, functions.lit(1)).otherwise(divisor)
+    return when((divisor == 0) | undefined, functions.lit(1), divisor)
 
 
 def floor(value: Column) -> Column:
     rounded = functions.rint(value)
-    return functions.when(rounded > value, rounded - 1.0).otherwise(rounded)
+    return when(rounded > value, rounded - 1.0, rounded)
 
 
-def float_divmod(a: Column, b: Column) -> tuple[Column, Column]:
-    divisor = nonzero(b, functions.lit(False))
-    remainder = a % divisor
-    quotient = (a - remainder) / divisor
-    adjust = (remainder != 0.0) & ((divisor < 0.0) != (remainder < 0.0))
-    modulo = (
-        functions.when(remainder == 0.0, functions.signum(b) * 0.0)
-        .when(adjust, remainder + divisor)
-        .otherwise(remainder)
-    )
-    quotient = functions.when(adjust, quotient - 1.0).otherwise(quotient)
-    floored = floor(quotient)
-    snapped = functions.when(quotient - floored > 0.5, floored + 1.0).otherwise(floored)
-    floored = functions.when(quotient != 0.0, snapped).otherwise(a / divisor * 0.0)
-    return floored, modulo
+PRIMITIVES = FloatPrimitives(
+    when, floor, functions.signum, lambda left, right: (left % right, None)
+)
+
+
+def float_floordiv(a: Column, b: Column) -> Lowered[Column]:
+    quotient, _, exact = float_divmod(PRIMITIVES, a, nonzero(b, functions.lit(False)))
+    return Lowered(quotient, exact)
+
+
+def float_mod(a: Column, b: Column) -> Lowered[Column]:
+    _, remainder, exact = float_divmod(PRIMITIVES, a, nonzero(b, functions.lit(False)))
+    return Lowered(remainder, exact)
 
 
 def int_divmod(a: Column, b: Column) -> tuple[Column, Column]:
     divisor = nonzero(b, (a == INT64_MIN) & (b == -1))
     remainder = a % divisor
     adjust = (remainder != 0) & ((remainder < 0) != (b < 0))
-    quotient = functions.call_function("div", a, divisor) - functions.when(adjust, 1).otherwise(0)
-    modulo = functions.when(adjust, remainder + divisor).otherwise(remainder)
+    shift = when(adjust, functions.lit(1), functions.lit(0))
+    quotient = functions.call_function("div", a, divisor) - shift
+    modulo = when(adjust, remainder + divisor, remainder)
     return quotient, modulo
 
 
@@ -114,8 +120,8 @@ for _name, _compare in COMPARISONS.items():
     comparison(_name, _compare)
 
 floating("__truediv__", functions.try_divide)
-floating("__floordiv__", lambda a, b: float_divmod(a, b)[0])
-floating("__mod__", lambda a, b: float_divmod(a, b)[1])
+floating("__floordiv__", float_floordiv)
+floating("__mod__", float_mod)
 
 RULES("__eq__", Kind.INT, Kind.INT)(Column.eqNullSafe)
 RULES("__mod__", Kind.INT, Kind.INT)(lambda a, b: int_divmod(a, b)[1])

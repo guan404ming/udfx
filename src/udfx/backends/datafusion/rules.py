@@ -20,3 +20,7 @@ def length(text: Expr) -> Expr:
 
 def not_distinct(a: Expr, b: Expr) -> Expr:
     return functions.coalesce(a == b, a.is_null() & b.is_null())
+
+
+def when(condition: Expr, then: Expr, orelse: Expr) -> Expr:
+    return functions.when(condition, then).otherwise(orelse)
