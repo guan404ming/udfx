@@ -21,6 +21,18 @@ OUT = "udfx out"
 RAISED = "udfx raised "
 
 
+def raised(text: str) -> Exception | None:
+    _, found, detail = text.partition(RAISED)
+    name, _, message = detail.partition(": ")
+    kind = getattr(builtins, name.strip(), None)
+    if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
+        return None
+    try:
+        return kind(message.partition("\n")[0])
+    except TypeError:
+        return None
+
+
 class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
@@ -43,12 +55,7 @@ class SparkBackend(Backend[Column]):
             raise RuntimeError(f"{RAISED}{type(error).__name__}: {error}") from error
 
     def unwrap(self, error: BaseException) -> BaseException:
-        _, found, detail = str(error).partition(RAISED)
-        name, _, message = detail.partition(": ")
-        kind = getattr(builtins, name.strip(), None)
-        if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
-            return error
-        return kind(message.partition("\n")[0])
+        return raised(str(error)) or error
 
     def column(self, node: Col) -> Column:
         self.session()

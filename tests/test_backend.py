@@ -22,6 +22,18 @@ NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 
 
+class CustomError(Exception):
+    pass
+
+
+def custom(x: int) -> int:
+    raise CustomError(f"custom failure {x}")
+
+
+def decode(x: int) -> str:
+    return bytes([x]).decode()
+
+
 def inverse(x: int) -> float:
     return 1 / x
 
@@ -62,6 +74,21 @@ def test_evaluate_forgets_earlier_python_exception(backend: Backend[Any]) -> Non
     with pytest.raises(Exception) as error:
         backend.evaluate([backend.column(Col("missing", INT))], {"x": INT}, [(1,)])
     assert not isinstance(error.value, ZeroDivisionError)
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    ("function", "message"),
+    [(custom, "custom failure 255"), (decode, "invalid start byte")],
+    ids=["custom", "decode"],
+)
+def test_fallback_surfaces_exceptions_it_cannot_rebuild(
+    backend: Backend[Any], function: Callable[[int], object], message: str
+) -> None:
+    program = Program(function, {"x": INT}, Col("x", INT))
+    expr = backend.fallback(backend.literal(Lit(0, INT)), backend.literal(FALSE), program)
+    with pytest.raises(Exception, match=message):
+        backend.evaluate([expr], {"x": INT}, [(255,)])
 
 
 @pytest.mark.parametrize("backend", backend_params())
