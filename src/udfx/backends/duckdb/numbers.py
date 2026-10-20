@@ -81,18 +81,25 @@ def either_nan(left: Expression, right: Expression) -> Expression:
     )
 
 
+def widened(name: str, rule: Binary) -> None:
+    def exact(value: Expression) -> Expression:
+        return value.isnull() | representable(value)
+
+    RULES(name, Kind.INT, Kind.FLOAT)(
+        lambda left, right: Lowered(rule(floating(left), right), exact(left))
+    )
+    RULES(name, Kind.FLOAT, Kind.INT)(
+        lambda left, right: Lowered(rule(left, floating(right)), exact(right))
+    )
+
+
 def comparison(name: str, compare: Binary) -> None:
     def ordered(left: Expression, right: Expression) -> Expression:
         return compare(left, right) & ~is_nan(left) & ~is_nan(right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(ordered(floating(left), right), representable(left))
-    )
-    RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(ordered(left, floating(right)), representable(right))
-    )
+    widened(name, ordered)
 
 
 def whole(value: Expression) -> Expression:
@@ -219,6 +226,10 @@ def float_eq(left: Expression, right: Expression) -> Expression:
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
 def float_ne(left: Expression, right: Expression) -> Expression:
     return ~nullable_equal(left, right) | either_nan(left, right)
+
+
+widened("__eq__", float_eq)
+widened("__ne__", float_ne)
 
 
 @RULES("__neg__", Kind.INT)

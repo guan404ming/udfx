@@ -61,18 +61,25 @@ def is_nan(value: Expr) -> Expr:
     return functions.coalesce(functions.isnan(value), lit(False))
 
 
+def widened(name: str, rule: Binary) -> None:
+    def exact(value: Expr) -> Expr:
+        return value.is_null() | representable(value)
+
+    RULES(name, Kind.INT, Kind.FLOAT)(
+        lambda left, right: Lowered(rule(floating(left), right), exact(left))
+    )
+    RULES(name, Kind.FLOAT, Kind.INT)(
+        lambda left, right: Lowered(rule(left, floating(right)), exact(right))
+    )
+
+
 def comparison(name: str, compare: Binary) -> None:
     def ordered(left: Expr, right: Expr) -> Expr:
         return compare(left, right) & ~is_nan(left) & ~is_nan(right)
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(ordered(floating(left), right), representable(left))
-    )
-    RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(ordered(left, floating(right)), representable(right))
-    )
+    widened(name, ordered)
 
 
 PRIMITIVES = FloatPrimitives(
@@ -161,6 +168,10 @@ RULES("__eq__", Kind.FLOAT, Kind.FLOAT)(float_eq)
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
 def float_ne(left: Expr, right: Expr) -> Expr:
     return ~float_eq(left, right)
+
+
+widened("__eq__", float_eq)
+widened("__ne__", float_ne)
 
 
 @RULES("__neg__", Kind.INT)

@@ -50,18 +50,25 @@ def floating(name: str, rule: Rule) -> None:
     RULES(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, right.cast(pl.Float64)))
 
 
+def widened(name: str, rule: Binary) -> None:
+    def exact(value: pl.Expr) -> pl.Expr:
+        return value.is_null() | representable(value)
+
+    RULES(name, Kind.INT, Kind.FLOAT)(
+        lambda left, right: Lowered(rule(left.cast(pl.Float64), right), exact(left))
+    )
+    RULES(name, Kind.FLOAT, Kind.INT)(
+        lambda left, right: Lowered(rule(left, right.cast(pl.Float64)), exact(right))
+    )
+
+
 def comparison(name: str, compare: Binary) -> None:
     def ordered(left: pl.Expr, right: pl.Expr) -> pl.Expr:
         return compare(left, right) & left.is_not_nan() & right.is_not_nan()
 
     RULES(name, Kind.INT, Kind.INT)(compare)
     RULES(name, Kind.FLOAT, Kind.FLOAT)(ordered)
-    RULES(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(ordered(left.cast(pl.Float64), right), representable(left))
-    )
-    RULES(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(ordered(left, right.cast(pl.Float64)), representable(right))
-    )
+    widened(name, ordered)
 
 
 def materialized(operation: Binary) -> Binary:
@@ -148,6 +155,10 @@ def float_eq(left: pl.Expr, right: pl.Expr) -> pl.Expr:
 @RULES("__ne__", Kind.FLOAT, Kind.FLOAT)
 def float_ne(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left.ne_missing(right) | either_nan(left, right)
+
+
+widened("__eq__", float_eq)
+widened("__ne__", float_ne)
 
 
 @RULES("__neg__", Kind.INT)

@@ -149,6 +149,15 @@ def test_none_argument_takes_the_nullable_parameter() -> None:
     assert program.fault == FALSE
 
 
+def is_zero(x: float) -> bool:
+    return x == 0
+
+
+def test_float_compares_equal_to_int() -> None:
+    x = Col("x", FLOAT)
+    assert trace(is_zero, {"x": FLOAT}).value == apply("__eq__", x, Lit(0, INT))
+
+
 def test_str_of_none_does_not_raise() -> None:
     program = trace(text_or_empty, {"x": INT.or_none()})
     assert program.value == apply("str", Col("x", INT.or_none()))

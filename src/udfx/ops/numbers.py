@@ -61,10 +61,10 @@ for a, b in PAIRS:
     register(Op("__mod__", (a, b), result, operator.mod, divisor_zero))
     for name, compare in COMPARISONS.items():
         register(Op(name, (a, b), BOOL, compare))
+    register(Op("__eq__", (a.or_none(), b.or_none()), BOOL, operator.eq))
+    register(Op("__ne__", (a.or_none(), b.or_none()), BOOL, operator.ne))
 
 for scalar in (INT, FLOAT):
-    register(Op("__eq__", (scalar.or_none(), scalar.or_none()), BOOL, operator.eq))
-    register(Op("__ne__", (scalar.or_none(), scalar.or_none()), BOOL, operator.ne))
     register(Op("__neg__", (scalar,), scalar, operator.neg))
     register(Op("abs", (scalar,), scalar, abs))
     register(Op("math.log10", (scalar,), FLOAT, math.log10, not_positive))
