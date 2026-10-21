@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import operator
-
 from duckdb import Expression
 
 from udfx.backends.base import Lowered, register_extremum, register_float_variants
@@ -38,8 +36,8 @@ def root(value: Expression) -> Expression:
     return function("sqrt", when(value < constant(0.0), constant(0.0), value))
 
 
-register_extremum(RULES, "max", operator.gt, ORDER)
-register_extremum(RULES, "min", operator.lt, ORDER)
+register_extremum(RULES, "max", lambda left, right: function("greatest", left, right), ORDER)
+register_extremum(RULES, "min", lambda left, right: function("least", left, right), ORDER)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(root)

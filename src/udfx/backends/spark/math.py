@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import operator
-
 from pyspark.sql import Column, functions
 
 from udfx.backends.base import Lowered, register_extremum, register_float_variants
@@ -23,8 +21,8 @@ def power(base: Column, exponent: Column) -> Lowered[Column]:
     return Lowered(functions.pow(base, exponent), functions.lit(False))
 
 
-register_extremum(RULES, "max", operator.gt, ORDER)
-register_extremum(RULES, "min", operator.lt, ORDER)
+register_extremum(RULES, "max", functions.greatest, ORDER)
+register_extremum(RULES, "min", functions.least, ORDER)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(functions.sqrt)

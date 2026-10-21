@@ -22,7 +22,6 @@ from udfx.semantics.literals import (
 from udfx.semantics.numbers import (
     Binary,
     OrderPrimitives,
-    extremum,
     float_compare,
     float_extremum,
     widened_exact,
@@ -135,13 +134,13 @@ def register_equality[E](
 
 
 def register_extremum[E](
-    rules: RuleSet[E], name: str, compare: Binary, order: OrderPrimitives
+    rules: RuleSet[E], name: str, pick: Binary, order: OrderPrimitives
 ) -> None:
     rules(name, Kind.FLOAT, Kind.FLOAT)(
-        lambda left, right: float_extremum(order, compare, left, right)
+        lambda left, right: Lowered(*float_extremum(order, pick, left, right))
     )
     for kind in (Kind.INT, Kind.STR):
-        rules(name, kind, kind)(lambda left, right: extremum(order, compare, left, right))
+        rules(name, kind, kind)(pick)
 
 
 def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> None:

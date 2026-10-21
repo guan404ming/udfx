@@ -70,12 +70,11 @@ def widened_exact(primitives: OrderPrimitives, value: Any) -> Any:
     return primitives.is_null(value) | primitives.within_exact_float_range(value)
 
 
-def extremum(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any) -> Any:
-    return primitives.when(compare(right, left), right, left)
-
-
-def float_extremum(primitives: OrderPrimitives, compare: Binary, left: Any, right: Any) -> Any:
-    return primitives.when(float_compare(primitives, compare, right, left), right, left)
+def float_extremum(
+    primitives: OrderPrimitives, pick: Binary, left: Any, right: Any
+) -> tuple[Any, Any]:
+    zeros = (left == 0.0) & (right == 0.0)
+    return pick(left, right), ~primitives.either_nan(left, right) & ~zeros
 
 
 @dataclass(frozen=True)

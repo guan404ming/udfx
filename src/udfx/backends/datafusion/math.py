@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import operator
-
 from datafusion import Expr, functions, lit
 
 from udfx.backends.base import Lowered, register_extremum, register_float_variants
@@ -49,8 +47,8 @@ def root(value: Expr) -> Expr:
     return functions.sqrt(functions.when(below_zero(value), lit(0.0)).otherwise(value))
 
 
-register_extremum(RULES, "max", operator.gt, ORDER)
-register_extremum(RULES, "min", operator.lt, ORDER)
+register_extremum(RULES, "max", functions.greatest, ORDER)
+register_extremum(RULES, "min", functions.least, ORDER)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(root)
