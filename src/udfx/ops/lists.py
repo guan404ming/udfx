@@ -16,9 +16,11 @@ for item in (STR, INT, FLOAT, BOOL):
         register(Op("len", (sequence,), INT, len))
         register(Op("bool", (sequence.or_none(),), BOOL, bool))
         register(Op("is_none", (sequence.or_none(),), BOOL, is_none))
-        register(Op("__contains__", (sequence, item), BOOL, operator.contains))
+        if item != INT:
+            register(Op("__contains__", (sequence, item), BOOL, operator.contains))
         register(Op("__getitem__", (sequence, INT), item, operator.getitem, out_of_range))
 
+register(Op("__contains__", (list_of(INT.or_none()), INT.or_none()), BOOL, operator.contains))
 register(Op("any", (list_of(BOOL),), BOOL, any))
 register(Op("all", (list_of(BOOL),), BOOL, all))
 register(Op("sum", (list_of(INT),), INT, sum))

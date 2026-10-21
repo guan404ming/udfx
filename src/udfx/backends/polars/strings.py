@@ -7,16 +7,25 @@ from functools import cache, partial
 import polars as pl
 
 from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
-from udfx.backends.registration import Lowered, RuleResult
+from udfx.backends.registration import (
+    Lowered,
+    RuleResult,
+    register_padding,
+    register_string_predicates,
+)
 from udfx.semantics import text
 from udfx.semantics.text import (
+    CASE_METHODS,
     CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
+    CasePrimitives,
+    PaddingPrimitives,
     SearchPrimitives,
     SequencePrimitives,
     SlicePrimitives,
     SplitPrimitives,
+    case_expression,
     case_guard,
     has_prefix_suffix_overlap,
     non_whitespace_pattern,
@@ -31,7 +40,12 @@ from udfx.types import Kind
 
 
 def native_recase(method: str, samples: Sequence[str]) -> list[str]:
-    return getattr(pl.Series(samples).str, f"to_{method}case")().to_list()
+    return (
+        pl.DataFrame({"udfx point": samples})
+        .select(case_expression(CASE, pl.col("udfx point"), method))
+        .to_series()
+        .to_list()
+    )
 
 
 @cache
@@ -40,35 +54,43 @@ def case_drift(method: str) -> CaseDrift:
 
 
 def recase(value: pl.Expr, method: str) -> RuleResult[pl.Expr]:
-    expr = getattr(value.str, f"to_{method}case")()
+    expr = case_expression(CASE, value, method)
     sigma = value.str.contains(SIGMA, literal=True)
     exact = case_guard(case_drift(method), value.str.contains, sigma)
     return expr if exact is None else Lowered(expr, exact)
 
 
-@RULES(".lower", Kind.STR)
-def lower(value: pl.Expr) -> RuleResult[pl.Expr]:
-    return recase(value, "lower")
-
-
-@RULES(".upper", Kind.STR)
-def upper(value: pl.Expr) -> RuleResult[pl.Expr]:
-    return recase(value, "upper")
-
-
 @RULES(".strip", Kind.STR)
-def strip(text: pl.Expr) -> pl.Expr:
-    return text.str.strip_chars(whitespace())
+@RULES(".strip", Kind.STR, Kind.STR)
+def strip(text: pl.Expr, characters: pl.Expr | None = None) -> pl.Expr:
+    characters = (
+        pl.coalesce(characters, pl.lit(whitespace()))
+        if characters is not None
+        else pl.lit(whitespace())
+    )
+    return text.str.strip_chars(characters)
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(text: pl.Expr) -> pl.Expr:
-    return text.str.strip_chars_start(whitespace())
+@RULES(".lstrip", Kind.STR, Kind.STR)
+def lstrip(text: pl.Expr, characters: pl.Expr | None = None) -> pl.Expr:
+    characters = (
+        pl.coalesce(characters, pl.lit(whitespace()))
+        if characters is not None
+        else pl.lit(whitespace())
+    )
+    return text.str.strip_chars_start(characters)
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(text: pl.Expr) -> pl.Expr:
-    return text.str.strip_chars_end(whitespace())
+@RULES(".rstrip", Kind.STR, Kind.STR)
+def rstrip(text: pl.Expr, characters: pl.Expr | None = None) -> pl.Expr:
+    characters = (
+        pl.coalesce(characters, pl.lit(whitespace()))
+        if characters is not None
+        else pl.lit(whitespace())
+    )
+    return text.str.strip_chars_end(characters)
 
 
 def split_words(text: pl.Expr) -> pl.Expr:
@@ -294,3 +316,37 @@ def split_limit(text: pl.Expr, separator: pl.Expr, maximum: pl.Expr) -> pl.Expr:
 def rsplit(text: pl.Expr, separator: pl.Expr, maximum: pl.Expr | None = None) -> Lowered[pl.Expr]:
     exact = single_code_point_clusters(text) & single_code_point_clusters(separator).fill_null(True)
     return Lowered(split_right(SPLIT, text, separator, maximum), exact)
+
+
+register_string_predicates(RULES, lambda value, pattern: value.str.contains(pattern))
+
+
+for method in CASE_METHODS:
+    RULES(f".{method}", Kind.STR)(partial(recase, method=method))
+
+
+CASE = CasePrimitives(
+    lower=lambda value: value.str.to_lowercase(),
+    upper=lambda value: value.str.to_uppercase(),
+    title=lambda value: value.str.to_titlecase(),
+    head=lambda value: value.str.slice(0, 1),
+    tail=lambda value: value.str.slice(1),
+    concat=lambda *values: pl.concat_str(values),
+    when=when,
+    matches=lambda value, pattern: value.str.contains(pattern),
+    characters=lambda value, transform: (
+        value.str.split("").list.eval(transform(pl.element())).list.join("")
+    ),
+)
+
+
+register_padding(
+    RULES,
+    PaddingPrimitives(
+        sequence=TEXT,
+        literal=pl.lit,
+        concat=lambda *values: pl.concat_str(values),
+        repeat=lambda value, count: value.repeat_by(count).list.join(""),
+        half=lambda value: value // 2,
+    ),
+)

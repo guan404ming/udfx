@@ -25,6 +25,13 @@ from udfx.semantics.numbers import (
 )
 from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.scalars import missing_expression
+from udfx.semantics.text import (
+    PADDING_METHODS,
+    PREDICATES,
+    PaddingPrimitives,
+    pad_text,
+    string_predicate,
+)
 from udfx.types import Kind
 
 
@@ -88,6 +95,28 @@ def register_regex[E](rules: RuleSet[E], primitives: RegexPrimitives) -> None:
             *lower_regex(primitives, "split", text, pattern, flags, count=count)
         )
     )
+
+
+def register_string_predicates[E](rules: RuleSet[E], matches: Callable[[E, str], E]) -> None:
+    for method in PREDICATES:
+        rules(f".{method}", Kind.STR)(
+            lambda value, method=method: string_predicate(matches, value, method)
+        )
+
+
+def register_padding[E](rules: RuleSet[E], primitives: PaddingPrimitives) -> None:
+    for method in PADDING_METHODS:
+        rules(f".{method}", Kind.STR, Kind.INT)(
+            lambda value, width, method=method: Lowered(
+                *pad_text(primitives, value, width, primitives.literal(" "), method)
+            )
+        )
+        if method != "zfill":
+            rules(f".{method}", Kind.STR, Kind.INT, Kind.STR)(
+                lambda value, width, fill, method=method: Lowered(
+                    *pad_text(primitives, value, width, fill, method)
+                )
+            )
 
 
 def register_float_variants[E](

@@ -4,6 +4,7 @@ import operator
 
 from udfx.ir import Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
+from udfx.semantics.text import CASE_METHODS, PADDING_METHODS, PREDICATES
 from udfx.types import BOOL, INT, STR, list_of
 
 STRINGS = list_of(STR)
@@ -35,11 +36,21 @@ def zero_step(_: Node, start: Node, stop: Node, step: Node) -> tuple[Fault, ...]
     return (Fault(ValueError, apply("__eq__", step, lit(0))),)
 
 
-register(Op(".lower", (STR,), STR, str.lower))
-register(Op(".upper", (STR,), STR, str.upper))
-register(Op(".strip", (STR,), STR, str.strip))
-register(Op(".lstrip", (STR,), STR, str.lstrip))
-register(Op(".rstrip", (STR,), STR, str.rstrip))
+def invalid_fill(_: Node, width: Node, fill: Node) -> tuple[Fault, ...]:
+    return (Fault(TypeError, apply("__ne__", apply("len", fill), lit(1))),)
+
+
+for name in CASE_METHODS:
+    register(Op(f".{name}", (STR,), STR, getattr(str, name)))
+for name in PADDING_METHODS:
+    register(Op(f".{name}", (STR, INT), STR, getattr(str, name)))
+    if name != "zfill":
+        register(Op(f".{name}", (STR, INT, STR), STR, getattr(str, name), invalid_fill))
+for name in PREDICATES:
+    register(Op(f".{name}", (STR,), BOOL, getattr(str, name)))
+for name in ("strip", "lstrip", "rstrip"):
+    register(Op(f".{name}", (STR,), STR, getattr(str, name)))
+    register(Op(f".{name}", (STR, STR.or_none()), STR, getattr(str, name)))
 for name, method in ((".split", str.split), (".rsplit", str.rsplit)):
     register(Op(name, (STR,), STRINGS, method))
     register(Op(name, (STR, STR.or_none()), STRINGS, method, empty_separator))

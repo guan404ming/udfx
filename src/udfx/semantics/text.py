@@ -24,6 +24,20 @@ CLUSTER_JOINERS = (
     "[\\p{M}\\p{Cf}\\x{1F1E6}-\\x{1F1FF}\\x{1F3FB}-\\x{1F3FF}"
     "\\x{1100}-\\x{11FF}\\x{A960}-\\x{A97F}\\x{D7B0}-\\x{D7FF}]|\\r\\n"
 )
+PREDICATES = (
+    "isdigit",
+    "isalpha",
+    "isalnum",
+    "isnumeric",
+    "isdecimal",
+    "isspace",
+    "islower",
+    "isupper",
+    "istitle",
+)
+CASE_METHODS = ("lower", "upper", "title", "capitalize", "swapcase", "casefold")
+PADDING_METHODS = ("zfill", "center", "ljust", "rjust")
+NATIVE_PADDING_LIMIT = 2**20
 
 
 @cache
@@ -37,8 +51,54 @@ def whitespace() -> str:
 
 
 def char_class(chars: Iterable[str], negate: bool = False) -> str:
-    body = "".join(f"\\x{{{ord(char):X}}}" for char in chars)
-    return f"[{'^' if negate else ''}{body}]"
+    ranges: list[str] = []
+    points = sorted({ord(char) for char in chars})
+    start = end = points[0] if points else 0
+    for point in points[1:]:
+        if point == end + 1:
+            end = point
+        else:
+            ranges.append(f"\\x{{{start:X}}}" + (f"-\\x{{{end:X}}}" if start != end else ""))
+            start = end = point
+    if points:
+        ranges.append(f"\\x{{{start:X}}}" + (f"-\\x{{{end:X}}}" if start != end else ""))
+    return f"[{'^' if negate else ''}{''.join(ranges)}]"
+
+
+@cache
+def character_class(method: str) -> str:
+    predicate: Callable[[str], bool] = getattr(str, method)
+    return char_class(point for point in code_points() if predicate(point))
+
+
+@cache
+def cased_characters() -> str:
+    return "".join(
+        point for point in code_points() if point.islower() or point.isupper() or point.istitle()
+    )
+
+
+@cache
+def predicate_patterns(method: str) -> tuple[str, str | None]:
+    if method not in {"islower", "isupper", "istitle"}:
+        return rf"\A{character_class(method)}+\z", None
+    uncased = char_class(cased_characters(), negate=True)
+    if method == "istitle":
+        title = character_class("istitle")
+        lowercase_start = rf"(?:\A|{uncased}){character_class('islower')}"
+        uppercase_continuation = char_class(cased_characters()) + title
+        return title, f"{lowercase_start}|{uppercase_continuation}"
+    forbidden = char_class(
+        (point for point in cased_characters() if not getattr(point, method)()),
+        negate=True,
+    )
+    return rf"\A{uncased}*{character_class(method)}{forbidden}*\z", None
+
+
+def string_predicate(matches: Callable[[Any, str], Any], value: Any, method: str) -> Any:
+    required, forbidden = predicate_patterns(method)
+    found = matches(value, required)
+    return found if forbidden is None else found & ~matches(value, forbidden)
 
 
 @cache
@@ -87,6 +147,10 @@ def case_drift(method: str, native: Recase, engine: str) -> CaseDrift:
         return CaseDrift(**cached)
     reference: Callable[[str], str] = getattr(str, method)
     alone = drift(reference, native)
+    if method in {"title", "capitalize"}:
+        alone |= frozenset[str]().union(
+            *(drift(reference, native, context) for context in ("A{}b", "a{}B", "{}b", "a{}"))
+        )
     contexts = (drift(reference, native, context) for context in SIGMA_CONTEXTS)
     nearby = frozenset[str]().union(*contexts) - alone
     widespread = len(nearby) > len(code_points()) // 2
@@ -96,6 +160,53 @@ def case_drift(method: str, native: Recase, engine: str) -> CaseDrift:
     )
     write_cache(key, asdict(found))
     return found
+
+
+@dataclass(frozen=True)
+class CasePrimitives:
+    lower: Callable[[Any], Any]
+    upper: Callable[[Any], Any]
+    title: Callable[[Any], Any]
+    head: Callable[[Any], Any]
+    tail: Callable[[Any], Any]
+    concat: Callable[..., Any]
+    when: Callable[[Any, Any, Any], Any]
+    matches: Callable[[Any, str], Any]
+    characters: Callable[[Any, Callable[[Any], Any]], Any]
+
+
+def capitalized(primitives: CasePrimitives, value: Any) -> Any:
+    return primitives.concat(
+        primitives.upper(primitives.head(value)), primitives.lower(primitives.tail(value))
+    )
+
+
+def title_words(
+    primitives: CasePrimitives,
+    value: Any,
+    transform: Callable[[Any, str, Callable[[Any], Any]], Any],
+) -> Any:
+    pattern = char_class(cased_characters()) + "+|" + char_class(cased_characters(), True) + "+"
+    return transform(value, pattern, lambda word: capitalized(primitives, word))
+
+
+def case_expression(primitives: CasePrimitives, value: Any, method: str) -> Any:
+    if method in {"lower", "casefold"}:
+        return primitives.lower(value)
+    if method == "upper":
+        return primitives.upper(value)
+    if method == "title":
+        return primitives.title(value)
+    if method == "capitalize":
+        return capitalized(primitives, value)
+    return primitives.characters(
+        value,
+        lambda character: primitives.when(
+            primitives.matches(character, character_class("islower")),
+            primitives.upper(character),
+            primitives.lower(character),
+        ),
+    )
 
 
 def cache_path(key: str) -> Path:
@@ -182,6 +293,46 @@ class SequencePrimitives:
     reverse: Callable[[Any], Any]
     stride: Callable[[Any, int], Any]
     bind: Callable[[Any, Callable[[Any], Any]], Any]
+
+
+@dataclass(frozen=True)
+class PaddingPrimitives:
+    sequence: SequencePrimitives
+    literal: Callable[[object], Any]
+    concat: Callable[..., Any]
+    repeat: Callable[[Any, Any], Any]
+    half: Callable[[Any], Any]
+
+
+def pad_text(
+    primitives: PaddingPrimitives, value: Any, width: Any, fill: Any, method: str
+) -> tuple[Any, Any]:
+    sequence = primitives.sequence
+    literal = primitives.literal
+    when = sequence.bounds.when
+    zero = literal(0)
+    limit = literal(NATIVE_PADDING_LIMIT)
+    exact = width <= limit
+    width = when((width > zero) & exact, width, zero)
+    padding = sequence.bounds.clip(width - sequence.length(value), zero, limit)
+    if method == "zfill":
+        zeros = primitives.repeat(literal("0"), padding)
+        head = sequence.head(value, 1)
+        signed = (head == literal("+")) | (head == literal("-"))
+        return when(
+            signed,
+            primitives.concat(head, zeros, sequence.tail(value, -1)),
+            primitives.concat(zeros, value),
+        ), exact
+    fill = sequence.head(fill, 1)
+    if method == "center":
+        left = primitives.half(padding) + padding % literal(2) * (width % literal(2))
+        right = padding - left
+    else:
+        left, right = (padding, zero) if method == "rjust" else (zero, padding)
+    return primitives.concat(
+        primitives.repeat(fill, left), value, primitives.repeat(fill, right)
+    ), exact
 
 
 def slice_forward(primitives: SequencePrimitives, container: Any, start: Any, stop: Any) -> Any:

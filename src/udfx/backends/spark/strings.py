@@ -7,18 +7,27 @@ from typing import cast
 import pyspark
 from pyspark.sql import Column, functions
 
-from udfx.backends.registration import Lowered, RuleResult
+from udfx.backends.registration import (
+    Lowered,
+    RuleResult,
+    register_padding,
+    register_string_predicates,
+)
 from udfx.backends.spark.backend import SparkBackend
 from udfx.backends.spark.rules import RULES, when
 from udfx.ir import Col
 from udfx.semantics import text
 from udfx.semantics.text import (
+    CASE_METHODS,
     SIGMA,
     CaseDrift,
+    CasePrimitives,
+    PaddingPrimitives,
     SearchPrimitives,
     SequencePrimitives,
     SlicePrimitives,
     SplitPrimitives,
+    case_expression,
     case_guard,
     count_occurrences,
     non_whitespace_pattern,
@@ -37,7 +46,7 @@ POINT = "point"
 
 def native_recase(method: str, samples: Sequence[str]) -> list[str]:
     backend = SparkBackend()
-    expr = getattr(functions, method)(backend.column(Col(POINT, STR)))
+    expr = case_expression(CASE, backend.column(Col(POINT, STR)), method)
     (recased,) = backend.evaluate([expr], {POINT: STR}, [(sample,) for sample in samples])
     return cast("list[str]", recased)
 
@@ -49,7 +58,7 @@ def case_drift(method: str) -> CaseDrift:
 
 
 def recase(value: Column, method: str) -> RuleResult[Column]:
-    expr = getattr(functions, method)(value)
+    expr = case_expression(CASE, value, method)
     exact = case_guard(case_drift(method), value.rlike, value.contains(SIGMA))
     return expr if exact is None else Lowered(expr, exact)
 
@@ -78,29 +87,37 @@ def array_join(words: Column, separator: Column) -> Column:
     return functions.call_function("array_join", words, separator)
 
 
-@RULES(".lower", Kind.STR)
-def lower(value: Column) -> RuleResult[Column]:
-    return recase(value, "lower")
-
-
-@RULES(".upper", Kind.STR)
-def upper(value: Column) -> RuleResult[Column]:
-    return recase(value, "upper")
-
-
 @RULES(".strip", Kind.STR)
-def strip(text: Column) -> Column:
-    return functions.btrim(text, functions.lit(whitespace()))
+@RULES(".strip", Kind.STR, Kind.STR)
+def strip(text: Column, characters: Column | None = None) -> Column:
+    characters = (
+        functions.coalesce(characters, functions.lit(whitespace()))
+        if characters is not None
+        else functions.lit(whitespace())
+    )
+    return functions.btrim(text, characters)
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(text: Column) -> Column:
-    return functions.ltrim(text, functions.lit(whitespace()))
+@RULES(".lstrip", Kind.STR, Kind.STR)
+def lstrip(text: Column, characters: Column | None = None) -> Column:
+    characters = (
+        functions.coalesce(characters, functions.lit(whitespace()))
+        if characters is not None
+        else functions.lit(whitespace())
+    )
+    return functions.ltrim(text, characters)
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(text: Column) -> Column:
-    return functions.rtrim(text, functions.lit(whitespace()))
+@RULES(".rstrip", Kind.STR, Kind.STR)
+def rstrip(text: Column, characters: Column | None = None) -> Column:
+    characters = (
+        functions.coalesce(characters, functions.lit(whitespace()))
+        if characters is not None
+        else functions.lit(whitespace())
+    )
+    return functions.rtrim(text, characters)
 
 
 def split_words(text: Column) -> Column:
@@ -328,3 +345,37 @@ def split_limit(text: Column, separator: Column, maximum: Column) -> Column:
 @RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
 def rsplit(text: Column, separator: Column, maximum: Column | None = None) -> Column:
     return split_right(SPLIT, text, separator, maximum)
+
+
+register_string_predicates(RULES, lambda value, pattern: value.rlike(pattern))
+
+
+for method in CASE_METHODS:
+    RULES(f".{method}", Kind.STR)(partial(recase, method=method))
+
+
+CASE = CasePrimitives(
+    lower=functions.lower,
+    upper=functions.upper,
+    title=functions.initcap,
+    head=lambda value: functions.substring(value, 1, 1),
+    tail=lambda value: functions.substring(value, 2, INT32_MAX),
+    concat=functions.concat,
+    when=when,
+    matches=lambda value, pattern: value.rlike(pattern),
+    characters=lambda value, transform: array_join(
+        functions.transform(characters(value), transform), functions.lit("")
+    ),
+)
+
+
+register_padding(
+    RULES,
+    PaddingPrimitives(
+        sequence=TEXT,
+        literal=functions.lit,
+        concat=functions.concat,
+        repeat=lambda value, count: functions.repeat(value, count.cast("int")),
+        half=lambda value: functions.call_function("div", value, functions.lit(2)),
+    ),
+)

@@ -65,6 +65,19 @@ STRING_TRAPS = (
     "aba",
     "👩\u200d👩\u200d👧\u200d👦",
     "🇹🇼",
+    "²",
+    "½",
+    "四",
+    "Ⅷ",
+    "a1B",
+    "AA",
+    "A\u0345b",
+    "they're",
+    "ǆUNGLE",
+    "ßABC",
+    "+-1",
+    "-+1",
+    "-]^\\\x00",
     "\u1100\u1161\u11a8",
     "xx",
     "abxd",
@@ -152,7 +165,9 @@ def regex_constants(name: str) -> st.SearchStrategy[dict[int, object]]:
 
 LIST_TRAPS = (("b", "a", "b"), ("\ue000", "\U00010000"), ("z", "Z", "ä", "a", ""))
 
-INT_TRAPS = (0, 1, -1, 2, -2, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
+PREDICATE_TRAPS = ("Aa " * 10000,)
+
+INT_TRAPS = (0, 1, -1, 2, -2, 3, 5, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
 SLICE_TRAPS = (-10, 2**31 - 1, 2**31, 2**32 - 1, 2**32)
 
 FLOAT_TRAPS = (

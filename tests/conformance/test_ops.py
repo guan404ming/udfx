@@ -7,8 +7,15 @@ from hypothesis import strategies as st
 
 from udfx.backends.base import Backend
 from udfx.ops import Op, all_ops
+from udfx.semantics.text import PREDICATES
 from udfx.testing import batches, check_op, values
-from udfx.testing.strategies import REGEX_PATTERNS, SLICE_TRAPS, STRING_TRAPS, regex_constants
+from udfx.testing.strategies import (
+    PREDICATE_TRAPS,
+    REGEX_PATTERNS,
+    SLICE_TRAPS,
+    STRING_TRAPS,
+    regex_constants,
+)
 from udfx.types import Kind
 
 CASES = [
@@ -31,6 +38,8 @@ def test_op_matches_python(backend: Backend[Any], op: Op, data: st.DataObject) -
         pytest.importorskip("numpy")
     schema = {f"arg{index}": param for index, param in enumerate(op.parameters)}
     rows = data.draw(batches(schema))
+    if op.name in {f".{method}" for method in PREDICATES}:
+        rows.extend((value,) for value in PREDICATE_TRAPS)
     constant = data.draw(st.sampled_from([None, *range(len(op.parameters))]))
     constants = {} if constant is None else {constant: data.draw(values(op.parameters[constant]))}
     if op.name.startswith("re."):

@@ -20,7 +20,7 @@ IMPORT = importlib.import_module
 
 
 def test_unsupported_is_reported() -> None:
-    translation = compile(lambda s: s.casefold(), {"s": STR})
+    translation = compile(lambda s: s.expandtabs(), {"s": STR})
     assert not translation.ok
     assert translation.unsupported is not None
 
@@ -44,8 +44,8 @@ def test_translation_repr() -> None:
     assert repr(compile(lambda s: s.upper(), {"s": STR})) == (
         "Translation(ok=True, backend='polars', result=str)"
     )
-    assert repr(compile(lambda s: s.casefold(), {"s": STR})) == (
-        "Translation(ok=False, backend='polars', unsupported='no op .casefold(str)')"
+    assert repr(compile(lambda s: s.expandtabs(), {"s": STR})) == (
+        "Translation(ok=False, backend='polars', unsupported='no op .expandtabs(str)')"
     )
 
 

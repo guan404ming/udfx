@@ -31,6 +31,8 @@ BINARY_OPS: dict[str, str] = {
     "//": "__floordiv__",
     "%": "__mod__",
     "**": "__pow__",
+    "&": "and",
+    "|": "or",
 }
 
 COMPARE_OPS: dict[str, str] = {
@@ -53,14 +55,13 @@ def binary_op(context: Context, state: State, instruction: dis.Instruction) -> l
         and left.node.type.kind is Kind.LIST
     ):
         raise Unsupported("in-place list mutation", context.where(state))
-    if symbol == "|":
-        if any(
-            isinstance(item, Opaque) and isinstance(item.value, re.RegexFlag)
-            for item in (left, right)
-        ):
-            first, second = constant_value(left), constant_value(right)
-            if isinstance(first, int) and isinstance(second, int):
-                return [rest.push(constant(first | second)).advance()]
+    if symbol == "|" and any(
+        isinstance(item, Opaque) and isinstance(item.value, re.RegexFlag) for item in (left, right)
+    ):
+        first, second = constant_value(left), constant_value(right)
+        if isinstance(first, int) and isinstance(second, int):
+            return [rest.push(constant(first | second)).advance()]
+    if symbol == "|" and not isinstance(left, Value):
         return [rest.push(annotation(operator.or_, left, right)).advance()]
     if symbol == "%" and isinstance(left, Value) and left.node.type.kind is Kind.STR:
         if isinstance(right, Value) and right.container in (list, set, frozenset):

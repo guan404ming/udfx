@@ -11,15 +11,24 @@ from datafusion import Expr, col, functions, lit
 
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
-from udfx.backends.registration import Lowered, RuleResult
+from udfx.backends.registration import (
+    Lowered,
+    RuleResult,
+    register_padding,
+    register_string_predicates,
+)
 from udfx.semantics import text
 from udfx.semantics.text import (
+    CASE_METHODS,
     SIGMA,
     CaseDrift,
+    CasePrimitives,
+    PaddingPrimitives,
     SearchPrimitives,
     SequencePrimitives,
     SlicePrimitives,
     SplitPrimitives,
+    case_expression,
     case_guard,
     char_class,
     count_occurrences,
@@ -36,7 +45,7 @@ POINT = "point"
 
 
 def native_recase(method: str, samples: Sequence[str]) -> list[str]:
-    expr = getattr(functions, method)(col(POINT))
+    expr = case_expression(CASE, col(POINT), method)
     (recased,) = DataFusionBackend().evaluate(
         [expr], {POINT: STR}, [(sample,) for sample in samples]
     )
@@ -50,7 +59,7 @@ def case_drift(method: str) -> CaseDrift:
 
 
 def recase(value: Expr, method: str) -> RuleResult[Expr]:
-    expr = getattr(functions, method)(value)
+    expr = case_expression(CASE, value, method)
     sigma = functions.strpos(value, lit(SIGMA)) > lit(0)
     exact = case_guard(
         case_drift(method), lambda pattern: functions.regexp_like(value, lit(pattern)), sigma
@@ -58,29 +67,37 @@ def recase(value: Expr, method: str) -> RuleResult[Expr]:
     return expr if exact is None else Lowered(expr, exact)
 
 
-@RULES(".lower", Kind.STR)
-def lower(value: Expr) -> RuleResult[Expr]:
-    return recase(value, "lower")
-
-
-@RULES(".upper", Kind.STR)
-def upper(value: Expr) -> RuleResult[Expr]:
-    return recase(value, "upper")
-
-
 @RULES(".strip", Kind.STR)
-def strip(text: Expr) -> Expr:
-    return functions.btrim(text, lit(whitespace()))
+@RULES(".strip", Kind.STR, Kind.STR)
+def strip(text: Expr, characters: Expr | None = None) -> Expr:
+    characters = (
+        functions.coalesce(characters, lit(whitespace()))
+        if characters is not None
+        else lit(whitespace())
+    )
+    return functions.btrim(text, characters)
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(text: Expr) -> Expr:
-    return functions.ltrim(text, lit(whitespace()))
+@RULES(".lstrip", Kind.STR, Kind.STR)
+def lstrip(text: Expr, characters: Expr | None = None) -> Expr:
+    characters = (
+        functions.coalesce(characters, lit(whitespace()))
+        if characters is not None
+        else lit(whitespace())
+    )
+    return functions.ltrim(text, characters)
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(text: Expr) -> Expr:
-    return functions.rtrim(text, lit(whitespace()))
+@RULES(".rstrip", Kind.STR, Kind.STR)
+def rstrip(text: Expr, characters: Expr | None = None) -> Expr:
+    characters = (
+        functions.coalesce(characters, lit(whitespace()))
+        if characters is not None
+        else lit(whitespace())
+    )
+    return functions.rtrim(text, characters)
 
 
 def split_words(text: Expr) -> Expr:
@@ -314,3 +331,37 @@ def split_limit(text: Expr, separator: Expr, maximum: Expr) -> Expr:
 @RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
 def rsplit(text: Expr, separator: Expr, maximum: Expr | None = None) -> Expr:
     return split_right(SPLIT, text, separator, maximum)
+
+
+register_string_predicates(RULES, lambda value, pattern: functions.regexp_like(value, lit(pattern)))
+
+
+for method in CASE_METHODS:
+    RULES(f".{method}", Kind.STR)(partial(recase, method=method))
+
+
+CASE = CasePrimitives(
+    lower=functions.lower,
+    upper=functions.upper,
+    title=functions.initcap,
+    head=lambda value: functions.substr(value, lit(1), lit(1)),
+    tail=lambda value: functions.substr(value, lit(2)),
+    concat=functions.concat,
+    when=when,
+    matches=lambda value, pattern: functions.regexp_like(value, lit(pattern)),
+    characters=lambda value, transform: functions.array_to_string(
+        functions.array_transform(characters(value), transform), lit("")
+    ),
+)
+
+
+register_padding(
+    RULES,
+    PaddingPrimitives(
+        sequence=TEXT,
+        literal=lit,
+        concat=functions.concat,
+        repeat=functions.repeat,
+        half=lambda value: value / lit(2),
+    ),
+)

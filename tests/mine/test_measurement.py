@@ -30,7 +30,8 @@ def test_missing_module_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         ("lambda value: value.lower()", {"value": "str?"}, None),
         ("lambda value: value / 2", {"value": "float?"}, None),
         ("lambda value: 'word'[value]", {"value": "int?"}, None),
-        ("lambda value: value.casefold()", None, "no op .casefold"),
+        ("lambda value: value.casefold()", {"value": "str?"}, None),
+        ("lambda value: value.expandtabs()", None, "no op .expandtabs"),
         ("lambda value: sum(value)", None, "no op sum"),
         ("lambda value: missing(value)", None, "unknown global"),
     ],
@@ -44,8 +45,8 @@ def test_measure_tries_schemas_and_retains_first_failure(
     assert result.schema == schema
     assert result.ok == (schema is not None)
     assert result.category == category
-    if category == "no op .casefold":
-        assert result.reason == "no op .casefold(str)"
+    if category == "no op .expandtabs":
+        assert result.reason == "no op .expandtabs(str)"
 
 
 @pytest.mark.parametrize(
@@ -53,7 +54,7 @@ def test_measure_tries_schemas_and_retains_first_failure(
     [
         ("unknown callable sum", "unknown callable"),
         ("unknown global numpy", "unknown global"),
-        ("no op .casefold(str) at helper.<locals>.nested+32", "no op .casefold"),
+        ("no op .expandtabs(str) at helper.<locals>.nested+32", "no op .expandtabs"),
         ("loops and comprehensions at helper+16", "loops and comprehensions"),
         ("object at 0x123ABC at helper+4", "object at <address>"),
     ],

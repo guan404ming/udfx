@@ -117,9 +117,14 @@ def build_container(context: Context, state: State, instruction: dis.Instruction
 @handles("LIST_EXTEND", "SET_UPDATE")
 def extend_container(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item,), rest = state.pop()
-    members = constant_value(item)
     items, base = rest.pop(instruction.argval)
-    current = constant_value(items[0])
+    try:
+        members = constant_value(item)
+        current = constant_value(items[0])
+    except Unsupported:
+        raise Unsupported(
+            "list and set literal extension requires constants", context.where(state)
+        ) from None
     if not isinstance(members, tuple | list | set | frozenset) or not isinstance(
         current, tuple | list | set | frozenset
     ):

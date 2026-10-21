@@ -16,16 +16,25 @@ from udfx.backends.duckdb.rules import (
     null_safe_equal,
     when,
 )
-from udfx.backends.registration import Lowered, RuleResult
+from udfx.backends.registration import (
+    Lowered,
+    RuleResult,
+    register_padding,
+    register_string_predicates,
+)
 from udfx.semantics import text
 from udfx.semantics.text import (
+    CASE_METHODS,
     CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
+    CasePrimitives,
+    PaddingPrimitives,
     SearchPrimitives,
     SequencePrimitives,
     SlicePrimitives,
     SplitPrimitives,
+    case_expression,
     case_guard,
     count_occurrences,
     non_whitespace_pattern,
@@ -45,7 +54,7 @@ INDEX = "udfx index"
 
 def native_recase(method: str, samples: Sequence[str]) -> list[str]:
     table = pa.table({POINT: pa.array(list(samples))})
-    rows = duckdb.from_arrow(table).select(function(method, column(POINT))).fetchall()
+    rows = duckdb.from_arrow(table).select(case_expression(CASE, column(POINT), method)).fetchall()
     return [row[0] for row in rows]
 
 
@@ -56,7 +65,7 @@ def case_drift(method: str) -> CaseDrift:
 
 
 def recase(value: Expression, method: str) -> RuleResult[Expression]:
-    expr = function(method, value)
+    expr = case_expression(CASE, value, method)
     sigma = function("contains", value, constant(SIGMA))
     exact = case_guard(
         case_drift(method),
@@ -66,29 +75,37 @@ def recase(value: Expression, method: str) -> RuleResult[Expression]:
     return expr if exact is None else Lowered(expr, exact)
 
 
-@RULES(".lower", Kind.STR)
-def lower(value: Expression) -> RuleResult[Expression]:
-    return recase(value, "lower")
-
-
-@RULES(".upper", Kind.STR)
-def upper(value: Expression) -> RuleResult[Expression]:
-    return recase(value, "upper")
-
-
 @RULES(".strip", Kind.STR)
-def strip(text: Expression) -> Expression:
-    return function("trim", text, constant(whitespace()))
+@RULES(".strip", Kind.STR, Kind.STR)
+def strip(text: Expression, characters: Expression | None = None) -> Expression:
+    characters = (
+        duckdb.CoalesceOperator(characters, constant(whitespace()))
+        if characters is not None
+        else constant(whitespace())
+    )
+    return function("trim", text, characters)
 
 
 @RULES(".lstrip", Kind.STR)
-def lstrip(text: Expression) -> Expression:
-    return function("ltrim", text, constant(whitespace()))
+@RULES(".lstrip", Kind.STR, Kind.STR)
+def lstrip(text: Expression, characters: Expression | None = None) -> Expression:
+    characters = (
+        duckdb.CoalesceOperator(characters, constant(whitespace()))
+        if characters is not None
+        else constant(whitespace())
+    )
+    return function("ltrim", text, characters)
 
 
 @RULES(".rstrip", Kind.STR)
-def rstrip(text: Expression) -> Expression:
-    return function("rtrim", text, constant(whitespace()))
+@RULES(".rstrip", Kind.STR, Kind.STR)
+def rstrip(text: Expression, characters: Expression | None = None) -> Expression:
+    characters = (
+        duckdb.CoalesceOperator(characters, constant(whitespace()))
+        if characters is not None
+        else constant(whitespace())
+    )
+    return function("rtrim", text, characters)
 
 
 def split_words(text: Expression) -> Expression:
@@ -326,3 +343,57 @@ def rsplit(
         single_code_point_clusters(separator), constant(True)
     )
     return Lowered(split_right(SPLIT, text, separator, maximum), exact)
+
+
+register_string_predicates(
+    RULES, lambda value, pattern: function("regexp_matches", value, constant(pattern))
+)
+
+
+for method in CASE_METHODS:
+    RULES(f".{method}", Kind.STR)(partial(recase, method=method))
+
+
+CASE = CasePrimitives(
+    lower=lambda value: function("lower", value),
+    upper=lambda value: function("upper", value),
+    title=lambda value: text.title_words(
+        CASE,
+        value,
+        lambda value, pattern, transform: function(
+            "array_to_string",
+            function(
+                "list_transform",
+                function("regexp_extract_all", value, constant(pattern)),
+                duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
+            ),
+            constant(""),
+        ),
+    ),
+    head=lambda value: function("substring", value, constant(1), constant(1)),
+    tail=lambda value: function("substring", value, constant(2)),
+    concat=lambda *values: function("concat", *values),
+    when=when,
+    matches=lambda value, pattern: function("regexp_matches", value, constant(pattern)),
+    characters=lambda value, transform: function(
+        "array_to_string",
+        function(
+            "list_transform",
+            function("string_split", value, constant("")),
+            duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
+        ),
+        constant(""),
+    ),
+)
+
+
+register_padding(
+    RULES,
+    PaddingPrimitives(
+        sequence=TEXT,
+        literal=constant,
+        concat=lambda *values: function("concat", *values),
+        repeat=lambda value, count: function("repeat", value, count),
+        half=lambda value: function("//", value, constant(2)),
+    ),
+)

@@ -9,7 +9,7 @@ from typing import cast
 from udfx.errors import Unsupported
 from udfx.frontend.binding import bind
 from udfx.frontend.formatting import format_template
-from udfx.frontend.logic import fold, negate
+from udfx.frontend.logic import disjunction, fold, negate
 from udfx.frontend.values import (
     MAX_UNROLL,
     Generator,
@@ -145,6 +145,12 @@ def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
 def invoke(
     name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
 ) -> tuple[Node, list[Fault]]:
+    if (
+        name in {".center", ".ljust", ".rjust"}
+        and len(arguments) == 3
+        and not isinstance(arguments[2], Lit)
+    ):
+        raise Unsupported("fill character must be a literal")
     op, arguments = overload(name, arguments)
     call = Call(op, tuple(arguments))
     folded = fold(call)
@@ -200,6 +206,39 @@ def keyword_arguments(
     return positional
 
 
+def tuple_affixes(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]] | None:
+    if len(arguments) != 2:
+        return None
+    match arguments[1]:
+        case Value(node=Lit(value=prefixes), container=container) if container is tuple:
+            pass
+        case Opaque(value=tuple() as prefixes):
+            pass
+        case _:
+            return None
+    if not isinstance(prefixes, tuple) or not all(isinstance(prefix, str) for prefix in prefixes):
+        raise Unsupported("affixes must be a tuple of string literals")
+    owner = node_of(arguments[0])
+    result: Node = FALSE
+    faults: list[Fault] = []
+    for prefix in prefixes:
+        test, pending = invoke(f".{name}", [owner, lit(prefix)], AttributeError)
+        result = disjunction(result, test)
+        faults.extend(pending)
+    if not prefixes:
+        _, faults = invoke(f".{name}", [owner, lit("")], AttributeError)
+    return result, faults
+
+
+def extremum(name: str, nodes: Sequence[Node]) -> tuple[Node, list[Fault]]:
+    result = nodes[0]
+    faults: list[Fault] = []
+    for node in nodes[1:]:
+        result, pending = invoke(name, [result, node], TypeError)
+        faults.extend(pending)
+    return result, faults
+
+
 def call(
     callee: Item, arguments: Sequence[Item], keywords: Mapping[str, Item] | None = None
 ) -> tuple[Node, list[Fault]]:
@@ -219,28 +258,37 @@ def call(
         name = op_name(callee.value)
         if isinstance(arguments[0], Set) or name in {"list", "sorted", "any", "all", "sum"}:
             return sequence_call(name, arguments[0])
-    nodes = [
-        iterable_node(argument)
-        if isinstance(callee, Method) and callee.name == "join" and index == 1
-        else node_of(argument)
-        for index, argument in enumerate(arguments)
-    ]
     match callee:
         case Method(name=name):
-            folded = evaluated(nodes, lambda values: getattr(values[0], name)(*values[1:]))
-            if folded is not None:
-                return folded, []
-            if name == "format":
-                node, faults = format_template(nodes[0], nodes[1:])
-                return fold(node), faults
-            return invoke(f".{name}", nodes, AttributeError)
+            return method_call(name, arguments)
         case Opaque(value=value):
+            nodes = [node_of(argument) for argument in arguments]
             name = op_name(value)
+            if name in {"min", "max"} and len(nodes) > 2:
+                return extremum(name, nodes)
             function = cast("Callable[..., object]", value)
             folded = evaluated(nodes, lambda values: function(*values))
             return (folded, []) if folded is not None else invoke(name, nodes, TypeError)
         case _:
             raise Unsupported(f"cannot call {describe(callee)}")
+
+
+def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
+    if name in {"startswith", "endswith"}:
+        matched = tuple_affixes(name, arguments)
+        if matched is not None:
+            return matched
+    nodes = [
+        iterable_node(argument) if name == "join" and index == 1 else node_of(argument)
+        for index, argument in enumerate(arguments)
+    ]
+    folded = evaluated(nodes, lambda values: getattr(values[0], name)(*values[1:]))
+    if folded is not None:
+        return folded, []
+    if name == "format":
+        node, faults = format_template(nodes[0], nodes[1:])
+        return fold(node), faults
+    return invoke(f".{name}", nodes, AttributeError)
 
 
 def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
