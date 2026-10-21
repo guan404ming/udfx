@@ -11,6 +11,7 @@ from udfx.program import Program
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, pa.DataType] = {
+    Kind.DATETIME: pa.timestamp("us"),
     Kind.STR: pa.string(),
     Kind.INT: pa.int64(),
     Kind.FLOAT: pa.float64(),
@@ -28,7 +29,18 @@ def dtype(type: Type) -> pa.DataType:
 
 
 def make_gather(columns: Sequence[pa.Array]) -> Gather:
-    return lambda pending: [column.take(pending).to_pylist() for column in columns]
+    def gather(pending: list[int]) -> Sequence[Sequence[object]]:
+        selected = [column.take(pending) for column in columns]
+        return [
+            (
+                column.cast(pa.timestamp("us", tz=column.type.tz))
+                if pa.types.is_timestamp(column.type)
+                else column
+            ).to_pylist()
+            for column in selected
+        ]
+
+    return gather
 
 
 def pending(flags: pa.Array) -> list[int]:

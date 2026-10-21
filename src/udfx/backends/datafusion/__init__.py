@@ -1,4 +1,15 @@
-from udfx.backends.datafusion import conversions, core, lists, math, numbers, regex, strings  # noqa: F401  # pyright: ignore[reportUnusedImport]
+# pyright: reportUnusedImport=false
+
+from udfx.backends.datafusion import (  # noqa: F401
+    conversions,
+    core,
+    datetimes,
+    lists,
+    math,
+    numbers,
+    regex,
+    strings,
+)
 from udfx.backends.datafusion.backend import DataFusionBackend
 
 BACKEND = DataFusionBackend

@@ -1,4 +1,5 @@
 from . import Case
+from .cases_datetimes import CASES as DATETIMES
 from .cases_formatting import CASES as FORMATTING
 from .cases_lists import CASES as LISTS
 from .cases_numbers import CASES as NUMBERS
@@ -8,6 +9,16 @@ from .cases_small_gaps import CASES as SMALL_GAPS
 from .cases_strings import CASES as STRINGS
 from .cases_structure import CASES as STRUCTURE
 
-CASES = [*STRINGS, *NUMBERS, *STRUCTURE, *ROWS, *FORMATTING, *REGEX, *LISTS, *SMALL_GAPS]
+CASES = [
+    *STRINGS,
+    *NUMBERS,
+    *STRUCTURE,
+    *ROWS,
+    *FORMATTING,
+    *REGEX,
+    *LISTS,
+    *SMALL_GAPS,
+    *DATETIMES,
+]
 
 __all__ = ["CASES", "Case"]

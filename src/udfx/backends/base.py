@@ -199,7 +199,12 @@ class Backend[E](ABC):
             raise Unsupported(f"{self.name} has no rule for {node.op.key}")
         arguments = [
             Lowered(cast("Any", argument.value))
-            if node.op.name.startswith("re.") and index > 0 and isinstance(argument, Lit)
+            if (
+                node.op.name.startswith("re.")
+                or node.op.name in {".strftime", "datetime.strptime", "datetime_parses"}
+            )
+            and index > 0
+            and isinstance(argument, Lit)
             else self.lower(argument, elements)
             for index, argument in enumerate(node.arguments)
         ]

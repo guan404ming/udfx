@@ -13,10 +13,10 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 
 | Path | Owns |
 |---|---|
-| `src/udfx/types.py` | IR types (`Kind`, `Type`), int64 bounds, `fits` |
+| `src/udfx/types.py` | IR types (`Kind`, `Type`, naive microsecond `DATETIME`), int64 bounds, `fits` |
 | `src/udfx/ir.py` | IR nodes: `Col`, `Lit`, `Call`, `If` |
 | `src/udfx/program.py` | `Program`: the traced function, its schema, value, fault, and `run` for fallback rows |
-| `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py` |
+| `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `datetimes.py` |
 | `src/udfx/semantics/` | Facts about Python that every backend needs: whitespace, literal grammars, operator tables, Unicode drift, and policies that build expressions from a primitives record |
 | `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
 | `src/udfx/backends/base.py` | Generic lowering, fallback composition, and `evaluate` helpers. Backends never reimplement it |
@@ -81,7 +81,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type.
-- `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`: rules, one file per op family.
+- `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `datetimes.py`: rules, one file per op family.
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
 - `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception: `run_fallback_rows` records it in thread-local state and raises a `FallbackError` whose message carries the type, and `unwrap` restores it from either. Engines that run the UDF in another thread or process (DuckDB, Spark) rely on the message, so only builtin exception types come back there.

@@ -1,4 +1,4 @@
-from udfx.backends.duckdb import conversions, core, lists, math, numbers, regex, strings  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from udfx.backends.duckdb import conversions, core, datetimes, lists, math, numbers, regex, strings  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from udfx.backends.duckdb.backend import DuckDBBackend
 
 BACKEND = DuckDBBackend

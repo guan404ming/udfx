@@ -10,6 +10,9 @@ from udfx.ops import Op, all_ops
 from udfx.semantics.text import PREDICATES
 from udfx.testing import batches, check_op, values
 from udfx.testing.strategies import (
+    DATETIME_FORMATS,
+    DATETIME_TEXT_TRAPS,
+    DATETIME_TRAPS,
     PREDICATE_TRAPS,
     REGEX_PATTERNS,
     SLICE_TRAPS,
@@ -44,6 +47,10 @@ def test_op_matches_python(backend: Backend[Any], op: Op, data: st.DataObject) -
     constants = {} if constant is None else {constant: data.draw(values(op.parameters[constant]))}
     if op.name.startswith("re."):
         constants.update(data.draw(regex_constants(op.name)))
+    if op.name in {".strftime", "datetime.strptime", "datetime_parses"}:
+        constants[1] = data.draw(st.sampled_from(DATETIME_FORMATS))
+        traps = DATETIME_TRAPS if op.name == ".strftime" else DATETIME_TEXT_TRAPS
+        rows.extend((value, "") for value in traps)
     if op.name == "slice":
         bound_values = st.one_of(values(op.parameters[1]), st.sampled_from(SLICE_TRAPS))
         bounds = data.draw(st.sets(st.sampled_from([1, 2])))

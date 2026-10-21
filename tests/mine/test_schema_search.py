@@ -5,7 +5,7 @@ import pytest
 from bench.mine.measurement import measure
 from bench.mine.models import Candidate
 from bench.mine.schema_search import schemas
-from udfx.types import BOOL, FLOAT, INT, STR
+from udfx.types import BOOL, DATETIME, FLOAT, INT, STR
 
 
 def test_schema_search_compiles_mixed_parameter_types() -> None:
@@ -65,3 +65,35 @@ def test_row_inference_reports_unsupported_shapes(source: str, category: str) ->
     result = measure(Candidate("notebook", 1, node, kind="row"))
     assert not result.ok
     assert result.category == category
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "lambda value: value.year",
+        "lambda value: value.month",
+        "lambda value: value.day",
+        "lambda value: value.hour",
+        "lambda value: value.minute",
+        "lambda value: value.second",
+        "lambda value: value.microsecond",
+        "lambda value: value.strftime('%Y-%m-%d')",
+        "lambda value: value.weekday()",
+    ],
+)
+def test_schema_search_infers_datetime(source: str) -> None:
+    node = ast.parse(source, mode="eval").body
+    assert isinstance(node, ast.Lambda)
+    candidate = Candidate("notebook", 1, node)
+    assert next(schemas(candidate)) == {"value": DATETIME.or_none()}
+    result = measure(candidate)
+    assert result.ok
+    assert result.schema == {"value": "datetime?"}
+
+
+def test_row_schema_search_infers_datetime() -> None:
+    node = ast.parse("lambda row: row['time'].year + row.amount", mode="eval").body
+    assert isinstance(node, ast.Lambda)
+    candidate = Candidate("notebook", 1, node, kind="row")
+    assert next(schemas(candidate)) == {"time": DATETIME.or_none(), "amount": FLOAT.or_none()}
+    assert measure(candidate).ok

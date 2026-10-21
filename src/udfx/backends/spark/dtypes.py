@@ -8,11 +8,13 @@ from pyspark.sql.types import (
     LongType,
     NullType,
     StringType,
+    TimestampNTZType,
 )
 
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, DataType] = {
+    Kind.DATETIME: TimestampNTZType(),
     Kind.STR: StringType(),
     Kind.INT: LongType(),
     Kind.FLOAT: DoubleType(),

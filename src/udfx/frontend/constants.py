@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from datetime import datetime
 from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
 
@@ -56,7 +57,11 @@ def type_comparison(left: Item, right: Item) -> Node | None:
 
 
 def is_scalar(value: object) -> bool:
-    return value is None or type(value) in SCALARS
+    return (
+        value is None
+        or type(value) in SCALARS
+        or (type(value) is datetime and value.tzinfo is None)
+    )
 
 
 def constant(value: object) -> Item:

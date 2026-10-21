@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from datetime import datetime
 from typing import ClassVar, cast
 
 import pyarrow as pa
@@ -61,6 +62,8 @@ class SparkBackend(Backend[Column]):
         value = node.value
         if node.type.kind is Kind.LIST and value is not None:
             value = list(cast("Iterable[object]", value))
+        if node.type.kind is Kind.DATETIME and isinstance(value, datetime):
+            value = value.isoformat(" ")
         return functions.lit(value).cast(dtype(node.type))
 
     def select(self, condition: Column, then: Column, orelse: Column) -> Column:

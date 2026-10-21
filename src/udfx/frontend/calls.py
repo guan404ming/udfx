@@ -4,6 +4,7 @@ import inspect
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
 from typing import cast
 
 from udfx.errors import Unsupported
@@ -24,6 +25,7 @@ from udfx.frontend.values import (
 )
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Lit, Node, lit
 from udfx.ops import Fault, Op, apply, matching
+from udfx.semantics.datetimes import format_parts, parse_parts
 from udfx.types import BOOL, INT, Kind, list_of, type_of
 
 CALLABLES: tuple[tuple[object, str], ...] = (
@@ -98,6 +100,11 @@ def iterable_node(item: Item) -> Node:
 
 
 def known_op(callee: object) -> str | None:
+    if (
+        getattr(callee, "__self__", None) is datetime
+        and getattr(callee, "__name__", "") == "strptime"
+    ):
+        return "datetime.strptime"
     if isinstance(getattr(callee, "__self__", None), re.Pattern):
         callee = getattr(re.Pattern, getattr(callee, "__name__", ""), callee)
     for known, name in CALLABLES:
@@ -151,6 +158,17 @@ def invoke(
         and not isinstance(arguments[2], Lit)
     ):
         raise Unsupported("fill character must be a literal")
+    if name in {".strftime", "datetime.strptime"}:
+        if (
+            len(arguments) != 2
+            or not isinstance(arguments[1], Lit)
+            or not isinstance(arguments[1].value, str)
+        ):
+            raise Unsupported("datetime format must be a string literal")
+        if name == "datetime.strptime":
+            parse_parts(arguments[1].value)
+        else:
+            format_parts(arguments[1].value)
     op, arguments = overload(name, arguments)
     call = Call(op, tuple(arguments))
     folded = fold(call)
@@ -264,6 +282,8 @@ def call(
         case Opaque(value=value):
             nodes = [node_of(argument) for argument in arguments]
             name = op_name(value)
+            if name == "datetime.strptime":
+                return invoke(name, nodes, TypeError)
             if name in {"min", "max"} and len(nodes) > 2:
                 return extremum(name, nodes)
             function = cast("Callable[..., object]", value)
@@ -282,6 +302,8 @@ def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]
         iterable_node(argument) if name == "join" and index == 1 else node_of(argument)
         for index, argument in enumerate(arguments)
     ]
+    if name == "strftime":
+        return invoke(".strftime", nodes, AttributeError)
     folded = evaluated(nodes, lambda values: getattr(values[0], name)(*values[1:]))
     if folded is not None:
         return folded, []

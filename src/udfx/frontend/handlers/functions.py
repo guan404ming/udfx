@@ -4,6 +4,7 @@ import dis
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime
 from types import CodeType, FunctionType, ModuleType
 from typing import cast
 
@@ -41,7 +42,8 @@ from udfx.frontend.values import (
     describe,
 )
 from udfx.ir import Lit, lit
-from udfx.types import STR
+from udfx.semantics.datetimes import ATTRIBUTES
+from udfx.types import STR, Kind
 
 DEFAULTS = 0x01
 KEYWORD_DEFAULTS = 0x02
@@ -76,10 +78,19 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             attribute = owner.column(name)
         case Opaque(value=ModuleType() as module) if name in context.snapshot.members(module):
             attribute = constant(context.snapshot.attribute(module, name))
+        case Opaque(value=python_type) if python_type is datetime and name == "strptime":
+            attribute = Opaque(datetime.strptime)
         case Opaque(value=dict()) if name == "get" and method:
             return [rest.push(Method(name), owner).advance()]
         case Opaque(value=re.Pattern() as pattern):
             attribute = Opaque(getattr(pattern, name, None))
+        case Value(node=node) if node.type.kind is Kind.DATETIME and name in ATTRIBUTES:
+            if method:
+                raise Unsupported(
+                    f"datetime attribute {name} is not callable", context.where(state)
+                )
+            result, faults = invoke(f".{name}", [node], AttributeError)
+            return emit(context, rest, Value(result), faults)
         case Value() | Match() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():

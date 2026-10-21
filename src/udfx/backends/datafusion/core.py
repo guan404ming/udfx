@@ -8,7 +8,7 @@ from udfx.types import Kind
 
 register_missing(RULES, Expr.is_null, functions.isnan)
 
-for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
+for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST, Kind.DATETIME):
     RULES("is_none", _kind)(Expr.is_null)
 
 

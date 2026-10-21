@@ -4,9 +4,10 @@ import operator
 
 from udfx.ops.registry import Op, register
 from udfx.semantics.scalars import is_missing, not_missing
-from udfx.types import BOOL, FLOAT, INT, STR, Type, list_of
+from udfx.types import BOOL, DATETIME, FLOAT, INT, STR, Type, list_of
 
 NULLABLE_TYPES: tuple[Type, ...] = (
+    DATETIME.or_none(),
     STR.or_none(),
     INT.or_none(),
     FLOAT.or_none(),

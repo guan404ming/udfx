@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from datetime import datetime
 
 from hypothesis import strategies as st
 
@@ -170,6 +171,57 @@ PREDICATE_TRAPS = ("Aa " * 10000,)
 INT_TRAPS = (0, 1, -1, 2, -2, 3, 5, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
 SLICE_TRAPS = (-10, -1, 1, 2**31 - 1, 2**31, 2**32 - 1, 2**32)
 
+DATETIME_FORMATS = (
+    "%Y-%m-%d",
+    "%Y-%m-%d %H:%M:%S.%f",
+    "%Y%m%d",
+    "%d/%m/%y",
+    "%Y %j",
+    "%H:%M:%S",
+    "%f",
+    "%y",
+    "%%",
+    "",
+    "literal",
+    "day %% %d.%m.%Y",
+    "\x00%Y\n%m\t%d",
+    "date 年 %Y",
+    "%Y %Y",
+    "%Y %y",
+)
+
+DATETIME_TEXT_TRAPS = (
+    "0000-01-01",
+    "10000-01-01",
+    "9999-12-31 24:00:00.000000",
+    "0001-01-01",
+    "9999-12-31",
+    "1969-12-31",
+    "2024-02-29",
+    "2023-02-29",
+    "2024-2-9",
+    "2024-01-01junk",
+    "2024-01-01\n",
+    "2024-02-29 12:34:56.123456",
+    "2024-01-01 00:00:00.1",
+    "2024-01-01 24:00:00.000000",
+    "2024-01-01 00:00:60.000000",
+    "01/02/68",
+    "01/02/69",
+    "2023 366",
+    "2024 367",
+)
+
+DATETIME_TRAPS = (
+    datetime.min,
+    datetime.max,
+    datetime(1970, 1, 1),
+    datetime(1969, 12, 31, 23, 59, 59, 999999),
+    datetime(2000, 2, 29, 12, 34, 56),
+    datetime(1900, 3, 1),
+    datetime(1600, 2, 29, 0, 0, 0, 999999),
+)
+
 FLOAT_TRAPS = (
     0.0,
     -0.0,
@@ -220,6 +272,8 @@ def batches(
 
 def _base(type: Type) -> st.SearchStrategy[object]:
     match type.kind:
+        case Kind.DATETIME:
+            return st.one_of(st.sampled_from(DATETIME_TRAPS), st.datetimes())
         case Kind.STR:
             return st.one_of(st.sampled_from(STRING_TRAPS), st.text(max_size=12))
         case Kind.INT:

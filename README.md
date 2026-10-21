@@ -73,6 +73,7 @@ A single parameter represents a row when the schema keys differ from its name:
 | Core | `not`, `and`, `or`, `is None`, truthiness |
 | Numbers | `+ - * / // %`, comparisons, unary `-`, `abs`, `int`, `float`, `str`, `math.log10`, `math.isnan`, `math.isinf` |
 | Strings | `lower upper strip lstrip rstrip split find rfind count startswith endswith replace join`, `+`, `in`, `len`, indexing, slices |
+| Datetimes | Naive `DATETIME` at microsecond precision: `year month day hour minute second microsecond`, `weekday isoweekday toordinal`, comparisons, `strftime` and `datetime.strptime` with literal `%Y %m %d %H %M %S %f %j %y %%` formats |
 | Rows | `row["name"]` with a constant key, `row.name` for schema columns |
 
 Python features: `if`/`else`, conditional expressions, `and`/`or`/`not`, chained comparisons,
@@ -85,7 +86,7 @@ String formatting: f-strings, literal `.format` templates with positional fields
 Not supported, so `compile` returns `ok == False` and `unsupported` names the feature: loops,
 comprehensions, dynamic format templates/specs, other format specs, string `!r`, `!a`,
 list and set literals, `with`, `raise`, generators, imports, global
-assignment, attribute access on a column value, `*args`/`**kwargs` calls, keywords without an
+assignment, other attribute access on a column value, `*args`/`**kwargs` calls, keywords without an
 inspectable signature (such as `int(base=...)`), `is` against anything but `None`,
 calls without a supported helper or registered op.
 

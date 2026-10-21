@@ -5,7 +5,8 @@ import heapq
 from collections.abc import Iterator
 
 from bench.mine.models import Candidate
-from udfx.types import BOOL, FLOAT, INT, STR, Type
+from udfx.semantics.datetimes import ATTRIBUTES
+from udfx.types import BOOL, DATETIME, FLOAT, INT, STR, Type
 
 
 def column_name(node: ast.AST, row_parameter: str | None) -> str | None:
@@ -53,9 +54,15 @@ def schema_types(
         expression: ast.AST = child
         hint = None
         if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
-            if child.func.attr in vars(str):
+            if child.func.attr in {"strftime", "weekday", "isoweekday", "toordinal"}:
+                expression = child.func.value
+                hint = "datetime"
+            elif child.func.attr in vars(str):
                 expression = child.func.value
                 hint = "str"
+        elif isinstance(child, ast.Attribute) and child.attr in ATTRIBUTES:
+            expression = child.value
+            hint = "datetime"
         elif isinstance(child, ast.BinOp | ast.Compare):
             operands = (
                 [child.left, child.right]
@@ -79,6 +86,7 @@ def schema_types(
                 if name in hints:
                     hints[name].add(hint)
     orders = {
+        "datetime": (DATETIME, STR, FLOAT, INT, BOOL),
         "str": (STR, FLOAT, INT, BOOL),
         "number": (FLOAT, INT, STR, BOOL),
         "bool": (BOOL, STR, FLOAT, INT),

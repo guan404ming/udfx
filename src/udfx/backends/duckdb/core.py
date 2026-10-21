@@ -9,7 +9,7 @@ from udfx.types import Kind
 
 register_missing(RULES, Expression.isnull, lambda value: function("isnan", value))
 
-for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
+for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST, Kind.DATETIME):
     RULES("is_none", _kind)(Expression.isnull)
 
 

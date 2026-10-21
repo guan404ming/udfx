@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from udfx.ops.registry import OpKey
+from udfx.semantics.datetimes import (
+    ATTRIBUTES,
+    DatetimePrimitives,
+    datetime_field,
+    format_datetime,
+    parse_datetime,
+)
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -14,6 +21,7 @@ from udfx.semantics.literals import (
     parse_int,
 )
 from udfx.semantics.numbers import (
+    COMPARISONS,
     Binary,
     OrderPrimitives,
     RoundPrimitives,
@@ -232,3 +240,27 @@ def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> Non
     )
     register("float_parses", float_parses)
     register("float", parse_float)
+
+
+def register_datetimes[E](rules: RuleSet[E], primitives: DatetimePrimitives, equal: Binary) -> None:
+    for name in (*ATTRIBUTES, "weekday", "isoweekday", "toordinal"):
+        rules(f".{name}", Kind.DATETIME)(
+            lambda value, name=name: datetime_field(primitives, value, name)
+        )
+    for name, compare in COMPARISONS.items():
+        rules(name, Kind.DATETIME, Kind.DATETIME)(compare)
+    rules("__eq__", Kind.DATETIME, Kind.DATETIME)(equal)
+    rules("__ne__", Kind.DATETIME, Kind.DATETIME)(lambda left, right: ~equal(left, right))
+    rules("bool", Kind.DATETIME)(lambda value: ~primitives.is_null(value))
+    rules(".strftime", Kind.DATETIME, Kind.STR)(
+        lambda value, format: Lowered(*format_datetime(primitives, value, format))
+    )
+    rules("datetime.strptime", Kind.STR, Kind.STR)(
+        lambda text, format: Lowered(*parse_datetime(primitives, text, format))
+    )
+
+    def parses(text: E, format: Any) -> Lowered[E]:
+        parsed, exact = parse_datetime(primitives, text, format)
+        return Lowered(~primitives.is_null(parsed), exact)
+
+    rules("datetime_parses", Kind.STR, Kind.STR)(parses)
