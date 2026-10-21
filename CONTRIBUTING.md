@@ -24,6 +24,12 @@ All must pass before a pull request. CI runs them on Python 3.12, 3.13, and 3.14
 `uv run pytest` runs the tests in parallel with `-n auto` and prints the five slowest with
 `--durations=5`. Pass `-n 0` to run in one process.
 
+## Mine notebook UDFs
+
+Run `uv run python -m bench.mine <csv> <output>` from the project root. The CSV must contain
+`kernel_id` and `source` columns. The command writes `candidates.jsonl` and `summary.md` to the
+output directory.
+
 ## Code rules
 
 - No comments, no docstrings. Lint and type directives are the only exceptions.
