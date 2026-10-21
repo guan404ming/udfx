@@ -10,7 +10,18 @@ from udfx.frontend.constants import constant
 from udfx.frontend.context import Context, parameters
 from udfx.frontend.machine import emit, explore, handles
 from udfx.frontend.state import Return, State, Step
-from udfx.frontend.values import NULL, Cell, Function, Item, Method, Null, Opaque, Value, describe
+from udfx.frontend.values import (
+    NULL,
+    Cell,
+    Function,
+    Item,
+    Method,
+    Null,
+    Opaque,
+    Row,
+    Value,
+    describe,
+)
 
 CLOSURE = 0x08
 ANNOTATIONS = 0x04
@@ -38,9 +49,10 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
     method = instruction.arg is not None and instruction.arg & 1
     (owner,), rest = state.pop()
     match owner:
+        case Row():
+            attribute = owner.column(name)
         case Opaque(value=ModuleType() as module) if name in vars(module):
             attribute = constant(vars(module)[name])
-            return [(rest.push(NULL, attribute) if method else rest.push(attribute)).advance()]
         case Value() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():
@@ -50,6 +62,7 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             )
         case _:
             raise Unsupported(f"attribute load {name} of {describe(owner)}", context.where(state))
+    return [(rest.push(NULL, attribute) if method else rest.push(attribute)).advance()]
 
 
 @handles("KW_NAMES")
@@ -63,6 +76,8 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
     items, rest = state.pop(count + 2)
     head, second, *others = items
     callee, arguments = (second, others) if isinstance(head, Null) else (head, [second, *others])
+    if any(isinstance(argument, Row) for argument in arguments):
+        raise Unsupported("passing a row to a call", context.where(state))
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments)
     node, faults = call(callee, arguments)

@@ -12,7 +12,7 @@ from udfx.frontend.handlers import explore
 from udfx.frontend.logic import disjunction
 from udfx.frontend.merge import merge
 from udfx.frontend.state import Outcome, Raise, Return, State
-from udfx.frontend.values import Item, Value, named
+from udfx.frontend.values import Item, Row, Value, named
 from udfx.ir import FALSE, TRUE, Col
 from udfx.program import Program
 from udfx.types import Type
@@ -29,7 +29,8 @@ def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Progra
     if function.__defaults__ or function.__kwdefaults__:
         raise Unsupported(f"{function.__qualname__} has parameter defaults")
     names = parameters(function.__code__)
-    if list(schema) != names:
+    row_mode = len(names) == 1 and list(schema) != names
+    if not row_mode and list(schema) != names:
         raise Unsupported(f"schema {list(schema)} does not match parameters {names}")
     function = FunctionType(
         function.__code__,
@@ -51,8 +52,9 @@ def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Progra
         function.__code__, function.__globals__, function.__builtins__, None
     )
     columns = {name: Value(Col(name, type)) for name, type in schema.items()}
-    start = State(0, (), {**columns, **_closure(function)}, TRUE)
-    return _merge(function, schema, explore(context, start))
+    bindings = {names[0]: Row(columns)} if row_mode else columns
+    start = State(0, (), {**bindings, **_closure(function)}, TRUE)
+    return _merge(function, schema, explore(context, start), row_mode)
 
 
 def _global_names(code: CodeType) -> set[str]:
@@ -81,12 +83,15 @@ def _closure(function: FunctionType) -> dict[str, Item]:
 
 
 def _merge(
-    function: Callable[..., object], schema: Mapping[str, Type], outcomes: list[Outcome]
+    function: Callable[..., object],
+    schema: Mapping[str, Type],
+    outcomes: list[Outcome],
+    row_mode: bool,
 ) -> Program:
     returns = [outcome for outcome in outcomes if isinstance(outcome, Return)]
     if not returns:
         raise Unsupported("function never returns")
     faults = [outcome.path for outcome in outcomes if isinstance(outcome, Raise)]
     return Program(
-        function, dict(schema), merge(returns, faults), reduce(disjunction, faults, FALSE)
+        function, dict(schema), merge(returns, faults), reduce(disjunction, faults, FALSE), row_mode
     )

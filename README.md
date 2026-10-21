@@ -52,6 +52,9 @@ print(df.select(year=translation.expr)["year"].to_list())
 `compile(function, schema, backend="polars")` returns a `Translation`: `function`, `ok`, `expr`, `program`,
 `backend`, and `unsupported` (the reason when the function cannot be compiled).
 
+A single parameter represents a row when the schema keys differ from its name:
+`udfx.compile(lambda row: row["price"] * row.quantity, {"price": FLOAT, "quantity": INT})`.
+
 ## How it works
 
 1. [`frontend/`](src/udfx/frontend) runs the bytecode symbolically, forks on branches, inlines
@@ -70,6 +73,7 @@ print(df.select(year=translation.expr)["year"].to_list())
 | Core | `not`, `and`, `or`, `is None`, truthiness |
 | Numbers | `+ - * / // %`, comparisons, unary `-`, `abs`, `int`, `float`, `str`, `math.log10`, `math.isnan`, `math.isinf` |
 | Strings | `lower upper strip lstrip rstrip split find rfind count startswith endswith replace join`, `+`, `in`, `len`, indexing, slices |
+| Rows | `row["name"]` with a constant key, `row.name` for schema columns |
 
 Python features: `if`/`else`, conditional expressions, `and`/`or`/`not`, chained comparisons,
 `try`/`except`/`finally`, nested helpers and closures, constant dicts and sets, slices.

@@ -10,10 +10,10 @@ from udfx.backends.base import Backend, FallbackError
 from udfx.backends.polars import PolarsBackend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
-from udfx.testing import check_function
+from udfx.testing import check_function, check_translation
 from udfx.types import FLOAT, INT, INT64_MAX, INT64_MIN, STR
 
-from .functions import inverse, year
+from .functions import inverse, row_inverse, row_year, year
 
 FLOATS = [(1.0,), (-1.0,), (0.0,), (-0.0,), (float("inf"),), (float("-inf"),), (float("nan"),)]
 
@@ -143,6 +143,31 @@ def test_fallback_surfaces_exceptions_it_cannot_rebuild(
 def test_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
     rows = [("2024-01",), (" 123",), ("\uff11\uff12\uff13\uff14",), ("9223372036854775807",)]
     assert check_function(year, {"text": STR}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_row_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
+    schema = {"offset": INT, "text": STR, "unused": INT}
+    rows = [(1, "2024-01", 99), (2, "\uff11\uff12\uff13\uff14", 98)]
+    translation = compile(row_year, schema, backend)
+    assert translation.program is not None, translation.unsupported
+    exact = backend.lower(translation.program.value).exact
+    assert exact is not None
+    assert backend.evaluate([exact], schema, rows)[0][1] is False
+    assert backend.evaluate([translation.expr], schema, rows) == [[2025, 1236]]
+    assert check_translation(translation, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(("value", "kind"), [("0", ZeroDivisionError), ("invalid", ValueError)])
+def test_row_fallback_restores_exceptions(
+    backend: Backend[Any], value: str, kind: type[Exception]
+) -> None:
+    schema = {"value": STR}
+    translation = compile(row_inverse, schema, backend)
+    assert translation.ok, translation.unsupported
+    with pytest.raises(kind):
+        backend.evaluate([translation.expr], schema, [("2",), (value,)])
 
 
 @pytest.mark.parametrize("backend", backend_params())

@@ -1,15 +1,27 @@
 from __future__ import annotations
 
 import builtins
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import CodeType, ModuleType
 
+from udfx.errors import Unsupported
 from udfx.ir import Col, Lit, Node
 
 
 @dataclass(frozen=True)
 class Value:
     node: Node
+
+
+@dataclass(frozen=True)
+class Row:
+    columns: Mapping[str, Value]
+
+    def column(self, name: str) -> Value:
+        if name not in self.columns:
+            raise Unsupported(f"unknown row column {name!r}")
+        return self.columns[name]
 
 
 @dataclass(frozen=True)
@@ -41,7 +53,7 @@ class Cell:
 
 NULL = Null()
 
-Item = Value | Method | Opaque | Null | Function
+Item = Value | Row | Method | Opaque | Null | Function
 
 
 def named(value: object) -> str:
@@ -64,6 +76,8 @@ def describe(item: Item) -> str:
             return repr(value)
         case Value(node=node):
             return f"a {node.type} value"
+        case Row():
+            return "a row"
         case Method(name=name):
             return f"method .{name}"
         case Opaque(value=value):

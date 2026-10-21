@@ -39,7 +39,10 @@ def check_translation(
         translation.program.schema,
         translation.expr,
     )
-    expected = [run(function, row, translation.program.result) for row in rows]
+    expected = [
+        run(function, translation.program.arguments(row), translation.program.result)
+        for row in rows
+    ]
     returned = [
         (row, out) for row, out in zip(rows, expected, strict=True) if isinstance(out, Returned)
     ]

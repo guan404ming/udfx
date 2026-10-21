@@ -10,7 +10,7 @@ from udfx.frontend.context import Context
 from udfx.frontend.logic import negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Item, Opaque, Value
+from udfx.frontend.values import Item, Opaque, Row, Value
 from udfx.ir import Lit
 
 BINARY_OPS: dict[str, str] = {
@@ -93,6 +93,14 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
 @handles("BINARY_SUBSCR")
 def binary_subscr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, index), rest = state.pop(2)
+    if isinstance(container, Row):
+        if not (
+            isinstance(index, Value)
+            and isinstance(index.node, Lit)
+            and isinstance(index.node.value, str)
+        ):
+            raise Unsupported("row access requires a constant string key", context.where(state))
+        return [rest.push(container.column(index.node.value)).advance()]
     if isinstance(container, Opaque) and any(container.value is generic for generic in GENERICS):
         return [rest.push(annotation(operator.getitem, container, index)).advance()]
     if isinstance(container, Opaque):

@@ -40,6 +40,8 @@ def explain[E](
     if translation.unsupported is not None:
         lines.append(f"Unsupported: {translation.unsupported}")
     elif translation.program is not None:
+        if translation.program.row_mode:
+            lines.append("Mode: row")
         lines.extend(
             (
                 f"Value: {render(translation.program.value)}",

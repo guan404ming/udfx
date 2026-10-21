@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from udfx.errors import Unsupported
-from udfx.frontend.values import Item
+from udfx.frontend.values import Item, Row
 from udfx.ir import Node
 
 
@@ -25,6 +25,8 @@ class State:
         return self.stack[cut:], replace(self, stack=self.stack[:cut])
 
     def store(self, name: str, item: Item) -> State:
+        if isinstance(item, Row):
+            raise Unsupported("assignment of a row")
         return replace(self, names={**self.names, name: item})
 
     def load(self, name: str) -> Item:

@@ -41,6 +41,13 @@ def test_unsupported_report() -> None:
     assert "JUMP_BACKWARD" not in report
 
 
+def test_row_report() -> None:
+    report = explain(lambda row: row["image"].lower(), {"image": STR})
+    assert "Mode: row" in report
+    assert "Schema: {image: str}" in report
+    assert "Value: .lower(col image)" in report
+
+
 def test_render() -> None:
     column = Col("project", STR)
     node = If(

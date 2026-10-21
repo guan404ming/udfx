@@ -4,6 +4,7 @@ import pytest
 from conftest import backend_params
 from pyspark.sql import SparkSession
 
+from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
 from udfx.errors import Unsupported
@@ -13,6 +14,25 @@ from udfx.program import Program
 from udfx.types import INT
 
 CASE_INSENSITIVE = {"duckdb", "spark"}
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_row_schema_checks_unused_folded_names(backend: Backend[Any]) -> None:
+    schema = {"a": INT, "A": INT}
+    translation = compile(lambda row: row["a"], schema, backend)
+    if backend.name in CASE_INSENSITIVE:
+        assert translation.unsupported is not None
+        assert "'a' and 'A' collide" in str(translation.unsupported)
+    else:
+        assert translation.ok, translation.unsupported
+        assert backend.evaluate([translation.expr], schema, [(5, 3)]) == [[5]]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_row_schema_checks_unused_reserved_names(backend: Backend[Any]) -> None:
+    translation = compile(lambda row: row["a"], {"a": INT, "udfx row": INT}, backend)
+    assert translation.unsupported is not None
+    assert "column names starting with 'udfx ' are reserved" in str(translation.unsupported)
 
 
 @pytest.mark.parametrize("backend", backend_params())
