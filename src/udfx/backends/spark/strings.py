@@ -205,6 +205,7 @@ def list_getitem(container: Column, index: Column) -> Column:
 
 
 SLICE = SlicePrimitives(
+    maximum=INT32_MAX,
     literal=functions.lit,
     when=when,
     coalesce=functions.coalesce,
@@ -213,6 +214,6 @@ SLICE = SlicePrimitives(
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(text: Column, start: Column, stop: Column) -> Column:
+def str_slice(text: Column, start: Column | int | None, stop: Column | int | None) -> Column:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return functions.substring(text, (bounds.start + 1).cast("int"), bounds.length.cast("int"))

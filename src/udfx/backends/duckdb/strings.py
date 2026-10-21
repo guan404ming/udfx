@@ -193,6 +193,7 @@ def list_getitem(container: Expression, index: Expression) -> Expression:
 
 
 SLICE = SlicePrimitives(
+    maximum=2**32 - 1,
     literal=constant,
     when=when,
     coalesce=duckdb.CoalesceOperator,
@@ -201,6 +202,8 @@ SLICE = SlicePrimitives(
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(text: Expression, start: Expression, stop: Expression) -> Expression:
+def str_slice(
+    text: Expression, start: Expression | int | None, stop: Expression | int | None
+) -> Expression:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return function("substring", text, bounds.start + constant(1), bounds.length)

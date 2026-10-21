@@ -128,7 +128,11 @@ def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> Non
     def register(name: str, parse: Callable[[TextPrimitives, Any], tuple[Any, Any]]) -> None:
         rules(name, Kind.STR)(lambda value: Lowered(*parse(text, value)))
 
-    register("int_parses", int_parses)
-    register("int", parse_int)
+    rules("int_parses", Kind.STR)(
+        lambda value, maximum_length=None: Lowered(*int_parses(text, value, maximum_length))
+    )
+    rules("int", Kind.STR)(
+        lambda value, maximum_length=None: Lowered(*parse_int(text, value, maximum_length))
+    )
     register("float_parses", float_parses)
     register("float", parse_float)

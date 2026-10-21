@@ -197,6 +197,7 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
 
 
 SLICE = SlicePrimitives(
+    maximum=2**63 - 1,
     literal=lit,
     when=when,
     coalesce=functions.coalesce,
@@ -205,6 +206,6 @@ SLICE = SlicePrimitives(
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(text: Expr, start: Expr, stop: Expr) -> Expr:
+def str_slice(text: Expr, start: Expr | int | None, stop: Expr | int | None) -> Expr:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return functions.substr(text, bounds.start + lit(1), bounds.length)

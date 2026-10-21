@@ -18,10 +18,11 @@ JAVA_FIXED_MAX = 1e7
 
 
 TEXT = TextPrimitives(
+    when=when,
+    translate=functions.translate,
     matches=lambda text, pattern: text.rlike(pattern),
     strip=lambda text, chars: functions.btrim(text, functions.lit(chars)),
     replace=lambda text, old, new: functions.replace(text, functions.lit(old), functions.lit(new)),
-    byte_length=functions.octet_length,
     char_length=functions.length,
     not_null=Column.isNotNull,
     try_int=lambda text: text.try_cast("bigint"),

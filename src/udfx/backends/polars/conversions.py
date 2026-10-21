@@ -18,10 +18,13 @@ from udfx.semantics.numbers import (
 from udfx.types import Kind
 
 TEXT = TextPrimitives(
+    when=when,
+    translate=lambda text, old, new: text.str.replace_many(
+        list(old), list(new) + [""] * (len(old) - len(new))
+    ),
     matches=lambda text, pattern: text.str.contains(pattern),
     strip=lambda text, chars: text.str.strip_chars(chars),
     replace=lambda text, old, new: text.str.replace_all(old, new, literal=True),
-    byte_length=lambda text: text.str.len_bytes(),
     char_length=lambda text: text.str.len_chars(),
     not_null=pl.Expr.is_not_null,
     try_int=lambda text: text.str.to_integer(strict=False),

@@ -10,6 +10,7 @@ from udfx.backends.registration import Lowered, RuleResult, RuleSet
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
 from udfx.program import Program
+from udfx.semantics.text import maximum_length
 from udfx.types import Kind, Type, fits
 
 RESERVED = "udfx "
@@ -167,7 +168,18 @@ class Backend[E](ABC):
         if rule is None:
             raise Unsupported(f"{self.name} has no rule for {node.op.key}")
         arguments = [self.lower(argument) for argument in node.arguments]
-        result: RuleResult[E] = rule(*(argument.expr for argument in arguments))
+        operands = [argument.expr for argument in arguments]
+        if node.op.name == "slice":
+            for index in (1, 2):
+                bound = node.arguments[index]
+                if isinstance(bound, Lit):
+                    operands[index] = cast("Any", bound.value)
+        if node.op.name in {"int", "int_parses"} and node.arguments[0].type.kind is Kind.STR:
+            result: RuleResult[E] = rule(
+                *operands, maximum_length=maximum_length(node.arguments[0])
+            )
+        else:
+            result = rule(*operands)
         lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
         return Lowered(
             lowered.expr, self._all(*(argument.exact for argument in arguments), lowered.exact)

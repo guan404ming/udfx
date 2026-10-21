@@ -12,6 +12,7 @@ from functools import cache, reduce
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from udfx.ir import Call, Lit, Node
 from udfx.types import INT64_MAX
 
 SIGMA = "\u03a3"
@@ -124,6 +125,7 @@ class SlicePrimitives:
     when: Callable[[Any, Any, Any], Any]
     coalesce: Callable[[Any, Any], Any]
     clip: Callable[[Any, Any, Any], Any]
+    maximum: int
 
 
 class SliceBounds(NamedTuple):
@@ -135,9 +137,28 @@ def slice_bounds(
     primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any
 ) -> SliceBounds:
     zero = primitives.literal(0)
-    maximum = primitives.literal(INT64_MAX)
+    maximum = primitives.literal(primitives.maximum)
+
+    if isinstance(start, int) and start >= primitives.maximum:
+        return SliceBounds(zero, zero)
+    if (start is None or isinstance(start, int)) and (stop is None or isinstance(stop, int)):
+        begin = 0 if start is None else start
+        end = primitives.maximum if stop is None else stop
+        if begin >= 0 and end >= 0:
+            return SliceBounds(
+                primitives.literal(min(begin, primitives.maximum - 1)),
+                primitives.literal(min(max(end - begin, 0), primitives.maximum)),
+            )
 
     def clamp(bound: Any, default: Any) -> Any:
+        if bound is None:
+            return default
+        if isinstance(bound, int):
+            if bound >= 0:
+                return primitives.literal(min(bound, primitives.maximum))
+            return primitives.clip(
+                text_length + primitives.literal(max(bound, -INT64_MAX)), zero, text_length
+            )
         shifted = bound + primitives.when(bound < zero, text_length, zero)
         return primitives.clip(primitives.coalesce(shifted, default), zero, text_length)
 
@@ -166,3 +187,23 @@ def count_occurrences(
 ) -> Any:
     empty = pattern == primitives.literal("")
     return primitives.when(empty, primitives.length(text) + primitives.literal(1), occurrences)
+
+
+def maximum_length(node: Node) -> int | None:
+    if isinstance(node, Lit) and isinstance(node.value, str):
+        return len(node.value)
+    if not isinstance(node, Call):
+        return None
+    if node.op.name in {".strip", ".lstrip", ".rstrip"}:
+        return maximum_length(node.arguments[0])
+    if node.op.name != "slice":
+        return None
+    text, start, stop = node.arguments
+    bounds = [maximum_length(text)]
+    if isinstance(start, Lit) and isinstance(start.value, int) and start.value < 0:
+        bounds.append(-start.value)
+    if isinstance(stop, Lit) and isinstance(stop.value, int) and stop.value >= 0:
+        begin = start.value if isinstance(start, Lit) and isinstance(start.value, int) else 0
+        bounds.append(max(stop.value - max(begin, 0), 0))
+    known = [bound for bound in bounds if bound is not None]
+    return min(known) if known else None

@@ -19,10 +19,11 @@ from udfx.semantics.numbers import (
 from udfx.types import Kind
 
 TEXT = TextPrimitives(
+    when=when,
+    translate=lambda text, old, new: functions.translate(text, lit(old), lit(new)),
     matches=lambda text, pattern: functions.regexp_like(text, lit(pattern)),
     strip=lambda text, chars: functions.btrim(text, lit(chars)),
     replace=lambda text, old, new: functions.replace(text, lit(old), lit(new)),
-    byte_length=functions.octet_length,
     char_length=length,
     not_null=Expr.is_not_null,
     try_int=lambda text: text.try_cast(pa.int64()),
