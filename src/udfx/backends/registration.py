@@ -23,6 +23,7 @@ from udfx.semantics.numbers import (
     signed_round,
     widened_exact,
 )
+from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.scalars import missing_expression
 from udfx.types import Kind
 
@@ -67,6 +68,26 @@ class RuleSet[E]:
 
     def keys(self) -> frozenset[OpKey]:
         return frozenset(self._rules)
+
+
+def register_regex[E](rules: RuleSet[E], primitives: RegexPrimitives) -> None:
+    def rule(name: str) -> Rule[E]:
+        return lambda *arguments: Lowered(*lower_regex(primitives, name, *arguments))
+
+    for name in ("search", "match", "fullmatch", "findall"):
+        rules(f"re.{name}", Kind.STR, Kind.STR, Kind.INT)(rule(name))
+    rules("re.sub", Kind.STR, Kind.STR, Kind.INT, Kind.STR, Kind.INT)(
+        lambda text, pattern, flags, substitute, count: Lowered(
+            *lower_regex(
+                primitives, "sub", text, pattern, flags, substitute=substitute, count=count
+            )
+        )
+    )
+    rules("re.split", Kind.STR, Kind.STR, Kind.INT, Kind.INT)(
+        lambda text, pattern, flags, count: Lowered(
+            *lower_regex(primitives, "split", text, pattern, flags, count=count)
+        )
+    )
 
 
 def register_float_variants[E](

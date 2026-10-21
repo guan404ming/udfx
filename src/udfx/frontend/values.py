@@ -16,6 +16,11 @@ class Value:
 
 
 @dataclass(frozen=True)
+class Match:
+    node: Node
+
+
+@dataclass(frozen=True)
 class Row:
     columns: Mapping[str, Value]
 
@@ -71,7 +76,7 @@ class Cell:
 
 NULL = Null()
 
-Item = Value | Row | Method | Opaque | RuntimeType | Tuple | Slice | Null | Function
+Item = Value | Match | Row | Method | Opaque | RuntimeType | Tuple | Slice | Null | Function
 
 
 def named(value: object) -> str:
@@ -94,6 +99,8 @@ def describe(item: Item) -> str:
             return repr(value)
         case Value(node=node):
             return f"a {node.type} value"
+        case Match():
+            return "a regex match (use a truth test, a None test, or guarded group(0))"
         case Row():
             return "a row"
         case Method(name=name):

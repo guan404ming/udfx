@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from udfx.errors import Unsupported
 from udfx.frontend.context import Context
 from udfx.frontend.state import Outcome, State, Step
-from udfx.frontend.values import Value
+from udfx.frontend.values import Item
 from udfx.ops import Fault
 
 Handler = Callable[[Context, State, dis.Instruction], list[Step]]
@@ -49,7 +49,7 @@ def handles(*opnames: str) -> Callable[[Handler], Handler]:
     return register
 
 
-def emit(context: Context, state: State, result: Value, faults: Sequence[Fault]) -> list[Step]:
+def emit(context: Context, state: State, result: Item, faults: Sequence[Fault]) -> list[Step]:
     survivor, steps = context.guard(state, faults)
     if survivor is not None:
         steps.append(survivor.push(result).advance())

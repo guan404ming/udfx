@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import dis
 import operator
+import re
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, node_of, none_test, truth
-from udfx.frontend.constants import GENERICS, annotation, constant, lookup, type_comparison
+from udfx.frontend.constants import (
+    GENERICS,
+    annotation,
+    constant,
+    constant_value,
+    lookup,
+    type_comparison,
+)
 from udfx.frontend.context import Context
 from udfx.frontend.formatting import format_percent
 from udfx.frontend.logic import fold, negate
@@ -40,6 +48,13 @@ def binary_op(context: Context, state: State, instruction: dis.Instruction) -> l
     symbol = instruction.argrepr.removesuffix("=")
     (left, right), rest = state.pop(2)
     if symbol == "|":
+        if any(
+            isinstance(item, Opaque) and isinstance(item.value, re.RegexFlag)
+            for item in (left, right)
+        ):
+            first, second = constant_value(left), constant_value(right)
+            if isinstance(first, int) and isinstance(second, int):
+                return [rest.push(constant(first | second)).advance()]
         return [rest.push(annotation(operator.or_, left, right)).advance()]
     if symbol == "%" and isinstance(left, Value) and left.node.type.kind is Kind.STR:
         if isinstance(right, Value) and right.container is not tuple:

@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import inspect
 import math
+import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.binding import bind
 from udfx.frontend.formatting import format_template
-from udfx.frontend.logic import fold
-from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
+from udfx.frontend.logic import fold, negate
+from udfx.frontend.values import Item, Match, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops import Fault, Op, apply, matching
 from udfx.types import BOOL, Kind, type_of
@@ -30,6 +31,19 @@ CALLABLES: tuple[tuple[object, str], ...] = (
     (math.isnan, "math.isnan"),
     (math.log10, "math.log10"),
     (math.sqrt, "math.sqrt"),
+    (re.compile, "re.compile"),
+    (re.sub, "re.sub"),
+    (re.search, "re.search"),
+    (re.match, "re.match"),
+    (re.fullmatch, "re.fullmatch"),
+    (re.findall, "re.findall"),
+    (re.split, "re.split"),
+    (re.Pattern.sub, "re.sub"),
+    (re.Pattern.search, "re.search"),
+    (re.Pattern.match, "re.match"),
+    (re.Pattern.fullmatch, "re.fullmatch"),
+    (re.Pattern.findall, "re.findall"),
+    (re.Pattern.split, "re.split"),
 )
 
 CALLABLE_IDENTITIES = {
@@ -57,6 +71,8 @@ def node_of(item: Item) -> Node:
 
 
 def known_op(callee: object) -> str | None:
+    if isinstance(getattr(callee, "__self__", None), re.Pattern):
+        callee = getattr(re.Pattern, getattr(callee, "__name__", ""), callee)
     for known, name in CALLABLES:
         if known is callee:
             return name
@@ -187,6 +203,8 @@ def call(
 
 def truth(item: Item) -> tuple[Node, list[Fault]]:
     match item:
+        case Match():
+            return negate(none_test(item)), []
         case Value(node=Lit(value=value)):
             return lit(bool(value)), []
         case Value(node=node) if node.type == BOOL:
@@ -199,6 +217,8 @@ def truth(item: Item) -> tuple[Node, list[Fault]]:
 
 def none_test(item: Item) -> Node:
     match item:
+        case Match(node=node):
+            return none_test(Value(node))
         case Value(node=Lit(value=value)):
             return lit(value is None)
         case Value(node=node) if node.type.nullable:

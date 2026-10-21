@@ -167,7 +167,12 @@ class Backend[E](ABC):
         rule = self.rules.get(node.op.key)
         if rule is None:
             raise Unsupported(f"{self.name} has no rule for {node.op.key}")
-        arguments = [self.lower(argument) for argument in node.arguments]
+        arguments = [
+            Lowered(cast("Any", argument.value))
+            if node.op.name.startswith("re.") and index > 0 and isinstance(argument, Lit)
+            else self.lower(argument)
+            for index, argument in enumerate(node.arguments)
+        ]
         operands = [argument.expr for argument in arguments]
         if node.op.name == "slice":
             for index in range(1, len(node.arguments)):

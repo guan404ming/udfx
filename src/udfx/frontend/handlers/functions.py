@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dis
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from types import CodeType, FunctionType, ModuleType
@@ -20,12 +21,14 @@ from udfx.frontend.constants import (
 from udfx.frontend.context import Context
 from udfx.frontend.frozen import closure
 from udfx.frontend.machine import emit, explore, handles
+from udfx.frontend.regex import call_regex
 from udfx.frontend.state import Return, State, Step
 from udfx.frontend.values import (
     NULL,
     Cell,
     Function,
     Item,
+    Match,
     Method,
     Null,
     Opaque,
@@ -70,7 +73,9 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             attribute = constant(context.snapshot.attribute(module, name))
         case Opaque(value=dict()) if name == "get" and method:
             return [rest.push(Method(name), owner).advance()]
-        case Value() if method:
+        case Opaque(value=re.Pattern() as pattern):
+            attribute = Opaque(getattr(pattern, name, None))
+        case Value() | Match() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():
             raise Unsupported(
@@ -108,6 +113,10 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
         rest = replace(rest, keywords=())
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments, keywords)
+    regex = call_regex(callee, arguments, keywords, state.path)
+    if regex is not None:
+        item, faults = regex
+        return emit(context, rest, item, faults)
     if isinstance(callee, Opaque) and not keywords:
         if callee.value is type and len(arguments) == 1:
             return [rest.push(runtime_type(arguments[0])).advance()]
