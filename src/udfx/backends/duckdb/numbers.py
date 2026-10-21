@@ -44,7 +44,10 @@ def cast_int128(value: Expression) -> Expression:
 
 def checked_int64(value: Expression) -> Lowered[Expression]:
     fits = value.between(constant(INT64_MIN), constant(INT64_MAX))
-    return Lowered(when(fits, value, constant(0)).cast(sqltypes.BIGINT), fits)
+    clamped = function(
+        "least", function("greatest", value, constant(INT64_MIN)), constant(INT64_MAX)
+    )
+    return Lowered(clamped.cast(sqltypes.BIGINT), fits)
 
 
 def within_exact_float_range(value: Expression) -> Expression:

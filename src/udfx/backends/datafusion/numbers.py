@@ -127,8 +127,9 @@ def float_neg(value: Expr) -> Expr:
 
 @RULES("abs", Kind.INT)
 def int_abs(value: Expr) -> Lowered[Expr]:
-    small = value != lit(INT64_MIN)
-    return Lowered(functions.abs(when(small, value, lit(0))), small)
+    return Lowered(
+        functions.abs(functions.greatest(value, lit(-INT64_MAX))), value != lit(INT64_MIN)
+    )
 
 
 @RULES("abs", Kind.FLOAT)
