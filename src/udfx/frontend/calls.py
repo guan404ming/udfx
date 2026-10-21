@@ -10,17 +10,34 @@ from udfx.errors import Unsupported
 from udfx.frontend.binding import bind
 from udfx.frontend.formatting import format_template
 from udfx.frontend.logic import fold, negate
-from udfx.frontend.values import Item, Match, Method, Opaque, Value, describe, named
-from udfx.ir import FALSE, Call, Lit, Node, lit
+from udfx.frontend.values import (
+    MAX_UNROLL,
+    Generator,
+    Item,
+    Match,
+    Method,
+    Opaque,
+    Set,
+    Value,
+    describe,
+    named,
+)
+from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Lit, Node, lit
 from udfx.ops import Fault, Op, apply, matching
-from udfx.types import BOOL, Kind, type_of
+from udfx.types import BOOL, INT, Kind, list_of, type_of
 
 CALLABLES: tuple[tuple[object, str], ...] = (
     (abs, "abs"),
+    (any, "any"),
+    (all, "all"),
     (bool, "bool"),
     (float, "float"),
     (int, "int"),
     (len, "len"),
+    (list, "list"),
+    (set, "set"),
+    (sorted, "sorted"),
+    (sum, "sum"),
     (max, "max"),
     (min, "min"),
     (round, "round"),
@@ -65,9 +82,19 @@ CALLABLE_IDENTITIES = {
 def node_of(item: Item) -> Node:
     if not isinstance(item, Value):
         raise Unsupported(f"expected a value, got {describe(item)}")
-    if isinstance(item.node, Lit) and item.node.type.kind is Kind.LIST:
-        raise Unsupported(f"constant container {item.node.value!r} outside an in test")
+    if item.container in (tuple, set, frozenset):
+        raise Unsupported(f"constant container {describe(item)} outside an in test")
     return item.node
+
+
+def iterable_node(item: Item) -> Node:
+    if isinstance(item, Generator):
+        return item.node
+    if isinstance(item, Set):
+        return invoke("set_list", [item.node], TypeError)[0]
+    if isinstance(item, Value) and item.container in (tuple, list):
+        return item.node
+    return node_of(item)
 
 
 def known_op(callee: object) -> str | None:
@@ -133,7 +160,13 @@ def invoke(
 
 
 def evaluated(nodes: Sequence[Node], run: Callable[[list[object]], object]) -> Lit | None:
-    values = [node.value for node in nodes if isinstance(node, Lit)]
+    values = [
+        list(node.value)
+        if node.type.kind is Kind.LIST and isinstance(node.value, tuple)
+        else node.value
+        for node in nodes
+        if isinstance(node, Lit)
+    ]
     if len(values) < len(nodes):
         return None
     try:
@@ -182,7 +215,16 @@ def call(
             case _:
                 raise Unsupported(f"cannot call {describe(callee)}")
         arguments = keyword_arguments(cast("Callable[..., object]", function), arguments, keywords)
-    nodes = [node_of(argument) for argument in arguments]
+    if isinstance(callee, Opaque) and len(arguments) == 1:
+        name = op_name(callee.value)
+        if isinstance(arguments[0], Set) or name in {"list", "sorted", "any", "all", "sum"}:
+            return sequence_call(name, arguments[0])
+    nodes = [
+        iterable_node(argument)
+        if isinstance(callee, Method) and callee.name == "join" and index == 1
+        else node_of(argument)
+        for index, argument in enumerate(arguments)
+    ]
     match callee:
         case Method(name=name):
             folded = evaluated(nodes, lambda values: getattr(values[0], name)(*values[1:]))
@@ -201,10 +243,44 @@ def call(
             raise Unsupported(f"cannot call {describe(callee)}")
 
 
+def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
+    if isinstance(item, Set):
+        operation = {
+            "len": "set_size",
+            "list": "set_list",
+            "sorted": "sorted_set",
+            "bool": "bool",
+        }.get(name)
+        if operation is None:
+            raise Unsupported(f"{name} of a set")
+        return invoke(operation, [item.node], TypeError)
+    source = iterable_node(item)
+    faults = [Fault(TypeError, apply("is_none", source))] if source.type.nullable else []
+    if name in {"any", "all"} and source.type.item is not None and source.type.item != BOOL:
+        if (
+            isinstance(source, Lit)
+            and isinstance(source.value, tuple | list)
+            and len(source.value) > MAX_UNROLL
+        ):
+            raise Unsupported(f"loops and comprehensions exceed {MAX_UNROLL} unrolled items")
+        element = Element("item", source.type.item)
+        test, _ = truth(Value(element))
+        source = Comprehension(source, element, test, TRUE, FALSE)
+    if name == "sum":
+        if isinstance(source, Lit) and source.value == ():
+            source = Lit((), list_of(INT))
+        if source.type.item is not None and source.type.item.kind is Kind.FLOAT:
+            name = "sum_float"
+    node, more_faults = invoke(name, [source], TypeError)
+    return node, [*faults, *more_faults]
+
+
 def truth(item: Item) -> tuple[Node, list[Fault]]:
     match item:
         case Match():
             return negate(none_test(item)), []
+        case Set(node=node):
+            return invoke("bool", [node], TypeError)
         case Value(node=Lit(value=value)):
             return lit(bool(value)), []
         case Value(node=node) if node.type == BOOL:

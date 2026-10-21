@@ -194,9 +194,11 @@ def str_contains(text: Column, item: Column) -> Column:
     return text.contains(item)
 
 
-@RULES("__contains__", Kind.LIST, Kind.STR)
 def list_contains(container: Column, item: Column) -> Column:
     return functions.exists(container, lambda element: element.eqNullSafe(item))
+
+
+RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
 
 
 @RULES("len", Kind.STR)

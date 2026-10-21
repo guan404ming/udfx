@@ -8,7 +8,8 @@ from typing import Any, ClassVar, cast
 
 from udfx.backends.registration import Lowered, RuleResult, RuleSet
 from udfx.errors import Unsupported
-from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, Node
+from udfx.ir import FALSE, TRUE, Call, Col, Comprehension, Element, If, ListValue, Lit, Node
+from udfx.ops import OpKey
 from udfx.program import Program
 from udfx.semantics.text import maximum_length
 from udfx.types import Kind, Type, fits
@@ -107,6 +108,15 @@ class Backend[E](ABC):
     def negate(self, value: E) -> E:
         return ~cast("Any", value)
 
+    def list_value(self, items: Sequence[E], type: Type) -> E:
+        raise Unsupported(f"{self.name} has no list constructor")
+
+    def list_transform(self, source: E, transform: Callable[[E], E]) -> E:
+        raise Unsupported(f"{self.name} has no list transform")
+
+    def list_filter(self, source: E, predicate: Callable[[E], E]) -> E:
+        raise Unsupported(f"{self.name} has no list filter")
+
     @abstractmethod
     def fallback(self, native: E, exact: E, program: Program) -> E: ...
 
@@ -115,18 +125,38 @@ class Backend[E](ABC):
         self, exprs: Sequence[E], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]: ...
 
-    def lower(self, node: Node) -> Lowered[E]:
+    def lower(self, node: Node, elements: Mapping[Element, E] | None = None) -> Lowered[E]:
+        elements = elements or {}
         match node:
+            case Element():
+                return Lowered(elements[node])
+            case ListValue():
+                items = [self.lower(item, elements) for item in node.items]
+                return Lowered(
+                    self.list_value([item.expr for item in items], node.type),
+                    self._all(*(item.exact for item in items)),
+                )
+            case Comprehension():
+                return self._lower_comprehension(node, elements)
             case Col():
                 return Lowered(self.column(node))
+            case Lit() if (
+                node.type.kind is Kind.LIST
+                and node.type.item is not None
+                and isinstance(node.value, tuple | list)
+            ):
+                return self.lower(
+                    ListValue(tuple(Lit(item, node.type.item) for item in node.value), node.type),
+                    elements,
+                )
             case Lit() if node.type.kind is Kind.INT and not fits(node.value, node.type):
                 return Lowered(self.literal(Lit(0, node.type)), self.literal(FALSE))
             case Lit():
                 return Lowered(self.literal(node))
             case If():
-                return self._lower_if(node)
+                return self._lower_if(node, elements)
             case Call():
-                return self._lower_call(node)
+                return self._lower_call(node, elements)
 
     def fold_name(self, name: str) -> str:
         return name
@@ -154,23 +184,23 @@ class Backend[E](ABC):
             return value.expr
         return self.fallback(value.expr, exact, program)
 
-    def _lower_if(self, node: If) -> Lowered[E]:
-        condition = self.lower(node.condition)
-        then, orelse = self.lower(node.then), self.lower(node.orelse)
+    def _lower_if(self, node: If, elements: Mapping[Element, E]) -> Lowered[E]:
+        condition = self.lower(node.condition, elements)
+        then, orelse = self.lower(node.then, elements), self.lower(node.orelse, elements)
         expr = self.select(condition.expr, then.expr, orelse.expr)
         if then.exact is None and orelse.exact is None:
             return Lowered(expr, condition.exact)
         branch = self.select(condition.expr, self._exact(then), self._exact(orelse))
         return Lowered(expr, self._all(condition.exact, branch))
 
-    def _lower_call(self, node: Call) -> Lowered[E]:
+    def _lower_call(self, node: Call, elements: Mapping[Element, E]) -> Lowered[E]:
         rule = self.rules.get(node.op.key)
         if rule is None:
             raise Unsupported(f"{self.name} has no rule for {node.op.key}")
         arguments = [
             Lowered(cast("Any", argument.value))
             if node.op.name.startswith("re.") and index > 0 and isinstance(argument, Lit)
-            else self.lower(argument)
+            else self.lower(argument, elements)
             for index, argument in enumerate(node.arguments)
         ]
         operands = [argument.expr for argument in arguments]
@@ -189,6 +219,56 @@ class Backend[E](ABC):
         return Lowered(
             lowered.expr, self._all(*(argument.exact for argument in arguments), lowered.exact)
         )
+
+    def _lower_comprehension(
+        self, node: Comprehension, elements: Mapping[Element, E]
+    ) -> Lowered[E]:
+        source = self.lower(node.source, elements)
+
+        def parts(element: E) -> tuple[Lowered[E], Lowered[E], E]:
+            scope = {**elements, node.element: element}
+            condition = self.lower(node.condition, scope)
+            value = self.lower(node.value, scope)
+            fault = self.lower(node.fault, scope)
+            exact = self._all(
+                condition.exact,
+                self.select(condition.expr, self._exact(value), self.literal(TRUE)),
+                fault.exact,
+                self.negate(fault.expr),
+            )
+            return condition, value, cast("E", exact)
+
+        try:
+            if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
+                chunks: list[E] = []
+                exacts: list[E] = []
+                for item in node.source.value:
+                    element = self.lower(Lit(item, node.element.type), elements)
+                    condition, value, exact = parts(element.expr)
+                    chunks.append(
+                        self.select(
+                            condition.expr,
+                            self.list_value([value.expr], node.type),
+                            self.literal(Lit((), node.type)),
+                        )
+                    )
+                    exacts.append(exact)
+                result = self.literal(Lit((), node.type))
+                concatenate = self.rules.get(OpKey("__add__", (Kind.LIST, Kind.LIST)))
+                if concatenate is None:
+                    raise Unsupported(f"{self.name} has no list concatenation")
+                for chunk in chunks:
+                    result = cast("E", concatenate(result, chunk))
+                return Lowered(result, self._all(source.exact, *exacts))
+            filtered = self.list_filter(source.expr, lambda element: parts(element)[0].expr)
+            value = self.list_transform(filtered, lambda element: parts(element)[1].expr)
+            flags = self.list_transform(source.expr, lambda element: parts(element)[2])
+            every = self.rules.get(OpKey("all", (Kind.LIST,)))
+            if every is None:
+                raise Unsupported(f"{self.name} has no list reduction")
+            return Lowered(value, self._all(source.exact, cast("E", every(flags))))
+        except Unsupported:
+            return Lowered(self.literal(Lit((), node.type)), self.literal(FALSE))
 
     def _exact(self, lowered: Lowered[E]) -> E:
         return lowered.exact if lowered.exact is not None else self.literal(TRUE)

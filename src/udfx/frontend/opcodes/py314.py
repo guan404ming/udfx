@@ -11,6 +11,7 @@ RENAMES = {
     "LOAD_FAST_BORROW_LOAD_FAST_BORROW": "LOAD_FAST_LOAD_FAST",
     "LOAD_SMALL_INT": "LOAD_CONST",
     "NOT_TAKEN": "NOP",
+    "POP_ITER": "POP_TOP",
 }
 
 ANNOTATE = 0x10
@@ -23,7 +24,7 @@ def normalize(code: CodeType) -> tuple[dis.Instruction, ...]:
 
 def lower(instructions: Iterable[dis.Instruction]) -> list[dis.Instruction]:
     lowered: list[dis.Instruction] = []
-    for instruction in instructions:
+    for instruction in reduction_calls(list(instructions)):
         match instruction.opname:
             case name if name in RENAMES:
                 lowered.append(instruction._replace(opname=RENAMES[name]))
@@ -34,6 +35,24 @@ def lower(instructions: Iterable[dis.Instruction]) -> list[dis.Instruction]:
             case _:
                 lowered.append(instruction)
     return lowered
+
+
+def reduction_calls(instructions: list[dis.Instruction]) -> list[dis.Instruction]:
+    for index in range(2, len(instructions) - 2):
+        if [part.opname for part in instructions[index - 2 : index + 3]] != [
+            "LOAD_GLOBAL",
+            "COPY",
+            "LOAD_COMMON_CONSTANT",
+            "IS_OP",
+            "POP_JUMP_IF_FALSE",
+        ]:
+            continue
+        if instructions[index].arg not in (3, 4):
+            continue
+        for position in range(index - 1, index + 2):
+            instructions[position] = instructions[position]._replace(opname="NOP")
+        instructions[index + 2] = instructions[index + 2]._replace(opname="JUMP_FORWARD")
+    return instructions
 
 
 def subscript(index: dis.Instruction, instruction: dis.Instruction) -> tuple[dis.Instruction, ...]:

@@ -233,7 +233,7 @@ def test_recursion_stops_at_depth_limit(function: Callable[[int], int]) -> None:
         Cleaner().clean,
         "prefix".replace,
         str.title,
-        sum,
+        iter,
         object,
     ],
 )

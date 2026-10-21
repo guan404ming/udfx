@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dis
 from collections.abc import Callable, Sequence
+from typing import overload
 
 from udfx.errors import Unsupported
 from udfx.frontend.context import Context
@@ -61,9 +62,19 @@ def unsupported(context: Context, state: State) -> Unsupported:
     return Unsupported(FEATURES.get(opname, f"opcode {opname}"), context.where(state))
 
 
-def explore(context: Context, start: State) -> list[Outcome]:
+@overload
+def explore(context: Context, start: State, stop: None = None) -> list[Outcome]: ...
+
+
+@overload
+def explore(context: Context, start: State, stop: Callable[[State], bool]) -> list[Step]: ...
+
+
+def explore(
+    context: Context, start: State, stop: Callable[[State], bool] | None = None
+) -> Sequence[Step]:
     pending: list[State] = [start]
-    outcomes: list[Outcome] = []
+    outcomes: list[Step] = []
     steps = 0
     while pending:
         steps += 1
@@ -73,6 +84,9 @@ def explore(context: Context, start: State) -> list[Outcome]:
                 "the function has too many independent branches for one expression"
             )
         state = pending.pop()
+        if stop is not None and stop(state):
+            outcomes.append(state)
+            continue
         instruction = context.instructions[state.index]
         handler = HANDLERS.get(instruction.opname)
         if handler is None:

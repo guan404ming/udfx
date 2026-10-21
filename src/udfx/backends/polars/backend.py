@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import ClassVar
 
 import polars as pl
 
 from udfx.backends.base import RAISED, RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.polars.dtypes import dtype
-from udfx.backends.polars.rules import RULES
+from udfx.backends.polars.rules import RULES, broadcast, evaluate_list
 from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
-from udfx.types import Type
+from udfx.types import Kind, Type
 
 ROW = f"{RESERVED}row"
 
@@ -35,6 +35,17 @@ class PolarsBackend(Backend[pl.Expr]):
 
     def select(self, condition: pl.Expr, then: pl.Expr, orelse: pl.Expr) -> pl.Expr:
         return pl.when(condition).then(then).otherwise(orelse)
+
+    def list_value(self, items: Sequence[pl.Expr], type: Type) -> pl.Expr:
+        if items and type.item is not None and type.item.kind is Kind.LIST:
+            return pl.concat_arr(items).arr.to_list().cast(dtype(type))
+        return pl.concat_list(items).cast(dtype(type)) if items else self.literal(Lit((), type))
+
+    def list_transform(self, source: pl.Expr, transform: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
+        return evaluate_list(source, broadcast(transform(pl.element())))
+
+    def list_filter(self, source: pl.Expr, predicate: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
+        return evaluate_list(source, pl.element().filter(predicate(pl.element())))
 
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         result = dtype(program.result)

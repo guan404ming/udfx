@@ -15,8 +15,6 @@ from udfx.types import list_of
 
 SCALARS = (str, int, float, bool)
 
-ITEMS = (str, int)
-
 ANNOTATIONS = (type, UnionType, GenericAlias)
 
 GENERICS = (list, dict, tuple, set, frozenset, type)
@@ -69,7 +67,7 @@ def constant(value: object) -> Item:
     if isinstance(value, tuple | list | set | frozenset):
         present = [item for item in value if item is not None]
         kinds = {type(item) for item in present}
-        if len(kinds) == 1 and kinds <= set(ITEMS):
+        if len(kinds) == 1 and kinds <= set(SCALARS):
             missing = len(value) - len(present)
             ordered = isinstance(value, set | frozenset)
             items = (*sorted(present), *[None] * missing) if ordered else tuple(value)

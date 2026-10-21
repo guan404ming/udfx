@@ -8,6 +8,7 @@ from udfx.frontend.context import Context
 from udfx.frontend.logic import conjunction, negate
 from udfx.frontend.machine import handles, unsupported
 from udfx.frontend.state import Return, State, Step
+from udfx.frontend.values import Iterator
 from udfx.ir import FALSE
 
 JUMP_WHEN_TRUE = frozenset({"POP_JUMP_IF_TRUE", "POP_JUMP_IF_NONE"})
@@ -37,6 +38,11 @@ def jump_forward(context: Context, state: State, instruction: dis.Instruction) -
 
 @handles("JUMP_BACKWARD", "JUMP_BACKWARD_NO_INTERRUPT")
 def jump_backward(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    target = context.target(instruction)
+    if context.instructions[target].opname == "FOR_ITER" and any(
+        isinstance(item, Iterator) for item in state.stack
+    ):
+        return [state.goto(target)]
     raise unsupported(context, state)
 
 

@@ -181,9 +181,11 @@ def str_contains(text: Expr, item: Expr) -> Expr:
     return functions.strpos(text, item) > lit(0)
 
 
-@RULES("__contains__", Kind.LIST, Kind.STR)
 def list_contains(container: Expr, item: Expr) -> Expr:
     return functions.array_position(container, item).is_not_null()
+
+
+RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
 
 
 @RULES("len", Kind.STR)

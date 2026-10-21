@@ -204,3 +204,37 @@ def test_keyword_opcode_versions(monkeypatch: pytest.MonkeyPatch, normalizer: Mo
     assert trace(keyword_round, {"number": FLOAT}).value == apply(
         "round", Col("number", FLOAT), Lit(2, INT)
     )
+
+
+@pytest.mark.parametrize("normalizer", [py313, py314], ids=["3.13", "3.14"])
+def test_loop_cleanup_versions(monkeypatch: pytest.MonkeyPatch, normalizer: ModuleType) -> None:
+    template = next(dis.get_instructions(branch))
+    instructions = [
+        template._replace(opname="END_FOR", offset=0),
+        template._replace(opname="POP_ITER" if normalizer is py314 else "POP_TOP", offset=2),
+    ]
+    monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
+    assert [instruction.opname for instruction in normalizer.normalize(branch.__code__)] == [
+        "END_FOR",
+        "NOP",
+    ]
+
+
+def test_reduction_specialization_uses_call_path() -> None:
+    template = next(dis.get_instructions(branch))
+    instructions = [
+        template._replace(opname="LOAD_GLOBAL", argval="any"),
+        template._replace(opname="COPY", arg=1),
+        template._replace(opname="LOAD_COMMON_CONSTANT", arg=4),
+        template._replace(opname="IS_OP", arg=0),
+        template._replace(opname="POP_JUMP_IF_FALSE", argval=100),
+    ]
+    normalized = py314.lower(instructions)
+    assert [instruction.opname for instruction in normalized] == [
+        "LOAD_GLOBAL",
+        "NOP",
+        "NOP",
+        "NOP",
+        "JUMP_FORWARD",
+    ]
+    assert normalized[-1].argval == 100

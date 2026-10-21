@@ -8,6 +8,8 @@ from types import CodeType, ModuleType
 from udfx.errors import Unsupported
 from udfx.ir import Col, Lit, Node
 
+MAX_UNROLL = 64
+
 
 @dataclass(frozen=True)
 class Value:
@@ -51,6 +53,23 @@ class Tuple:
 
 
 @dataclass(frozen=True)
+class Iterator:
+    items: tuple[Item, ...]
+    position: int = 0
+    source: Node | None = None
+
+
+@dataclass(frozen=True)
+class Generator:
+    node: Node
+
+
+@dataclass(frozen=True)
+class Set:
+    node: Node
+
+
+@dataclass(frozen=True)
 class Slice:
     bounds: tuple[Node, ...]
 
@@ -76,7 +95,21 @@ class Cell:
 
 NULL = Null()
 
-Item = Value | Match | Row | Method | Opaque | RuntimeType | Tuple | Slice | Null | Function
+Item = (
+    Value
+    | Match
+    | Row
+    | Method
+    | Opaque
+    | RuntimeType
+    | Tuple
+    | Iterator
+    | Generator
+    | Set
+    | Slice
+    | Null
+    | Function
+)
 
 
 def named(value: object) -> str:
@@ -109,10 +142,10 @@ def describe(item: Item) -> str:
             return named(value)
         case RuntimeType(node=node):
             return f"type of a {node.type} value"
-        case Tuple():
-            return "a tuple"
-        case Slice():
-            return "a slice"
+        case Iterator():
+            return "an iterator"
+        case Tuple() | Generator() | Set() | Slice():
+            return f"a {type(item).__name__.lower()}"
         case Function(code=code):
             return f"helper {code.co_qualname}"
         case Null():

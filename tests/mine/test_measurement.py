@@ -31,7 +31,7 @@ def test_missing_module_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         ("lambda value: value / 2", {"value": "float?"}, None),
         ("lambda value: 'word'[value]", {"value": "int?"}, None),
         ("lambda value: value.casefold()", None, "no op .casefold"),
-        ("lambda value: sum(value)", None, "unknown callable"),
+        ("lambda value: sum(value)", None, "no op sum"),
         ("lambda value: missing(value)", None, "unknown global"),
     ],
 )

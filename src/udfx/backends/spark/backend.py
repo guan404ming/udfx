@@ -66,6 +66,15 @@ class SparkBackend(Backend[Column]):
     def select(self, condition: Column, then: Column, orelse: Column) -> Column:
         return functions.when(condition, then).otherwise(orelse)
 
+    def list_value(self, items: Sequence[Column], type: Type) -> Column:
+        return functions.array(*items).cast(dtype(type))
+
+    def list_transform(self, source: Column, transform: Callable[[Column], Column]) -> Column:
+        return functions.transform(source, transform)
+
+    def list_filter(self, source: Column, predicate: Callable[[Column], Column]) -> Column:
+        return functions.filter(source, predicate)
+
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
         result = dtype(program.result)
         flag = functions.coalesce(exact, functions.lit(False))

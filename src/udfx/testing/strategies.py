@@ -77,6 +77,10 @@ STRING_TRAPS = (
     "abab",
     "abcabc",
     "a\nb",
+    "\ue000",
+    "\U00010000",
+    "Func=a;Other=b;Func=c",
+    "Func;Func=",
 )
 
 REGEX_PATTERNS = (
@@ -146,6 +150,8 @@ def regex_constants(name: str) -> st.SearchStrategy[dict[int, object]]:
     return constants()
 
 
+LIST_TRAPS = (("b", "a", "b"), ("\ue000", "\U00010000"), ("z", "Z", "ä", "a", ""))
+
 INT_TRAPS = (0, 1, -1, 2, -2, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
 SLICE_TRAPS = (-10, 2**31 - 1, 2**31, 2**32 - 1, 2**32)
 
@@ -214,4 +220,9 @@ def _base(type: Type) -> st.SearchStrategy[object]:
         case Kind.LIST:
             if type.item is None:
                 raise TypeError("list type needs an item type")
-            return st.lists(values(type.item), max_size=5)
+            items = st.lists(values(type.item), max_size=5)
+            return (
+                st.one_of(st.sampled_from(LIST_TRAPS).map(list), items)
+                if type.item.kind is Kind.STR
+                else items
+            )

@@ -9,7 +9,7 @@ from typing import cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.binding import bind, helper_signature
-from udfx.frontend.calls import call, node_of
+from udfx.frontend.calls import call, invoke, iterable_node, node_of
 from udfx.frontend.constants import (
     constant,
     constant_value,
@@ -20,6 +20,7 @@ from udfx.frontend.constants import (
 )
 from udfx.frontend.context import Context
 from udfx.frontend.frozen import closure
+from udfx.frontend.handlers.iteration import comprehension, source_of
 from udfx.frontend.machine import emit, explore, handles
 from udfx.frontend.regex import call_regex
 from udfx.frontend.state import Return, State, Step
@@ -27,16 +28,20 @@ from udfx.frontend.values import (
     NULL,
     Cell,
     Function,
+    Generator,
     Item,
+    Iterator,
     Match,
     Method,
     Null,
     Opaque,
     Row,
+    Set,
     Value,
     describe,
 )
 from udfx.ir import Lit, lit
+from udfx.types import STR
 
 DEFAULTS = 0x01
 KEYWORD_DEFAULTS = 0x02
@@ -118,6 +123,12 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
         item, faults = regex
         return emit(context, rest, item, faults)
     if isinstance(callee, Opaque) and not keywords:
+        if callee.value is set and len(arguments) == 1:
+            source = iterable_node(arguments[0])
+            if source.type.item != STR:
+                raise Unsupported("set requires list[str]", context.where(state))
+            node, faults = invoke("list", [source], TypeError)
+            return emit(context, rest, Set(node), faults)
         if callee.value is type and len(arguments) == 1:
             return [rest.push(runtime_type(arguments[0])).advance()]
         if callee.value is isinstance and len(arguments) == 2:
@@ -167,6 +178,20 @@ def inline(
         nested = Context.from_code(
             code, home.scope, home.builtins, (context, state), context.snapshot
         )
+    if code.co_name == "<genexpr>" and len(arguments) == 1 and isinstance(arguments[0], Iterator):
+        iterator = arguments[0]
+        index = next(
+            index
+            for index, instruction in enumerate(nested.instructions)
+            if instruction.opname == "FOR_ITER"
+        )
+        start = State(index, (iterator,), {".0": iterator, **free}, state.path)
+        node = (
+            comprehension(nested, start, iterator, "YIELD_VALUE")
+            if iterator.items or iterator.source is not None
+            else source_of(iterator)
+        )
+        return [state.push(Generator(node)).advance()]
     for item in (*defaults, *keyword_defaults.values()):
         if isinstance(item, Opaque) and isinstance(item.value, dict):
             scalar_map(item.value.items())

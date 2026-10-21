@@ -5,7 +5,7 @@ import itertools
 import string
 import threading
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from typing import ClassVar, cast
 
@@ -76,6 +76,25 @@ class DuckDBBackend(Backend[Expression]):
 
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:
         return when(condition, then, orelse)
+
+    def list_value(self, items: Sequence[Expression], type: Type) -> Expression:
+        return function("list_value", *items).cast(dtype(type))
+
+    def list_transform(
+        self, source: Expression, transform: Callable[[Expression], Expression]
+    ) -> Expression:
+        name = f"{RESERVED}element"
+        return function(
+            "list_transform", source, duckdb.LambdaExpression(name, transform(column(name)))
+        )
+
+    def list_filter(
+        self, source: Expression, predicate: Callable[[Expression], Expression]
+    ) -> Expression:
+        name = f"{RESERVED}element"
+        return function(
+            "list_filter", source, duckdb.LambdaExpression(name, predicate(column(name)))
+        )
 
     def fallback(self, native: Expression, exact: Expression, program: Program) -> Expression:
         connection = self.connection

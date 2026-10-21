@@ -19,7 +19,7 @@ from udfx.frontend.formatting import format_percent
 from udfx.frontend.logic import fold, negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Item, Opaque, Row, Slice, Tuple, Value
+from udfx.frontend.values import Item, Opaque, Row, Set, Slice, Tuple, Value
 from udfx.ir import Lit, lit
 from udfx.types import Kind
 
@@ -47,6 +47,12 @@ COMPARE_OPS: dict[str, str] = {
 def binary_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     symbol = instruction.argrepr.removesuffix("=")
     (left, right), rest = state.pop(2)
+    if (
+        instruction.argrepr.endswith("=")
+        and isinstance(left, Value)
+        and left.node.type.kind is Kind.LIST
+    ):
+        raise Unsupported("in-place list mutation", context.where(state))
     if symbol == "|":
         if any(
             isinstance(item, Opaque) and isinstance(item.value, re.RegexFlag)
@@ -57,6 +63,8 @@ def binary_op(context: Context, state: State, instruction: dis.Instruction) -> l
                 return [rest.push(constant(first | second)).advance()]
         return [rest.push(annotation(operator.or_, left, right)).advance()]
     if symbol == "%" and isinstance(left, Value) and left.node.type.kind is Kind.STR:
+        if isinstance(right, Value) and right.container in (list, set, frozenset):
+            raise Unsupported("constant container outside an in test", context.where(state))
         if isinstance(right, Value) and right.container is not tuple:
             node_of(right)
         match right:
@@ -125,7 +133,7 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
     if isinstance(container, Opaque) and isinstance(container.value, dict):
         node, faults = lookup(dict.fromkeys(container.value, True), node_of(item), lit(False))
         return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
-    members = container.node if isinstance(container, Value) else node_of(container)
+    members = container.node if isinstance(container, Value | Set) else node_of(container)
     node, faults = invoke("__contains__", [members, node_of(item)], TypeError)
     return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
 

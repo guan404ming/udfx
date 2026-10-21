@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from udfx.types import BOOL, Type, type_of
+from udfx.types import BOOL, Type, list_of, type_of
 
 if TYPE_CHECKING:
     from udfx.ops.registry import Op
@@ -39,7 +39,32 @@ class If:
     type: Type
 
 
-Node = Col | Lit | Call | If
+@dataclass(frozen=True)
+class ListValue:
+    items: tuple[Node, ...]
+    type: Type
+
+
+@dataclass(frozen=True)
+class Element:
+    name: str
+    type: Type
+
+
+@dataclass(frozen=True)
+class Comprehension:
+    source: Node
+    element: Element
+    value: Node
+    condition: Node
+    fault: Node
+
+    @property
+    def type(self) -> Type:
+        return list_of(self.value.type)
+
+
+Node = Col | Lit | Call | If | ListValue | Element | Comprehension
 
 TRUE = Lit(True, BOOL)
 FALSE = Lit(False, BOOL)

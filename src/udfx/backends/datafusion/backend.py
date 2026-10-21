@@ -42,6 +42,11 @@ class DataFusionBackend(Backend[Expr]):
     def select(self, condition: Expr, then: Expr, orelse: Expr) -> Expr:
         return functions.when(condition, then).otherwise(orelse)
 
+    def list_value(self, items: Sequence[Expr], type: Type) -> Expr:
+        return (
+            functions.make_array(*items).cast(dtype(type)) if items else self.literal(Lit((), type))
+        )
+
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)
 

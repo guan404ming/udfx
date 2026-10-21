@@ -29,14 +29,6 @@ def while_loop(a: int) -> int:
     return a
 
 
-def list_literal(s: str) -> int:
-    return len([s, "x"])
-
-
-def set_literal(s: str) -> bool:
-    return s in {s, "x"}
-
-
 def global_assignment(a: int) -> int:
     global counter  # noqa: PLW0603
     counter = a
@@ -93,8 +85,6 @@ def unpacking(s: str) -> str:
         (for_loop, {"s": STR}, r"loops and comprehensions at for_loop\+\d+"),
         (comprehension, {"s": STR}, r"loops and comprehensions at comprehension\+\d+"),
         (while_loop, {"a": INT}, r"loops and comprehensions at while_loop\+\d+"),
-        (list_literal, {"s": STR}, r"list and set literals at list_literal\+\d+"),
-        (set_literal, {"s": STR}, r"list and set literals at set_literal\+\d+"),
         (global_assignment, {"a": INT}, r"global assignment at global_assignment\+\d+"),
         (global_deletion, {"a": INT}, r"global assignment at global_deletion\+\d+"),
         (local_import, {"a": INT}, r"imports at local_import\+\d+"),
