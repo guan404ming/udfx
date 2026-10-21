@@ -13,7 +13,7 @@ from udfx.frontend.calls import invoke
 from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
-from udfx.types import FLOAT, INT, STR, Type
+from udfx.types import BOOL, FLOAT, INT, STR, Type
 
 POLARS = PolarsBackend()
 
@@ -117,8 +117,7 @@ def test_keyword_only_and_defaults_are_unsupported() -> None:
 
 def test_callables_resolve_by_identity() -> None:
     assert trace(truthy, {"s": STR.or_none()}).value == apply("bool", S)
-    with pytest.raises(Unsupported, match="unknown callable"):
-        trace(calls_fake_bool, {"s": STR.or_none()})
+    assert trace(calls_fake_bool, {"s": STR.or_none()}).value == Lit(True, BOOL)
 
 
 def test_builtins_come_from_the_function() -> None:

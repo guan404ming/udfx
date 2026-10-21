@@ -11,7 +11,7 @@ from udfx.frontend.machine import HANDLERS
 from udfx.frontend.opcodes import normalize, py312, py313, py314
 from udfx.ir import FALSE, Col, If, Lit, Node
 from udfx.ops import apply
-from udfx.types import INT, STR, Type
+from udfx.types import FLOAT, INT, STR, Type
 
 S = Col("s", STR.or_none())
 T = Col("t", STR)
@@ -79,6 +79,10 @@ def formatted(number: int) -> str:
 
 def converted(number: int) -> str:
     return f"{number!r:s}"
+
+
+def keyword_round(number: float) -> float:
+    return round(number, ndigits=2)
 
 
 CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
@@ -172,3 +176,31 @@ def test_format_opcode_versions(
     program = trace(function, {"number": INT})
     assert program.value == apply("str", NUMBER)
     assert program.fault == FALSE
+
+
+@pytest.mark.parametrize("normalizer", [py312, py313, py314], ids=["3.12", "3.13", "3.14"])
+def test_keyword_opcode_versions(monkeypatch: pytest.MonkeyPatch, normalizer: ModuleType) -> None:
+    template = next(dis.get_instructions(keyword_round))
+    instructions = [
+        template._replace(opname="RESUME", arg=0),
+        template._replace(opname="LOAD_GLOBAL", arg=1, argval="round"),
+        template._replace(
+            opname="LOAD_FAST_BORROW" if normalizer is py314 else "LOAD_FAST",
+            arg=0,
+            argval="number",
+        ),
+        template._replace(opname="LOAD_CONST", argval=2),
+        template._replace(
+            opname="KW_NAMES" if normalizer is py312 else "LOAD_CONST",
+            arg=keyword_round.__code__.co_consts.index(("ndigits",)),
+            argval=("ndigits",),
+        ),
+        template._replace(opname="CALL" if normalizer is py312 else "CALL_KW", arg=2),
+        template._replace(opname="RETURN_VALUE", arg=None),
+    ]
+    instructions = [item._replace(offset=2 * index) for index, item in enumerate(instructions)]
+    monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
+    monkeypatch.setattr("udfx.frontend.context.normalize", normalizer.normalize)
+    assert trace(keyword_round, {"number": FLOAT}).value == apply(
+        "round", Col("number", FLOAT), Lit(2, INT)
+    )

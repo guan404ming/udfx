@@ -76,7 +76,8 @@ A single parameter represents a row when the schema keys differ from its name:
 | Rows | `row["name"]` with a constant key, `row.name` for schema columns |
 
 Python features: `if`/`else`, conditional expressions, `and`/`or`/`not`, chained comparisons,
-`try`/`except`/`finally`, nested helpers and closures, constant dicts and sets, slices.
+`try`/`except`/`finally`, Python helpers from globals and closures with constant defaults,
+keyword calls with inspectable signatures, constant dicts and sets, slices.
 String formatting: f-strings, literal `.format` templates with positional fields, and literal
 `%s`/`%d` templates. Format specs support empty, integer `d`, and string `s`; conversions support
 `!s` and numeric `!r`.
@@ -84,8 +85,9 @@ String formatting: f-strings, literal `.format` templates with positional fields
 Not supported, so `compile` returns `ok == False` and `unsupported` names the feature: loops,
 comprehensions, dynamic format templates/specs, other format specs, string `!r`, `!a`,
 list and set literals, `with`, `raise`, generators, imports, global
-assignment, attribute access on a column value, keyword arguments, `is` against anything but
-`None`, calls without a registered op.
+assignment, attribute access on a column value, `*args`/`**kwargs` calls, keywords without an
+inspectable signature (such as `int(base=...)`), `is` against anything but `None`,
+calls without a supported helper or registered op.
 
 ## Backends
 

@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from collections.abc import Callable
 from contextlib import nullcontext
 
@@ -78,7 +79,7 @@ def mixed_returns(a: int) -> int | str:
 
 
 def module_callable(s: str) -> str:
-    return re.sub("a", "b", s)
+    return unicodedata.normalize("NFC", s)
 
 
 def unpacking(s: str) -> str:
@@ -110,7 +111,7 @@ def unpacking(s: str) -> str:
             {"a": INT},
             r"return types differ: returns int on one path and str on another; return one type",
         ),
-        (module_callable, {"s": STR}, r"unknown callable re\.sub"),
+        (module_callable, {"s": STR}, r"unknown callable unicodedata\.normalize"),
         (unpacking, {"s": STR}, r"opcode UNPACK_SEQUENCE at unpacking\+\d+"),
         (len, {"s": STR}, r"len is not a Python function"),
     ],

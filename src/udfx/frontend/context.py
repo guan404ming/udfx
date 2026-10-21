@@ -9,6 +9,7 @@ from typing import NamedTuple
 
 from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
+from udfx.frontend.frozen import Snapshot
 from udfx.frontend.logic import conjunction, fold, negate
 from udfx.frontend.opcodes import normalize
 from udfx.frontend.state import Raise, State, Step
@@ -42,6 +43,8 @@ class Context:
     index_of: Mapping[int, int]
     protected: tuple[Protected, ...]
     caller: tuple[Context, State] | None
+    snapshot: Snapshot
+    depth: int
 
     @classmethod
     def from_code(
@@ -50,6 +53,7 @@ class Context:
         scope: Mapping[str, object],
         builtins: Mapping[str, object],
         caller: tuple[Context, State] | None,
+        snapshot: Snapshot,
     ) -> Context:
         instructions = normalize(code)
         index_of = {instruction.offset: index for index, instruction in enumerate(instructions)}
@@ -57,13 +61,10 @@ class Context:
             Protected(entry.start, entry.end, entry.target, entry.depth, entry.lasti)
             for entry in dis.Bytecode(code).exception_entries  # pyright: ignore[reportAttributeAccessIssue]
         )
-        return cls(code, scope, builtins, instructions, index_of, protected, caller)
-
-    def nested(self, code: CodeType, state: State) -> Context:
-        return Context.from_code(code, self.scope, self.builtins, (self, state))
-
-    def encloses(self, code: CodeType) -> bool:
-        return self.code is code or (self.caller is not None and self.caller[0].encloses(code))
+        depth = caller[0].depth + 1 if caller else 0
+        return cls(
+            code, scope, builtins, instructions, index_of, protected, caller, snapshot, depth
+        )
 
     def frame(self, state: State, home: object) -> State:
         if self is home:

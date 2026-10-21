@@ -50,6 +50,8 @@ class Function:
     code: CodeType
     cells: tuple[str, ...]
     home: object = field(repr=False)
+    defaults: tuple[Item, ...] = ()
+    keyword_defaults: Mapping[str, Item] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

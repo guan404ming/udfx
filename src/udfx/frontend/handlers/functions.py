@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import dis
-from collections.abc import Sequence
-from types import CodeType, ModuleType
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
+from types import CodeType, FunctionType, ModuleType
+from typing import cast
 
 from udfx.errors import Unsupported
+from udfx.frontend.binding import bind, helper_signature
 from udfx.frontend.calls import call
-from udfx.frontend.constants import constant
-from udfx.frontend.context import Context, parameters
+from udfx.frontend.constants import constant, constant_value, scalar_map
+from udfx.frontend.context import Context
+from udfx.frontend.frozen import closure
 from udfx.frontend.machine import emit, explore, handles
 from udfx.frontend.state import Return, State, Step
 from udfx.frontend.values import (
@@ -22,9 +26,13 @@ from udfx.frontend.values import (
     Value,
     describe,
 )
+from udfx.ir import Lit
 
+DEFAULTS = 0x01
+KEYWORD_DEFAULTS = 0x02
 CLOSURE = 0x08
 ANNOTATIONS = 0x04
+MAX_DEPTH = 32
 
 
 @handles("PUSH_NULL")
@@ -51,8 +59,8 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
     match owner:
         case Row():
             attribute = owner.column(name)
-        case Opaque(value=ModuleType() as module) if name in vars(module):
-            attribute = constant(vars(module)[name])
+        case Opaque(value=ModuleType() as module) if name in context.snapshot.members(module):
+            attribute = constant(context.snapshot.attribute(module, name))
         case Value() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():
@@ -67,7 +75,12 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
 
 @handles("KW_NAMES")
 def kw_names(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    raise Unsupported("keyword arguments", context.where(state))
+    names = instruction.argval
+    if not isinstance(names, tuple) or not all(isinstance(name, str) for name in names):
+        raise Unsupported("keyword argument names", context.where(state))
+    if len(set(names)) != len(names):
+        raise Unsupported("duplicate keyword arguments", context.where(state))
+    return [replace(state, keywords=names).advance()]
 
 
 @handles("CALL")
@@ -78,28 +91,64 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
     callee, arguments = (second, others) if isinstance(head, Null) else (head, [second, *others])
     if any(isinstance(argument, Row) for argument in arguments):
         raise Unsupported("passing a row to a call", context.where(state))
+    keywords: dict[str, Item] = {}
+    if state.keywords:
+        split = len(arguments) - len(state.keywords)
+        keywords = dict(zip(state.keywords, arguments[split:], strict=True))
+        arguments = arguments[:split]
+        rest = replace(rest, keywords=())
     if isinstance(callee, Function):
-        return inline(context, rest, callee, arguments)
-    node, faults = call(callee, arguments)
+        return inline(context, rest, callee, arguments, keywords)
+    node, faults = call(callee, arguments, keywords)
     return emit(context, rest, Value(node), faults)
 
 
 def inline(
-    context: Context, state: State, function: Function, arguments: Sequence[Item]
+    context: Context,
+    state: State,
+    function: Function,
+    arguments: Sequence[Item],
+    keywords: Mapping[str, Item],
 ) -> list[Step]:
     code = function.code
-    frame = context.frame(state, function.home)
-    if context.encloses(code):
-        raise Unsupported(f"{code.co_qualname} is recursive")
-    names = parameters(code)
-    if len(arguments) != len(names):
-        raise Unsupported(f"{code.co_qualname} takes {len(names)} arguments")
-    free = {
-        name: frame.load(cell) for name, cell in zip(code.co_freevars, function.cells, strict=True)
+    if context.depth >= MAX_DEPTH:
+        raise Unsupported(f"recursive helper {code.co_qualname}")
+    defaults = function.defaults
+    keyword_defaults = function.keyword_defaults
+    if isinstance(function.home, FunctionType):
+        helper = function.home
+        defaults = tuple(constant(value) for value in helper.__defaults__ or ())
+        keyword_defaults = {
+            name: constant(value) for name, value in (helper.__kwdefaults__ or {}).items()
+        }
+        free = closure(helper)
+        nested = Context.from_code(
+            code, helper.__globals__, helper.__builtins__, (context, state), context.snapshot
+        )
+    else:
+        frame = context.frame(state, function.home)
+        home = cast("Context", function.home)
+        free = {
+            name: frame.load(cell)
+            for name, cell in zip(code.co_freevars, function.cells, strict=True)
+        }
+        nested = Context.from_code(
+            code, home.scope, home.builtins, (context, state), context.snapshot
+        )
+    for item in (*defaults, *keyword_defaults.values()):
+        if isinstance(item, Opaque) and isinstance(item.value, dict):
+            scalar_map(item.value.items())
+        elif not isinstance(item, Value) or not isinstance(item.node, Lit):
+            raise Unsupported("helper with non-constant parameter defaults")
+    signature = helper_signature(code, defaults, keyword_defaults)
+    bindings = bind(signature, arguments, keywords)
+    bindings = {
+        name: bindings.get(name, cast("Item", parameter.default))
+        for name, parameter in signature.parameters.items()
     }
-    start = State(0, (), {**dict(zip(names, arguments, strict=True)), **free}, state.path)
+    start = State(0, (), {**bindings, **free}, state.path)
     steps: list[Step] = []
-    for outcome in explore(context.nested(code, state), start):
+    for outcome in explore(nested, start):
         under = state.under(outcome.path)
         if isinstance(outcome, Return):
             steps.append(under.push(Value(outcome.value)).advance())
@@ -111,7 +160,7 @@ def inline(
 @handles("MAKE_FUNCTION")
 def make_function(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     flags = instruction.arg or 0
-    if flags & ~(CLOSURE | ANNOTATIONS):
+    if flags & ~(CLOSURE | ANNOTATIONS | DEFAULTS | KEYWORD_DEFAULTS):
         raise Unsupported("helper with parameter defaults", context.where(state))
     (code,), rest = state.pop()
     cells: tuple[str, ...] = ()
@@ -120,9 +169,23 @@ def make_function(context: Context, state: State, instruction: dis.Instruction) 
         cells = cell_names(closure)
     if flags & ANNOTATIONS:
         rest = rest.pop()[1]
+    keyword_defaults: dict[str, Item] = {}
+    if flags & KEYWORD_DEFAULTS:
+        (item,), rest = rest.pop()
+        values = constant_value(item)
+        if not isinstance(values, dict):
+            raise Unsupported("helper with non-constant parameter defaults")
+        keyword_defaults = {name: constant(value) for name, value in values.items()}
+    defaults: tuple[Item, ...] = ()
+    if flags & DEFAULTS:
+        (item,), rest = rest.pop()
+        values = constant_value(item)
+        if not isinstance(values, tuple):
+            raise Unsupported("helper with non-constant parameter defaults")
+        defaults = tuple(constant(value) for value in values)
     if not isinstance(code, Opaque) or not isinstance(code.value, CodeType):
         raise Unsupported(f"function from {describe(code)}", context.where(state))
-    return [rest.push(Function(code.value, cells, context)).advance()]
+    return [rest.push(Function(code.value, cells, context, defaults, keyword_defaults)).advance()]
 
 
 def cell_names(item: Item) -> tuple[str, ...]:

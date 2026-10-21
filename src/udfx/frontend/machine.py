@@ -33,6 +33,8 @@ FEATURES: dict[str, str] = {
     "RAISE_VARARGS": "raise statements",
     "YIELD_VALUE": "generators",
     "RETURN_GENERATOR": "generators",
+    "CALL_FUNCTION_EX": "unpacked call arguments",
+    "DICT_MERGE": "unpacked call arguments",
 }
 
 

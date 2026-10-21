@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import inspect
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 
 from udfx.errors import Unsupported
+from udfx.frontend.binding import bind
 from udfx.frontend.formatting import format_template
 from udfx.frontend.logic import fold
 from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
@@ -99,7 +101,44 @@ def evaluated(nodes: Sequence[Node], run: Callable[[list[object]], object]) -> L
     return None if type is None else Lit(value, type)
 
 
-def call(callee: Item, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
+def keyword_arguments(
+    function: Callable[..., object], arguments: Sequence[Item], keywords: Mapping[str, Item]
+) -> list[Item]:
+    try:
+        signature = inspect.signature(function, follow_wrapped=False)
+    except (TypeError, ValueError) as error:
+        raise Unsupported(f"keyword arguments for {named(function)}: no signature") from error
+    bindings = bind(signature, arguments, keywords)
+    positional: list[Item] = []
+    remaining = set(bindings)
+    for name, parameter in signature.parameters.items():
+        if not remaining:
+            break
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            raise Unsupported(f"keyword arguments for {named(function)}")
+        positional.append(bindings[name] if name in bindings else Value(lit(parameter.default)))
+        remaining.discard(name)
+    return positional
+
+
+def call(
+    callee: Item, arguments: Sequence[Item], keywords: Mapping[str, Item] | None = None
+) -> tuple[Node, list[Fault]]:
+    if keywords:
+        match callee:
+            case Method(name=name):
+                owner = node_of(arguments[0])
+                owner_type = {Kind.STR: str, Kind.LIST: list}.get(owner.type.kind)
+                function = getattr(owner_type, name, None)
+            case Opaque(value=value):
+                op_name(value)
+                function = value
+            case _:
+                raise Unsupported(f"cannot call {describe(callee)}")
+        arguments = keyword_arguments(cast("Callable[..., object]", function), arguments, keywords)
     nodes = [node_of(argument) for argument in arguments]
     match callee:
         case Method(name=name):

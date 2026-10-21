@@ -14,6 +14,7 @@ class State:
     stack: tuple[Item, ...]
     names: Mapping[str, Item]
     path: Node
+    keywords: tuple[str, ...] = ()
 
     def push(self, *items: Item) -> State:
         return replace(self, stack=(*self.stack, *items))

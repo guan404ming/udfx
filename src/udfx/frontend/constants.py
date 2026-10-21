@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from types import GenericAlias, UnionType
+from types import FunctionType, GenericAlias, UnionType
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke
 from udfx.frontend.logic import choose, conjunction, negate
-from udfx.frontend.values import Item, Opaque, Value, describe, named
+from udfx.frontend.values import Function, Item, Opaque, Value, describe, named
 from udfx.ir import TRUE, Lit, Node, lit
 from udfx.ops import Fault
 from udfx.types import list_of
@@ -25,6 +25,8 @@ def is_scalar(value: object) -> bool:
 
 
 def constant(value: object) -> Item:
+    if isinstance(value, FunctionType):
+        return Function(value.__code__, (), value)
     if is_scalar(value):
         return Value(lit(value))
     if isinstance(value, tuple | list | set | frozenset):
