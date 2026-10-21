@@ -21,20 +21,20 @@ def test_supported_report() -> None:
     translation = compile(project_name, schema)
 
     assert "Function: project_name" in report
-    assert "Schema: {project: str?}" in report
+    assert "Schema: {'project': str?}" in report
     assert "bool(col project)" in report
     assert ".split(col project, '::')[0]" in report
     assert translation.program is not None
     assert f"Value: {render(translation.program.value)}" in report
     assert f"Fault: {render(translation.program.fault)}" in report
-    assert f"Native: {translation.expr!s}" in report
+    assert f"Native: {str(translation.expr)!r}" in report
 
 
 def test_unsupported_report() -> None:
     report = explain(loop, {"value": INT})
 
     assert "Function: loop" in report
-    assert "Schema: {value: int}" in report
+    assert "Schema: {'value': int}" in report
     assert "Unsupported: loops and comprehensions at loop+" in report
     assert "JUMP_BACKWARD" not in report
 
@@ -49,3 +49,14 @@ def test_render() -> None:
     )
 
     assert render(node) == "if(bool(col project), .split(col project, '::')[0], None)"
+
+
+def test_report_escapes_control_characters() -> None:
+    report = explain(lambda: "line\n\v", {})
+    assert "Value: 'line\\n\\x0b'" in report
+    assert len(report.splitlines()) == 5
+    assert "\\n" in report.splitlines()[-1]
+    assert "\\x0b" in report.splitlines()[-1]
+    unsupported = explain(lambda column: column, {"column\n\v": STR})
+    assert "Schema: {'column\\n\\x0b': str}" in unsupported
+    assert len(unsupported.splitlines()) == 3

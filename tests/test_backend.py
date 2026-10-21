@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import polars as pl
 import pytest
 from conftest import backend_params, spark_session
 from pyspark.sql import SparkSession
 
 from udfx import compile
-from udfx.backends.base import Backend
+from udfx.backends.base import Backend, FallbackError
 from udfx.backends.duckdb import DuckDBBackend
+from udfx.backends.polars import PolarsBackend
 from udfx.backends.spark import SparkBackend
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, Col, Lit
@@ -95,6 +97,30 @@ def test_evaluate_keeps_row_count_without_columns(backend: Backend[Any]) -> None
 @pytest.mark.parametrize("backend", backend_params())
 def test_fallback_raises_the_python_exception(backend: Backend[Any]) -> None:
     assert check_function(inverse, {"x": INT}, backend, [(2,), (0,), (4,)]) == []
+
+
+def test_rebuilt_fallback_error_keeps_the_python_exception() -> None:
+    error = FallbackError(ZeroDivisionError("division by zero"))
+    rebuilt = PolarsBackend().unwrap(FallbackError(str(error)))
+    assert isinstance(rebuilt, ZeroDivisionError)
+    assert str(rebuilt) == "division by zero"
+
+
+@pytest.mark.xdist_group("polars")
+@pytest.mark.parametrize("plan", ["eager", "eager-pair", "lazy", "streaming"])
+def test_polars_raises_without_execute(plan: str) -> None:
+    translation = compile(inverse, {"x": INT}, PolarsBackend())
+    assert translation.expr is not None
+    frame = pl.DataFrame({"x": [2, 0, 4]})
+    with pytest.raises(ZeroDivisionError, match="division by zero"):
+        if plan == "eager":
+            frame.select(translation.expr)
+        elif plan == "eager-pair":
+            frame.select(translation.expr.alias("first"), translation.expr.alias("second"))
+        elif plan == "lazy":
+            frame.lazy().select(translation.expr).collect()
+        else:
+            frame.lazy().select(translation.expr).collect(engine="streaming")
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -327,3 +353,16 @@ def test_spark_column_without_java_needs_a_session() -> None:
         [sys.executable, "-c", script], env=NO_JAVA, capture_output=True, text=True, check=False
     )
     assert "RuntimeError: udfx needs a SparkSession to build Spark columns" in result.stderr
+
+
+@pytest.mark.xdist_group("spark")
+def test_spark_rejects_a_stopped_session() -> None:
+    script = (
+        "from pyspark.sql import SparkSession; from udfx.backends.spark import SparkBackend; "
+        "session = SparkSession.builder.getOrCreate(); session.stop(); "
+        "SparkBackend(session).session()"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=False
+    )
+    assert "RuntimeError: the SparkSession given to SparkBackend was stopped" in result.stderr

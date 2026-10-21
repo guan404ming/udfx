@@ -12,6 +12,8 @@ from functools import cache, reduce
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from udfx.types import INT64_MAX
+
 SIGMA = "\u03a3"
 SIGMA_CONTEXTS = (f"A{SIGMA}{{}}b", f"A{{}}{SIGMA}", f"{{}}{SIGMA}", f"A{SIGMA}{{}}")
 
@@ -133,15 +135,15 @@ def slice_bounds(
     primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any
 ) -> SliceBounds:
     zero = primitives.literal(0)
+    maximum = primitives.literal(INT64_MAX)
 
     def clamp(bound: Any, default: Any) -> Any:
-        bound = primitives.coalesce(bound, default)
-        shifted = primitives.when(bound < zero, bound + text_length, bound)
-        return primitives.clip(shifted, zero, text_length)
+        shifted = bound + primitives.when(bound < zero, text_length, zero)
+        return primitives.clip(primitives.coalesce(shifted, default), zero, text_length)
 
     begin = clamp(start, zero)
-    end = clamp(stop, text_length)
-    return SliceBounds(begin, primitives.clip(end - begin, zero, text_length))
+    end = clamp(stop, maximum)
+    return SliceBounds(begin, primitives.clip(end - begin, zero, maximum))
 
 
 @dataclass(frozen=True)

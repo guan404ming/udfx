@@ -18,4 +18,14 @@ All notable changes to this project are documented in this file. The format foll
 - Engines keep their own sessions: udfx sets no Spark or DuckDB configuration.
 - Unicode case mapping differences are computed once per engine version and cached on disk.
 
+### Fixed
+
+- Cache DuckDB fallback registrations per connection object; use a separate connection or cursor per thread.
+- Reduce operand repetition in int64 clamps, integer division, slicing, rounding, and min/max; document the remaining nested-chain growth limits.
+- Round large half-integers to even on DuckDB.
+- Raise the original Python exception type from Polars eager, lazy, and streaming queries.
+- Preserve rebuilt fallback error messages so `backend.execute(run)` can restore builtin exception types that accept a message.
+- Raise a clear `RuntimeError` when an explicit Spark session has stopped.
+- Escape string literals and schema names in `udfx.explain` output.
+
 [0.1.0]: https://github.com/guan404ming/udfx/compare/ea70aef...v0.1.0

@@ -5,7 +5,7 @@ import polars as pl
 from udfx.backends.base import Lowered, register_extremum, register_float_variants
 from udfx.backends.polars.conversions import float_int
 from udfx.backends.polars.numbers import ORDER, cast_float64
-from udfx.backends.polars.rules import RULES, broadcast
+from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
 
@@ -18,7 +18,9 @@ def identity(value: pl.Expr) -> pl.Expr:
     return value
 
 
-ROUND = RoundPrimitives(pl.lit, pl.Expr.pow, pl.Expr.floor, pl.Expr.abs, cast_float64)
+ROUND = RoundPrimitives(
+    pl.lit, pl.Expr.pow, pl.Expr.is_between, pl.Expr.abs, cast_float64, half_even, when
+)
 
 
 def power(base: pl.Expr, exponent: pl.Expr) -> Lowered[pl.Expr]:

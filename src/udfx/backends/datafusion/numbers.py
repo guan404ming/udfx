@@ -73,7 +73,7 @@ def float_mod(left: Expr, right: Expr) -> Lowered[Expr]:
     return Lowered(remainder, exact)
 
 
-INTEGERS = IntegerPrimitives(lit, when, operator.truediv)
+INTEGERS = IntegerPrimitives(lit, when, operator.truediv, operator.mod)
 
 
 def finite(value: Expr) -> Expr:

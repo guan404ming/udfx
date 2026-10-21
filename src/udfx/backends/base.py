@@ -158,8 +158,10 @@ MARKER = "udfx raised "
 
 
 class FallbackError(RuntimeError):
-    def __init__(self, error: Exception) -> None:
-        super().__init__(f"{MARKER}{type(error).__name__}: {error}")
+    def __init__(self, error: Exception | str) -> None:
+        super().__init__(
+            error if isinstance(error, str) else f"{MARKER}{type(error).__name__}: {error}"
+        )
         self.error = error
 
 

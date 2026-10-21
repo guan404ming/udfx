@@ -96,16 +96,18 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 - Each row equals the Python result, or the row runs the Python function. Checked by tests, not
   by proof.
 - A raising row fails the query. Polars raises the original exception type. DuckDB, DataFusion,
-  and Spark wrap it in their UDF error. To get the original type, run the query through the
-  backend object's `execute`, for example `backend.execute(lambda: relation.fetchall())`.
+  and Spark raise their own UDF error whose message carries the Python type and message.
+  `backend.execute(run)` restores builtin Python exception types that accept a message,
+  for example `backend.execute(lambda: relation.fetchall())`.
 - Globals and closure constants are read once at compile time.
 - udfx does not validate data against the schema. Declare nullable columns with `.or_none()`.
 - On Polars, a `LazyFrame` gives the best speed.
+- Nested slice and round chains can grow rapidly on every engine; integer division chains can also grow rapidly on DuckDB, DataFusion, and Spark.
 - Spark pickles the user function by reference, so executors need the same modules and the same
   udfx version.
-- DuckDB expressions are bound to the connection they were built on. Pass your connection with
+- DuckDB expressions are bound to the connection object they were built on. Pass your connection with
   `DuckDBBackend(connection)` and run the query on it. Compiling the same function again reuses
-  its fallback function on that connection.
+  its fallback function on that connection object. Each thread must use its own connection or cursor.
 - `requires-python` stops before 3.15 on purpose: bytecode support is per CPython version.
 
 ## Performance

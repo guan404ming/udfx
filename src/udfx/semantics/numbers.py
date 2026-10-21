@@ -81,9 +81,21 @@ def float_extremum(
 class RoundPrimitives:
     literal: Callable[[object], Any]
     power: Callable[[Any, Any], Any]
-    floor: Callable[[Any], Any]
+    between: Callable[[Any, Any, Any], Any]
     abs: Callable[[Any], Any]
     to_float: Callable[[Any], Any]
+    round: Callable[[Any], Any]
+    when: Callable[[Any, Any, Any], Any]
+
+
+def round_half_even(primitives: RoundPrimitives, value: Any) -> Any:
+    literal = primitives.literal
+    tie = primitives.abs(value) % literal(1.0) == literal(0.5)
+    return primitives.when(
+        tie,
+        primitives.round(value / literal(2.0)) * literal(2.0),
+        primitives.round(value),
+    )
 
 
 class ScaledRound(NamedTuple):
@@ -96,10 +108,9 @@ def scaled_round(primitives: RoundPrimitives, value: Any, digits: Any) -> Scaled
     literal = primitives.literal
     scale = primitives.power(literal(10.0), primitives.to_float(digits))
     scaled = value * scale
-    tie = scaled - primitives.floor(scaled) == literal(0.5)
+    tie = primitives.abs(scaled) % literal(1.0) == literal(0.5)
     exact = (
-        (digits >= literal(0))
-        & (digits <= literal(EXACT_POWERS_OF_TEN))
+        primitives.between(digits, literal(0), literal(EXACT_POWERS_OF_TEN))
         & (primitives.abs(scaled) < literal(HALF_INTEGER_LIMIT))
         & ((digits == literal(0)) | ~tie)
     )
@@ -116,6 +127,7 @@ class IntegerPrimitives:
     literal: Callable[[object], Any]
     when: Callable[[Any, Any, Any], Any]
     truncated_divide: Callable[[Any, Any], Any]
+    truncated_remainder: Callable[[Any, Any], Any]
 
 
 def division_overflows(literal: Callable[[object], Any], left: Any, right: Any) -> Any:
@@ -124,13 +136,12 @@ def division_overflows(literal: Callable[[object], Any], left: Any, right: Any) 
 
 def int_divmod(primitives: IntegerPrimitives, left: Any, right: Any) -> tuple[Any, Any, Any]:
     literal, when = primitives.literal, primitives.when
-    overflow = division_overflows(literal, left, right)
-    divisor = when((right == literal(0)) | overflow, literal(1), right)
-    quotient = primitives.truncated_divide(left, divisor)
-    remainder = left - quotient * divisor
-    adjust = (remainder != literal(0)) & ((remainder < literal(0)) != (divisor < literal(0)))
+    negative_one = right == literal(-1)
+    divisor = when((right == literal(0)) | negative_one, literal(1), right)
+    truncated = primitives.truncated_remainder(left, divisor)
+    adjust = truncated * when(divisor < literal(0), literal(-1), literal(1)) < literal(0)
     return (
-        when(adjust, quotient - literal(1), quotient),
-        when(adjust, remainder + divisor, remainder),
-        ~overflow,
+        primitives.truncated_divide(left, divisor) + when(adjust, literal(-1), literal(0)),
+        truncated + when(adjust, divisor, literal(0)),
+        ~negative_one,
     )

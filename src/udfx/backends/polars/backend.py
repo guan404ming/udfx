@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import ClassVar
 
 import polars as pl
@@ -18,6 +18,9 @@ ROW = f"{RESERVED}row"
 class PolarsBackend(Backend[pl.Expr]):
     name: ClassVar[str] = "polars"
     rules: ClassVar[RuleSet[pl.Expr]] = RULES
+
+    def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+        return program.run(rows)
 
     def column(self, node: Col) -> pl.Expr:
         return pl.col(node.name)

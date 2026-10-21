@@ -11,24 +11,27 @@ from udfx.backends.datafusion.numbers import (
     finite,
     is_nan,
 )
-from udfx.backends.datafusion.rules import RULES
-from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
+from udfx.backends.datafusion.rules import RULES, when
+from udfx.semantics.numbers import (
+    RoundPrimitives,
+    round_half_even,
+    round_overflow_safe,
+    scaled_round,
+)
 from udfx.types import Kind
 
 
 def half_even(value: Expr) -> Expr:
-    floored = functions.floor(value)
-    fraction = value - floored
-    odd = floored % lit(2.0) != lit(0.0)
-    up = (fraction > lit(0.5)) | ((fraction == lit(0.5)) & odd)
-    return functions.when(up, floored + lit(1.0)).otherwise(floored)
+    return round_half_even(ROUND, value)
 
 
 def identity(value: Expr) -> Expr:
     return value
 
 
-ROUND = RoundPrimitives(lit, functions.power, functions.floor, functions.abs, cast_float64)
+ROUND = RoundPrimitives(
+    lit, functions.power, Expr.between, functions.abs, cast_float64, functions.round, when
+)
 
 
 def below_zero(value: Expr) -> Expr:

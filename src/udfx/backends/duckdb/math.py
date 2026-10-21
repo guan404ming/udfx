@@ -6,12 +6,17 @@ from udfx.backends.base import Lowered, register_extremum, register_float_varian
 from udfx.backends.duckdb.conversions import float_int
 from udfx.backends.duckdb.numbers import ORDER, cast_float64
 from udfx.backends.duckdb.rules import RULES, constant, function, when
-from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
+from udfx.semantics.numbers import (
+    RoundPrimitives,
+    round_half_even,
+    round_overflow_safe,
+    scaled_round,
+)
 from udfx.types import Kind
 
 
 def half_even(value: Expression) -> Expression:
-    return function("round_even", value, constant(0))
+    return round_half_even(ROUND, value)
 
 
 def identity(value: Expression) -> Expression:
@@ -21,9 +26,11 @@ def identity(value: Expression) -> Expression:
 ROUND = RoundPrimitives(
     constant,
     lambda base, exponent: function("pow", base, exponent),
-    lambda value: function("floor", value),
+    Expression.between,
     lambda value: function("abs", value),
     cast_float64,
+    lambda value: function("round", value),
+    when,
 )
 
 

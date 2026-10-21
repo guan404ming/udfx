@@ -29,7 +29,7 @@ def explain[E](
 ) -> str:
     translation = compile(function, schema, backend)
     name = getattr(function, "__name__", repr(function))
-    columns = ", ".join(f"{name}: {column_type}" for name, column_type in schema.items())
+    columns = ", ".join(f"{name!r}: {column_type}" for name, column_type in schema.items())
     lines = [f"Function: {name}", f"Schema: {{{columns}}}"]
     if translation.unsupported is not None:
         lines.append(f"Unsupported: {translation.unsupported}")
@@ -38,7 +38,7 @@ def explain[E](
             (
                 f"Value: {render(translation.program.value)}",
                 f"Fault: {render(translation.program.fault)}",
-                f"Native: {translation.expr!s}",
+                f"Native: {str(translation.expr)!r}",
             )
         )
     return "\n".join(lines)

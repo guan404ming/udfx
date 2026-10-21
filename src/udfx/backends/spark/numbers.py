@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable
 
 from pyspark.sql import Column, functions
@@ -78,7 +79,10 @@ def float_mod(left: Column, right: Column) -> Lowered[Column]:
 
 
 INTEGERS = IntegerPrimitives(
-    functions.lit, when, lambda left, right: functions.call_function("div", left, right)
+    functions.lit,
+    when,
+    lambda left, right: functions.call_function("div", left, right),
+    operator.mod,
 )
 
 

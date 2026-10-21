@@ -112,7 +112,7 @@ def float_mod(left: Expression, right: Expression) -> Lowered[Expression]:
     return Lowered(remainder, exact)
 
 
-INTEGERS = IntegerPrimitives(constant, when, operator.floordiv)
+INTEGERS = IntegerPrimitives(constant, when, operator.floordiv, operator.mod)
 
 
 ORDER = OrderPrimitives(when, either_nan, Expression.isnull, within_exact_float_range)
@@ -155,9 +155,8 @@ def int_floordiv(left: Expression, right: Expression) -> Lowered[Expression]:
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)
-def int_mod(left: Expression, right: Expression) -> Lowered[Expression]:
-    _, remainder, exact = int_divmod(INTEGERS, left, right)
-    return Lowered(remainder, exact)
+def int_mod(left: Expression, right: Expression) -> Expression:
+    return int_divmod(INTEGERS, left, right)[1]
 
 
 @RULES("__neg__", Kind.INT)

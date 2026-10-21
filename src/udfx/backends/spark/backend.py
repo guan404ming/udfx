@@ -38,6 +38,8 @@ class SparkBackend(Backend[Column]):
 
     def session(self) -> SparkSession:
         if self._session is not None:
+            if self._session.sparkContext._jsc is None:  # pyright: ignore[reportPrivateUsage]
+                raise RuntimeError("the SparkSession given to SparkBackend was stopped")
             return self._session
         try:
             return SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
