@@ -77,9 +77,13 @@ A single parameter represents a row when the schema keys differ from its name:
 
 Python features: `if`/`else`, conditional expressions, `and`/`or`/`not`, chained comparisons,
 `try`/`except`/`finally`, nested helpers and closures, constant dicts and sets, slices.
+String formatting: f-strings, literal `.format` templates with positional fields, and literal
+`%s`/`%d` templates. Format specs support empty, integer `d`, and string `s`; conversions support
+`!s` and numeric `!r`.
 
 Not supported, so `compile` returns `ok == False` and `unsupported` names the feature: loops,
-comprehensions, f-strings, list and set literals, `with`, `raise`, generators, imports, global
+comprehensions, dynamic format templates/specs, other format specs, string `!r`, `!a`,
+list and set literals, `with`, `raise`, generators, imports, global
 assignment, attribute access on a column value, keyword arguments, `is` against anything but
 `None`, calls without a registered op.
 

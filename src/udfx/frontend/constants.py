@@ -35,7 +35,9 @@ def constant(value: object) -> Item:
             ordered = isinstance(value, set | frozenset)
             items = (*sorted(present), *[None] * missing) if ordered else tuple(value)
             item_type = lit(present[0]).type
-            return Value(Lit(items, list_of(item_type.or_none() if missing else item_type)))
+            return Value(
+                Lit(items, list_of(item_type.or_none() if missing else item_type)), type(value)
+            )
     return Opaque(value)
 
 

@@ -1,12 +1,14 @@
+import dis
 from collections.abc import Callable, Iterator, Mapping
-from types import CodeType
+from types import CodeType, ModuleType
 
 import pytest
 
+from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.logic import fold
 from udfx.frontend.machine import HANDLERS
-from udfx.frontend.opcodes import normalize
+from udfx.frontend.opcodes import normalize, py312, py313, py314
 from udfx.ir import FALSE, Col, If, Lit, Node
 from udfx.ops import apply
 from udfx.types import INT, STR, Type
@@ -15,6 +17,7 @@ S = Col("s", STR.or_none())
 T = Col("t", STR)
 A = Col("a", INT)
 B = Col("b", INT)
+NUMBER = Col("number", INT)
 MISSING = apply("is_none", S)
 ZERO = Lit(0, INT)
 (OUT_OF_RANGE,) = apply("__getitem__", T, ZERO).op.faults(T, ZERO)
@@ -70,6 +73,14 @@ def truth(s: str | None) -> bool:
     return not not s  # noqa: SIM208
 
 
+def formatted(number: int) -> str:
+    return f"<{number:d}>"
+
+
+def converted(number: int) -> str:
+    return f"{number!r:s}"
+
+
 CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
     (
         branch,
@@ -85,6 +96,13 @@ CASES: list[tuple[Callable[..., object], Mapping[str, Type], Node, Node]] = [
     (has_colons, {"t": STR}, apply("__contains__", T, Lit("::", STR)), FALSE),
     (unpack, {"a": INT, "b": INT}, apply("__add__", A, B), FALSE),
     (truth, {"s": S.type}, apply("bool", S), FALSE),
+    (
+        formatted,
+        {"number": INT},
+        apply("__add__", apply("__add__", Lit("<", STR), apply("str", NUMBER)), Lit(">", STR)),
+        FALSE,
+    ),
+    (converted, {"number": INT}, apply("str", NUMBER), FALSE),
 ]
 
 
@@ -108,3 +126,49 @@ def test_trace_matches_expected_ir(
     program = trace(function, schema)
     assert program.value == value
     assert program.fault == fault
+
+
+@pytest.mark.parametrize("normalizer", [py312, py313, py314], ids=["3.12", "3.13", "3.14"])
+@pytest.mark.parametrize(
+    ("conversion", "specifier"),
+    [(0, None), (1, None), (2, None), (3, None), (0, ""), (0, "d"), (2, "s")],
+)
+def test_format_opcode_versions(
+    monkeypatch: pytest.MonkeyPatch,
+    normalizer: ModuleType,
+    conversion: int,
+    specifier: str | None,
+) -> None:
+    def function(number: int) -> int:
+        return number
+
+    resume, load, returned = dis.get_instructions(function)
+    load = load._replace(opname="LOAD_FAST_BORROW" if normalizer is py314 else "LOAD_FAST")
+    instructions = [resume, load]
+    if normalizer is py312:
+        if specifier is not None:
+            instructions.append(load._replace(opname="LOAD_CONST", argval=specifier))
+        instructions.append(
+            load._replace(
+                opname="FORMAT_VALUE", arg=conversion | (4 if specifier is not None else 0)
+            )
+        )
+    else:
+        if conversion:
+            instructions.append(load._replace(opname="CONVERT_VALUE", arg=conversion))
+        if specifier is not None:
+            instructions.append(load._replace(opname="LOAD_CONST", argval=specifier))
+        instructions.append(
+            load._replace(opname="FORMAT_SIMPLE" if specifier is None else "FORMAT_WITH_SPEC")
+        )
+    instructions.append(returned)
+    instructions = [item._replace(offset=2 * index) for index, item in enumerate(instructions)]
+    monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
+    monkeypatch.setattr("udfx.frontend.context.normalize", normalizer.normalize)
+    if conversion == 3:
+        with pytest.raises(Unsupported, match="conversion !a"):
+            trace(function, {"number": INT})
+        return
+    program = trace(function, {"number": INT})
+    assert program.value == apply("str", NUMBER)
+    assert program.fault == FALSE

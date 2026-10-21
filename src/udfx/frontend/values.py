@@ -12,6 +12,7 @@ from udfx.ir import Col, Lit, Node
 @dataclass(frozen=True)
 class Value:
     node: Node
+    container: type | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,11 @@ class Opaque:
 
 
 @dataclass(frozen=True)
+class Tuple:
+    items: tuple[Item, ...]
+
+
+@dataclass(frozen=True)
 class Null:
     pass
 
@@ -53,7 +59,7 @@ class Cell:
 
 NULL = Null()
 
-Item = Value | Row | Method | Opaque | Null | Function
+Item = Value | Row | Method | Opaque | Tuple | Null | Function
 
 
 def named(value: object) -> str:
@@ -82,6 +88,8 @@ def describe(item: Item) -> str:
             return f"method .{name}"
         case Opaque(value=value):
             return named(value)
+        case Tuple():
+            return "a tuple"
         case Function(code=code):
             return f"helper {code.co_qualname}"
         case Null():

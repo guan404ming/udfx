@@ -7,7 +7,7 @@ from udfx.frontend.constants import constant, constant_value, scalar_map
 from udfx.frontend.context import Context
 from udfx.frontend.machine import handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Opaque
+from udfx.frontend.values import Opaque, Tuple
 
 
 @handles("RESUME", "NOP", "CACHE")
@@ -74,4 +74,8 @@ def delete_fast(context: Context, state: State, instruction: dis.Instruction) ->
 @handles("BUILD_TUPLE")
 def build_tuple(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     items, rest = state.pop(instruction.argval)
-    return [rest.push(constant(tuple(constant_value(item) for item in items))).advance()]
+    try:
+        values = tuple(constant_value(item) for item in items)
+    except Unsupported:
+        return [rest.push(Tuple(items)).advance()]
+    return [rest.push(constant(values)).advance()]

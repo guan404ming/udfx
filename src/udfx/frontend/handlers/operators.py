@@ -5,13 +5,15 @@ import operator
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, node_of, none_test, truth
-from udfx.frontend.constants import GENERICS, annotation, lookup
+from udfx.frontend.constants import GENERICS, annotation, constant, lookup
 from udfx.frontend.context import Context
-from udfx.frontend.logic import negate
+from udfx.frontend.formatting import format_percent
+from udfx.frontend.logic import fold, negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Item, Opaque, Row, Value
+from udfx.frontend.values import Item, Opaque, Row, Tuple, Value
 from udfx.ir import Lit
+from udfx.types import Kind
 
 BINARY_OPS: dict[str, str] = {
     "+": "__add__",
@@ -39,6 +41,18 @@ def binary_op(context: Context, state: State, instruction: dis.Instruction) -> l
     (left, right), rest = state.pop(2)
     if symbol == "|":
         return [rest.push(annotation(operator.or_, left, right)).advance()]
+    if symbol == "%" and isinstance(left, Value) and left.node.type.kind is Kind.STR:
+        if isinstance(right, Value) and right.container is not tuple:
+            node_of(right)
+        match right:
+            case Tuple(items=items):
+                arguments = items
+            case Value(node=Lit(value=tuple() as values)) | Opaque(value=tuple() as values):
+                arguments = tuple(constant(value) for value in values)
+            case _:
+                arguments = (right,)
+        node, faults = format_percent(left.node, [node_of(item) for item in arguments])
+        return emit(context, rest, Value(fold(node)), faults)
     name = BINARY_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"binary operator {instruction.argrepr}", context.where(state))

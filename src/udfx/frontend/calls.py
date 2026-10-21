@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from typing import cast
 
 from udfx.errors import Unsupported
+from udfx.frontend.formatting import format_template
 from udfx.frontend.logic import fold
 from udfx.frontend.values import Item, Method, Opaque, Value, describe, named
 from udfx.ir import FALSE, Call, Lit, Node, lit
@@ -103,7 +104,12 @@ def call(callee: Item, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
     match callee:
         case Method(name=name):
             folded = evaluated(nodes, lambda values: getattr(values[0], name)(*values[1:]))
-            return (folded, []) if folded is not None else invoke(f".{name}", nodes, AttributeError)
+            if folded is not None:
+                return folded, []
+            if name == "format":
+                node, faults = format_template(nodes[0], nodes[1:])
+                return fold(node), faults
+            return invoke(f".{name}", nodes, AttributeError)
         case Opaque(value=value):
             name = op_name(value)
             function = cast("Callable[..., object]", value)

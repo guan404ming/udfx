@@ -20,6 +20,13 @@ def lower(code: CodeType, instructions: Iterable[dis.Instruction]) -> tuple[dis.
     lowered: list[dis.Instruction] = []
     for instruction in (part for whole in instructions for part in split(whole)):
         match instruction.opname:
+            case "CONVERT_VALUE" | "FORMAT_SIMPLE" | "FORMAT_WITH_SPEC":
+                flags = (
+                    instruction.arg
+                    if instruction.opname == "CONVERT_VALUE"
+                    else (4 if instruction.opname == "FORMAT_WITH_SPEC" else 0)
+                )
+                lowered.append(instruction._replace(opname="FORMAT_VALUE", arg=flags))
             case "TO_BOOL":
                 negate = instruction._replace(opname="UNARY_NOT", arg=None, argval=None, argrepr="")
                 lowered.extend((negate, negate._replace(offset=instruction.offset + 1)))

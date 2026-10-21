@@ -28,10 +28,6 @@ def while_loop(a: int) -> int:
     return a
 
 
-def f_string(s: str) -> str:
-    return f"<{s}>"
-
-
 def list_literal(s: str) -> int:
     return len([s, "x"])
 
@@ -96,7 +92,6 @@ def unpacking(s: str) -> str:
         (for_loop, {"s": STR}, r"loops and comprehensions at for_loop\+\d+"),
         (comprehension, {"s": STR}, r"loops and comprehensions at comprehension\+\d+"),
         (while_loop, {"a": INT}, r"loops and comprehensions at while_loop\+\d+"),
-        (f_string, {"s": STR}, r"f-strings at f_string\+\d+"),
         (list_literal, {"s": STR}, r"list and set literals at list_literal\+\d+"),
         (set_literal, {"s": STR}, r"list and set literals at set_literal\+\d+"),
         (global_assignment, {"a": INT}, r"global assignment at global_assignment\+\d+"),
