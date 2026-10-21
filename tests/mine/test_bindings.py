@@ -1,4 +1,5 @@
 import importlib
+import os
 from pathlib import Path
 from types import FunctionType, ModuleType
 
@@ -132,8 +133,8 @@ def test_imports_use_real_allowlisted_names(
 @pytest.mark.parametrize(
     "statement",
     [
-        "import os as forbidden",
-        "from os import system as forbidden",
+        "import subprocess as forbidden",
+        "from subprocess import run as forbidden",
         "import numpy.random as forbidden",
         "from .math import sqrt as forbidden",
         "from math import *",
@@ -181,3 +182,35 @@ def test_unsafe_helper_is_excluded(tmp_path: Path) -> None:
     )
     assert not candidates
     assert counts.skipped_definitions.total() == 1
+
+
+@pytest.mark.parametrize(
+    ("statement", "expression", "name", "expected"),
+    [
+        ("import os", "os.path.join('images', value)", "os", os),
+        ("import os as paths", "paths.path.basename(value)", "paths", os),
+        ("import os.path", "os.path.splitext(value)", "os", os),
+        ("import os.path as paths", "paths.basename(value)", "paths", os.path),
+        ("from os import path", "path.basename(value)", "path", os.path),
+        ("from os.path import join as path", "path('images', value)", "path", os.path.join),
+    ],
+)
+def test_path_imports_bind_without_unknown_globals(
+    tmp_path: Path, statement: str, expression: str, name: str, expected: object
+) -> None:
+    candidates, _ = collect_sources(
+        tmp_path, [("notebook", f"{statement}\nframe.map(lambda value: {expression})")]
+    )
+    assert bind_candidate(candidates[0]).__globals__[name] is expected
+    result = measure(candidates[0])
+    assert result.category != "unknown global"
+
+
+def test_allowed_os_calls_never_execute(tmp_path: Path) -> None:
+    marker = tmp_path / "executed"
+    candidates, _ = collect_sources(
+        tmp_path,
+        [("notebook", f"import os\nframe.map(lambda value: os.mkdir({str(marker)!r}))")],
+    )
+    assert not measure(candidates[0]).ok
+    assert not marker.exists()

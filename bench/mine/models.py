@@ -12,6 +12,7 @@ class Counts:
     data_file: str = ""
     notebooks: int = 0
     cells: int = 0
+    magic_cells: int = 0
     skipped_cells: Counter[str] = field(default_factory=Counter)
     call_sites: Counter[str] = field(default_factory=Counter)
     unresolved: Counter[str] = field(default_factory=Counter)
@@ -29,6 +30,7 @@ class Candidate:
     occurrences: int = 1
     kind: str = "element"
     bindings: dict[str, Binding] = field(default_factory=dict)
+    name_origins: dict[str, str | None] = field(default_factory=dict)
 
 
 @dataclass
@@ -41,3 +43,4 @@ class Result:
     reason: str | None = None
     category: str | None = None
     kind: str = "element"
+    third_party_names: list[str] = field(default_factory=list)

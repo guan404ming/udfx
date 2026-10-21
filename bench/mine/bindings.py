@@ -10,7 +10,7 @@ from types import CodeType, FunctionType
 from bench.mine.definitions import bind_function, strip_definition
 from bench.mine.models import Binding, Candidate
 
-MODULES = {"math", "re", "string", "datetime", "unicodedata", "numpy", "pandas"}
+MODULES = {"math", "re", "string", "datetime", "unicodedata", "numpy", "pandas", "os", "os.path"}
 HELPER_DEPTH = 8
 
 
@@ -52,14 +52,13 @@ def notebook_bindings(trees: list[ast.Module]) -> dict[str, Binding]:
 def import_bindings(node: ast.Import | ast.ImportFrom) -> dict[str, Binding]:
     if isinstance(node, ast.Import):
         return {
-            alias.asname or alias.name: ast.Import(names=[alias])
+            alias.asname or alias.name.split(".")[0]: ast.Import(names=[alias])
             for alias in node.names
-            if alias.name in MODULES
         }
-    if node.level or node.module not in MODULES:
-        return {}
     return {
-        alias.asname or alias.name: ast.ImportFrom(module=node.module, names=[alias], level=0)
+        alias.asname or alias.name: ast.ImportFrom(
+            module=node.module, names=[alias], level=node.level
+        )
         for alias in node.names
         if alias.name != "*"
     }
@@ -116,6 +115,12 @@ def bind_candidate(candidate: Candidate) -> FunctionType:
             assert module_name is not None
             try:
                 module = importlib.import_module(module_name)
+                if (
+                    isinstance(binding, ast.Import)
+                    and binding.names[0].asname is None
+                    and "." in module_name
+                ):
+                    module = importlib.import_module(module_name.split(".")[0])
             except ImportError as error:
                 raise ModuleNotFoundError(f"missing module {module_name}") from error
             if isinstance(binding, ast.Import):

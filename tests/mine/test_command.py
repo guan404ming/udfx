@@ -30,5 +30,6 @@ def test_main_writes_report_and_candidate_records(
         "schema": {"value": "float?"},
         "reason": None,
         "category": None,
+        "third_party_names": [],
     }
     assert "Compiled unique: 1/1 (100.00%)" in (output / "summary.md").read_text()

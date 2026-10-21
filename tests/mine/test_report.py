@@ -45,7 +45,8 @@ def test_summary_separates_kinds_and_exclusions() -> None:
     counts = Counts(data_file="input.csv", notebooks=3, cells=4)
     counts.unresolved["missing"] = 4
     counts.skipped_definitions["unsafe"] = 2
-    counts.skipped_cells.update({"parse error": 3, "IPython magic or shell line": 1})
+    counts.skipped_cells["parse error"] = 3
+    counts.magic_cells = 1
     report = summary(results, counts)
     assert "| element + row | 1/2 (50.00%) | 3/5 (60.00%) |" in report
     assert "| element | 1/1 (100.00%) | 3/3 (100.00%) |" in report
@@ -56,6 +57,29 @@ def test_summary_separates_kinds_and_exclusions() -> None:
     assert "Unresolved names at call sites: 4 occurrences" in report
     assert "Unsafe or unbindable definitions: 2 occurrences" in report
     assert "Parse errors: 3 cells" in report
-    assert "Magic cells: 1 cells" in report
+    assert "Cells with magic or shell lines removed: 1" in report
     for kind in ("element", "row", "group"):
         assert f"Top 25 failure categories: {kind}" in report
+
+
+def test_summary_excludes_third_party_names_from_both_headline_denominators() -> None:
+    results = [
+        Result("first", 3, "lambda value: value", ok=True),
+        Result("second", 2, "lambda row: row.value", kind="row", ok=True),
+        Result("third", 4, "lambda value: missing(value)", third_party_names=["missing"]),
+        Result(
+            "fourth", 5, "lambda row: model(row.value)", kind="row", third_party_names=["model"]
+        ),
+        Result("fifth", 6, "lambda value: value.expandtabs()", reason="no op .expandtabs(str)"),
+        Result("sixth", 7, "lambda value: model(value)", kind="group", third_party_names=["model"]),
+    ]
+    report = summary(results, Counts())
+    assert "### All candidates\n\n- Compiled unique: 2/5 (40.00%)" in report
+    assert "Compiled weighted by occurrences: 5/20 (25.00%)" in report
+    assert "### In-scope candidates\n\n- Compiled unique: 2/3 (66.67%)" in report
+    assert "Compiled weighted by occurrences: 5/11 (45.45%)" in report
+    assert "## Third-party names" in report
+    assert "Excluded element + row candidates: 2 unique; 9 occurrences" in report
+    assert "| model | 2 | 12 |" in report
+    assert "| missing | 1 | 4 |" in report
+    assert "X has no resolvable import and no definition in the notebook" in report

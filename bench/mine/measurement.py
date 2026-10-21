@@ -6,6 +6,7 @@ import re
 import udfx
 from bench.mine.bindings import bind_candidate
 from bench.mine.models import Candidate, Result
+from bench.mine.provenance import third_party_names
 from bench.mine.schema_search import schemas
 
 
@@ -32,6 +33,7 @@ def measure(candidate: Candidate) -> Result:
         function = bind_candidate(candidate)
     except ModuleNotFoundError as error:
         result.reason = result.category = str(error)
+        result.third_party_names = third_party_names(candidate, normalize_reason(result.reason))
         return result
     except (SyntaxError, ValueError, TypeError, RecursionError) as error:
         result.reason = f"definition error: {type(error).__name__}: {error}"
@@ -63,4 +65,6 @@ def measure(candidate: Candidate) -> Result:
         if result.reason is None:
             result.reason = reason
             result.category = failure_category(reason)
+    if result.reason is not None:
+        result.third_party_names = third_party_names(candidate, normalize_reason(result.reason))
     return result

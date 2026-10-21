@@ -3,12 +3,38 @@ from __future__ import annotations
 import ast
 import csv
 import sys
+from io import StringIO
 from pathlib import Path
+from tokenize import FSTRING_MIDDLE, STRING, TokenError, generate_tokens
 
 from bench.mine.bindings import notebook_bindings, select_bindings
 from bench.mine.call_sites import find_candidates
 from bench.mine.definitions import safe_definition, strip_definition
 from bench.mine.models import Candidate, Counts
+from bench.mine.provenance import candidate_origins, notebook_origins
+
+
+def strip_magics(source: str) -> str:
+    if not any(line.lstrip().startswith(("%", "!")) for line in source.splitlines()):
+        return source
+    literal_lines: set[int] = set()
+    try:
+        for token in generate_tokens(StringIO(source).readline):
+            if token.type in {STRING, FSTRING_MIDDLE}:
+                literal_lines.update(range(token.start[0] + 1, token.end[0] + 1))
+    except (TokenError, IndentationError):
+        pass
+    lines = []
+    shell_continuation = False
+    for position, line in enumerate(source.splitlines(keepends=True), 1):
+        if position in literal_lines:
+            lines.append(line)
+            continue
+        stripped = line.lstrip()
+        shell_line = shell_continuation or stripped.startswith("!")
+        shell_continuation = shell_line and line.rstrip().endswith("\\")
+        lines.append("\n" if shell_line or stripped.startswith("%") else line)
+    return "".join(lines)
 
 
 def read_notebooks(path: Path, counts: Counts) -> dict[str, list[tuple[int, str]]]:
@@ -32,16 +58,17 @@ def read_notebooks(path: Path, counts: Counts) -> dict[str, list[tuple[int, str]
 def collect_candidates(path: Path) -> tuple[list[Candidate], Counts]:
     counts = Counts(data_file=str(path))
     notebooks = read_notebooks(path, counts)
-    unique: dict[tuple[str, str, tuple[tuple[str, str], ...]], Candidate] = {}
+    unique: dict[
+        tuple[str, str, tuple[tuple[str, str], ...], tuple[tuple[str, str | None], ...]], Candidate
+    ] = {}
     for kernel_id, cells in notebooks.items():
         trees: list[ast.Module] = []
         references: list[tuple[int, str, str, ast.FunctionDef | ast.Lambda | ast.Name]] = []
         for position, source in cells:
-            if any(line.lstrip().startswith(("%", "!")) for line in source.splitlines()):
-                counts.skipped_cells["IPython magic or shell line"] += 1
-                continue
+            cleaned = strip_magics(source)
+            counts.magic_cells += cleaned != source
             try:
-                tree = ast.parse(source)
+                tree = ast.parse(cleaned)
             except (SyntaxError, ValueError, RecursionError):
                 counts.skipped_cells["parse error"] += 1
                 continue
@@ -50,6 +77,7 @@ def collect_candidates(path: Path) -> tuple[list[Candidate], Counts]:
                 (position, site, kind, node) for site, kind, node in find_candidates(tree)
             )
         available = notebook_bindings(trees)
+        origins = notebook_origins(trees, available)
         for position, site, kind, reference in references:
             counts.call_sites[site] += 1
             node = available.get(reference.id) if isinstance(reference, ast.Name) else reference
@@ -63,6 +91,7 @@ def collect_candidates(path: Path) -> tuple[list[Candidate], Counts]:
                 continue
             try:
                 bindings = select_bindings(stripped, available)
+                name_origins = candidate_origins(stripped, bindings, origins)
             except (SyntaxError, ValueError, TypeError, RecursionError) as error:
                 counts.skipped_definitions[f"definition error: {type(error).__name__}"] += 1
                 continue
@@ -70,6 +99,7 @@ def collect_candidates(path: Path) -> tuple[list[Candidate], Counts]:
                 kind,
                 ast.dump(stripped),
                 tuple((name, ast.dump(binding)) for name, binding in sorted(bindings.items())),
+                tuple(name_origins.items()),
             )
             if key in unique:
                 candidate = unique[key]
@@ -78,5 +108,12 @@ def collect_candidates(path: Path) -> tuple[list[Candidate], Counts]:
                     candidate.first_cell = position
                     candidate.kernel_id = kernel_id
             else:
-                unique[key] = Candidate(kernel_id, position, stripped, kind=kind, bindings=bindings)
+                unique[key] = Candidate(
+                    kernel_id,
+                    position,
+                    stripped,
+                    kind=kind,
+                    bindings=bindings,
+                    name_origins=name_origins,
+                )
     return sorted(unique.values(), key=lambda candidate: candidate.first_cell), counts

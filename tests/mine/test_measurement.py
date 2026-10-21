@@ -22,6 +22,7 @@ def test_missing_module_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     )
     result = measure(candidates[0])
     assert result.category == "missing module pandas"
+    assert result.third_party_names == []
 
 
 @pytest.mark.parametrize(

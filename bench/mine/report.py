@@ -60,9 +60,17 @@ def failure_table(results: list[Result], kind: str) -> list[str]:
 def summary(results: list[Result], counts: Counts) -> str:
     headline = [result for result in results if result.kind in {"element", "row"}]
     unique, weighted = coverage(headline)
+    in_scope = [result for result in headline if not result.third_party_names]
+    scope_unique, scope_weighted = coverage(in_scope)
+    external = [result for result in headline if result.third_party_names]
+    names: Counter[str] = Counter()
+    weighted_names: Counter[str] = Counter()
     missing: Counter[str] = Counter()
     weighted_missing: Counter[str] = Counter()
     for result in results:
+        for name in result.third_party_names:
+            names[name] += 1
+            weighted_names[name] += result.occurrences
         if result.reason is None:
             continue
         reason = normalize_reason(result.reason)
@@ -78,22 +86,30 @@ def summary(results: list[Result], counts: Counts) -> str:
         },
     }
     lines = [
-        "# UDF compilation coverage v2",
+        "# UDF compilation coverage",
         "",
         "## Headline: element + row",
         "",
+        "### All candidates",
+        "",
         f"- Compiled unique: {unique}",
         f"- Compiled weighted by occurrences: {weighted}",
+        "",
+        "### In-scope candidates",
+        "",
+        f"- Compiled unique: {scope_unique}",
+        f"- Compiled weighted by occurrences: {scope_weighted}",
         "",
         "## Setup",
         "",
         f"- Data file: {table_text(counts.data_file)}",
         f"- Notebooks: {counts.notebooks:,}",
         f"- Cells: {counts.cells:,}",
+        f"- Cells with magic or shell lines removed: {counts.magic_cells:,}",
         f"- Candidate references: {counts.call_sites.total():,}",
         "- Candidates total (resolved, safe occurrences): "
         f"{sum(result.occurrences for result in results):,}",
-        f"- Candidates unique (source, globals, kind): {len(results):,}",
+        f"- Candidates unique (source, globals, name origins, kind): {len(results):,}",
         f"- Collection seconds: {counts.collection_seconds:.2f}",
         f"- Compilation seconds: {counts.compile_seconds:.2f}",
         f"- CSV stop: {table_text(counts.csv_error) if counts.csv_error else 'end of file'}",
@@ -113,8 +129,21 @@ def summary(results: list[Result], counts: Counts) -> str:
         f"{len(counts.unresolved):,} distinct names",
         f"- Unsafe or unbindable definitions: {counts.skipped_definitions.total():,} occurrences",
         f"- Parse errors: {counts.skipped_cells['parse error']:,} cells",
-        f"- Magic cells: {counts.skipped_cells['IPython magic or shell line']:,} cells",
-        "- Unresolved globals and missing modules remain in the coverage denominator as failures.",
+        "- All-candidate coverage keeps unresolved globals and missing modules as failures. "
+        "In-scope coverage excludes candidates with third-party names.",
+        "",
+        "## Third-party names",
+        "",
+        f"- Excluded element + row candidates: {len(external):,} unique; "
+        f"{sum(result.occurrences for result in external):,} occurrences",
+        "- Name counts below include all kinds.",
+        "",
+        "| Name | Unique | Occurrences |",
+        "| --- | ---: | ---: |",
+        *[
+            f"| {table_text(name)} | {count:,} | {weighted_names[name]:,} |"
+            for name, count in names.most_common()
+        ],
         "",
         "## Candidates by call site",
         "",
@@ -146,8 +175,9 @@ def summary(results: list[Result], counts: Counts) -> str:
         "3. Read global names from bytecode, including nested code. Resolve helper dependencies "
         f"through depth {HELPER_DEPTH}, with direct helpers at depth zero. Stop cycles. Share a "
         "globals dictionary between helpers. Keep standard builtins. Import only math, re, "
-        "string, datetime, unicodedata, numpy, and pandas by their real names with importlib. "
-        "Reject relative and submodule imports. Resolve from-imports from module dictionaries. "
+        "string, datetime, unicodedata, numpy, pandas, os, and os.path by their real names with "
+        "importlib. Reject relative imports and other submodules. "
+        "Resolve from-imports from module dictionaries. "
         "Leave unresolved names missing. Report missing installed modules as failures.",
         "4. Recognize inline or assigned lambdas, module-level defs, "
         "and udf/pandas_udf decorators. "
@@ -157,10 +187,11 @@ def summary(results: list[Result], counts: Counts) -> str:
         "receiver chain overrides row and element. transform/agg/aggregate and pandas_udf are "
         "group. map_rows and apply with literal axis=1 or axis='columns' are row. Other recognized "
         "sites are element. Do not infer receiver aliases or dynamic/positional axes.",
-        "5. Deduplicate stripped source AST plus resolved dependency ASTs plus kind, without "
-        "locations. Count once per kind and global context. Weight by reference occurrences, "
-        "not runtime calls or dataframe rows. Exclude unresolved call-site names and unsafe "
-        "definitions. Skip whole magic/shell and parse-error cells. Stop at malformed CSV rows.",
+        "5. Deduplicate stripped source AST plus dependency ASTs, relevant name origins, and kind, "
+        "without locations. Count once per kind and global context. Weight by reference "
+        "occurrences, not runtime calls or dataframe rows. Exclude unresolved call-site names "
+        "and unsafe definitions. Remove magic and shell lines, including shell line continuations. "
+        "Parse the rest of each cell. Skip parse-error cells. Stop at malformed CSV rows.",
         "6. Compile with the default Polars backend. Search nullable STR, FLOAT, INT, and BOOL "
         "per parameter, up to 64 schemas. String methods and string operands prefer STR; "
         "arithmetic prefers FLOAT then INT; boolean operations prefer BOOL. String hints take "
@@ -175,6 +206,14 @@ def summary(results: list[Result], counts: Counts) -> str:
         "schema guesses. Resolved helpers can remain unsupported callables. Compilation success "
         "measures acceptance only. It does not validate input types, runtime results, other "
         "backends, or group semantics.",
+        "9. Mark a candidate as third-party only when its recorded failure is unknown global X "
+        "or missing module X and X resolves through a notebook import to a module outside the "
+        "exact allowlist, or X has no resolvable import and no definition in the notebook. "
+        "Track module-scope declarations, including conditional and destructured bindings, "
+        "for this check without executing them. Missing allowlisted modules stay in scope. "
+        "Store the failure name in third_party_names; use an empty list for other candidates. "
+        "Report element + row coverage for all candidates and for in-scope candidates, "
+        "excluding third-party candidates from both unique and occurrence denominators.",
         "",
     ]
     return "\n".join(lines)
