@@ -11,7 +11,7 @@ from udfx.backends.polars import PolarsBackend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function, check_translation
-from udfx.types import FLOAT, INT, INT64_MAX, INT64_MIN, STR
+from udfx.types import BOOL, FLOAT, INT, INT64_MAX, INT64_MIN, STR, list_of
 
 from .functions import inverse, row_inverse, row_year, year
 
@@ -143,6 +143,18 @@ def test_fallback_surfaces_exceptions_it_cannot_rebuild(
 def test_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
     rows = [("2024-01",), (" 123",), ("\uff11\uff12\uff13\uff14",), ("9223372036854775807",)]
     assert check_function(year, {"text": STR}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_fallback_patches_list_rows(backend: Backend[Any]) -> None:
+    schema = {"text": STR, "exact": BOOL}
+    result = list_of(STR)
+    program = Program(lambda text, exact: text.split(), schema, Lit(["native"], result))
+    expr = backend.fallback(
+        backend.literal(Lit(["native"], result)), backend.column(Col("exact", BOOL)), program
+    )
+    rows = [("a b", False), ("c", True), ("", False)]
+    assert backend.evaluate([expr], schema, rows) == [[["a", "b"], ["native"], []]]
 
 
 @pytest.mark.parametrize("backend", backend_params())

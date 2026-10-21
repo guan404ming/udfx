@@ -13,13 +13,19 @@ from udfx.semantics.text import (
     SIGMA,
     CaseDrift,
     SearchPrimitives,
+    SequencePrimitives,
     SlicePrimitives,
+    SplitPrimitives,
     case_guard,
     has_prefix_suffix_overlap,
     non_whitespace_pattern,
     reverse_find,
     slice_bounds,
+    slice_sequence,
+    split_limited,
+    split_right,
     whitespace,
+    word_prefix_pattern,
 )
 from udfx.types import Kind
 
@@ -70,11 +76,14 @@ def split_words(text: pl.Expr) -> pl.Expr:
 
 
 RULES(".split", Kind.STR)(split_words)
+RULES(".rsplit", Kind.STR)(split_words)
 
 
-@RULES(".split", Kind.STR, Kind.STR)
 def split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
     return when(separator.is_null(), split_words(text), text.str.split(separator))
+
+
+RULES(".split", Kind.STR, Kind.STR)(split)
 
 
 def length(text: pl.Expr) -> pl.Expr:
@@ -137,9 +146,16 @@ def replace(text: pl.Expr, old: pl.Expr, new: pl.Expr) -> pl.Expr:
     )
 
 
-@RULES(".join", Kind.STR, Kind.LIST)
 def join(separator: pl.Expr, words: pl.Expr) -> pl.Expr:
     return broadcast(words).list.join(separator)
+
+
+RULES(".join", Kind.STR, Kind.LIST)(join)
+
+
+@RULES(".join", Kind.STR, Kind.STR)
+def join_characters(separator: pl.Expr, text: pl.Expr) -> pl.Expr:
+    return join(separator, text.str.split(""))
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
@@ -192,7 +208,7 @@ SLICE = SlicePrimitives(
     literal=pl.lit,
     when=when,
     coalesce=pl.Expr.fill_null,
-    clip=pl.Expr.clip,
+    clip=lambda value, lower, upper: pl.min_horizontal(pl.max_horizontal(value, lower), upper),
 )
 
 
@@ -200,3 +216,56 @@ SLICE = SlicePrimitives(
 def str_slice(text: pl.Expr, start: pl.Expr | int | None, stop: pl.Expr | int | None) -> pl.Expr:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return text.str.slice(bounds.start, bounds.length)
+
+
+SEQUENCE = SequencePrimitives(
+    bounds=SLICE,
+    length=list_len,
+    slice=lambda value, start, length: value.list.slice(start.fill_null(0), length.fill_null(0)),
+    reverse=lambda value: value.list.reverse(),
+    stride=lambda value, step: value.list.gather_every(step),
+)
+
+
+def list_slice(
+    container: pl.Expr, start: pl.Expr, stop: pl.Expr, step: pl.Expr | None = None
+) -> pl.Expr:
+    return slice_sequence(SEQUENCE, container, start, stop, step)
+
+
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice_step(text: pl.Expr, start: pl.Expr, stop: pl.Expr, step: pl.Expr) -> pl.Expr:
+    return list_slice(text.str.split(""), start, stop, step).list.join("")
+
+
+SPLIT = SplitPrimitives(
+    sequence=SEQUENCE,
+    split=split,
+    join=join,
+    append=lambda values, value: values.list.concat(value),
+    length=length,
+    suffix=lambda value, start: value.str.slice(start),
+    word_prefix=lambda value, count: (
+        value.str.extract_all(word_prefix_pattern()).list.slice(0, count).list.join("")
+    ),
+    lstrip=lstrip,
+    is_null=pl.Expr.is_null,
+    reverse=lambda value: value.str.reverse(),
+    restore=lambda values: values.list.reverse().list.eval(pl.element().str.reverse()),
+)
+
+
+@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
+def split_limit(text: pl.Expr, separator: pl.Expr, maximum: pl.Expr) -> pl.Expr:
+    return split_limited(SPLIT, text, separator, maximum)
+
+
+@RULES(".rsplit", Kind.STR, Kind.STR)
+@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
+def rsplit(text: pl.Expr, separator: pl.Expr, maximum: pl.Expr | None = None) -> Lowered[pl.Expr]:
+    exact = single_code_point_clusters(text) & single_code_point_clusters(separator).fill_null(True)
+    return Lowered(split_right(SPLIT, text, separator, maximum), exact)

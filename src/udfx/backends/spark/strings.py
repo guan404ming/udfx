@@ -16,13 +16,19 @@ from udfx.semantics.text import (
     SIGMA,
     CaseDrift,
     SearchPrimitives,
+    SequencePrimitives,
     SlicePrimitives,
+    SplitPrimitives,
     case_guard,
     count_occurrences,
     non_whitespace_pattern,
     reverse_find,
     slice_bounds,
+    slice_sequence,
+    split_limited,
+    split_right,
     whitespace,
+    word_prefix_pattern,
 )
 from udfx.types import STR, Kind
 
@@ -105,12 +111,15 @@ def split_words(text: Column) -> Column:
 
 
 RULES(".split", Kind.STR)(split_words)
+RULES(".rsplit", Kind.STR)(split_words)
 
 
-@RULES(".split", Kind.STR, Kind.STR)
 def split(text: Column, separator: Column) -> Column:
     pieces = functions.split(text, quote_java_regex(separator), -1)
     return functions.when(separator.isNull(), split_words(text)).otherwise(pieces)
+
+
+RULES(".split", Kind.STR, Kind.STR)(split)
 
 
 def find(text: Column, pattern: Column) -> Column:
@@ -154,9 +163,16 @@ def replace(text: Column, old: Column, new: Column) -> Column:
     return functions.when(old == "", spread).otherwise(functions.replace(text, old, new))
 
 
-@RULES(".join", Kind.STR, Kind.LIST)
 def join(separator: Column, words: Column) -> Column:
     return array_join(words, separator)
+
+
+RULES(".join", Kind.STR, Kind.LIST)(join)
+
+
+@RULES(".join", Kind.STR, Kind.STR)
+def join_characters(separator: Column, text: Column) -> Column:
+    return join(separator, characters(text))
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
@@ -217,3 +233,64 @@ SLICE = SlicePrimitives(
 def str_slice(text: Column, start: Column | int | None, stop: Column | int | None) -> Column:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return functions.substring(text, (bounds.start + 1).cast("int"), bounds.length.cast("int"))
+
+
+SEQUENCE = SequencePrimitives(
+    bounds=SLICE,
+    length=list_len,
+    slice=lambda value, start, size: functions.slice(
+        value, (start + 1).cast("int"), size.cast("int")
+    ),
+    reverse=functions.reverse,
+    stride=lambda value, step: functions.filter(value, lambda item, index: index % step == 0),
+)
+
+
+def list_slice(
+    container: Column, start: Column, stop: Column, step: Column | None = None
+) -> Column:
+    return slice_sequence(SEQUENCE, container, start, stop, step)
+
+
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice_step(text: Column, start: Column, stop: Column, step: Column) -> Column:
+    return join(functions.lit(""), list_slice(characters(text), start, stop, step))
+
+
+SPLIT = SplitPrimitives(
+    sequence=SEQUENCE,
+    split=split,
+    join=join,
+    append=functions.array_append,
+    length=length,
+    suffix=lambda value, start: functions.substring(value, (start + 1).cast("int"), INT32_MAX),
+    word_prefix=lambda value, count: array_join(
+        functions.slice(
+            functions.regexp_extract_all(
+                value, functions.lit(word_prefix_pattern()), functions.lit(0)
+            ),
+            functions.lit(1),
+            count.cast("int"),
+        ),
+        functions.lit(""),
+    ),
+    lstrip=lstrip,
+    is_null=Column.isNull,
+    reverse=functions.reverse,
+    restore=lambda values: functions.transform(functions.reverse(values), functions.reverse),
+)
+
+
+@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
+def split_limit(text: Column, separator: Column, maximum: Column) -> Column:
+    return split_limited(SPLIT, text, separator, maximum)
+
+
+@RULES(".rsplit", Kind.STR, Kind.STR)
+@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
+def rsplit(text: Column, separator: Column, maximum: Column | None = None) -> Column:
+    return split_right(SPLIT, text, separator, maximum)

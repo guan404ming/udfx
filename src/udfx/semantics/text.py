@@ -46,6 +46,11 @@ def non_whitespace_pattern() -> str:
     return char_class(whitespace(), negate=True) + "+"
 
 
+@cache
+def word_prefix_pattern() -> str:
+    return char_class(whitespace()) + "*" + non_whitespace_pattern()
+
+
 def drift(reference: Callable[[str], str], native: Recase, context: str = "{}") -> frozenset[str]:
     points = code_points()
     samples = [context.format(point) for point in points]
@@ -134,7 +139,7 @@ class SliceBounds(NamedTuple):
 
 
 def slice_bounds(
-    primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any
+    primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any, reverse: Any = None
 ) -> SliceBounds:
     zero = primitives.literal(0)
     maximum = primitives.literal(primitives.maximum)
@@ -150,6 +155,9 @@ def slice_bounds(
                 primitives.literal(min(max(end - begin, 0), primitives.maximum)),
             )
 
+    lower = zero if reverse is None else primitives.when(reverse, primitives.literal(-1), zero)
+    upper = text_length + lower
+
     def clamp(bound: Any, default: Any) -> Any:
         if bound is None:
             return default
@@ -160,11 +168,91 @@ def slice_bounds(
                 text_length + primitives.literal(max(bound, -INT64_MAX)), zero, text_length
             )
         shifted = bound + primitives.when(bound < zero, text_length, zero)
-        return primitives.clip(primitives.coalesce(shifted, default), zero, text_length)
+        bounded = primitives.clip(primitives.coalesce(shifted, default), lower, upper)
+        return (
+            bounded
+            if reverse is None
+            else primitives.when(reverse, text_length - primitives.literal(1) - bounded, bounded)
+        )
 
-    begin = clamp(start, zero)
-    end = clamp(stop, maximum)
+    begin = clamp(start, zero if reverse is None else primitives.when(reverse, upper, zero))
+    end = clamp(stop, maximum if reverse is None else primitives.when(reverse, lower, maximum))
     return SliceBounds(begin, primitives.clip(end - begin, zero, maximum))
+
+
+@dataclass(frozen=True)
+class SequencePrimitives:
+    bounds: SlicePrimitives
+    length: Callable[[Any], Any]
+    slice: Callable[[Any, Any, Any], Any]
+    reverse: Callable[[Any], Any]
+    stride: Callable[[Any, Any], Any]
+
+
+def slice_sequence(
+    primitives: SequencePrimitives, container: Any, start: Any, stop: Any, step: Any = None
+) -> Any:
+    size = primitives.length(container)
+    bounds = primitives.bounds
+    if step is None:
+        begin, length = slice_bounds(bounds, size, start, stop)
+        return primitives.slice(container, begin, length)
+    zero, one = bounds.literal(0), bounds.literal(1)
+    step = bounds.coalesce(step, one)
+    reverse = step < zero
+    begin, length = slice_bounds(bounds, size, start, stop, reverse)
+    ordered = bounds.when(reverse, primitives.reverse(container), container)
+    sliced = primitives.slice(ordered, begin, length)
+    maximum = bounds.clip(size, one, bounds.literal(INT64_MAX))
+    stride = bounds.when(
+        reverse,
+        zero - bounds.clip(step, zero - maximum, bounds.literal(-1)),
+        bounds.clip(step, one, maximum),
+    )
+    return primitives.stride(sliced, stride)
+
+
+@dataclass(frozen=True)
+class SplitPrimitives:
+    sequence: SequencePrimitives
+    split: Callable[[Any, Any], Any]
+    join: Callable[[Any, Any], Any]
+    append: Callable[[Any, Any], Any]
+    length: Callable[[Any], Any]
+    suffix: Callable[[Any, Any], Any]
+    word_prefix: Callable[[Any, Any], Any]
+    lstrip: Callable[[Any], Any]
+    is_null: Callable[[Any], Any]
+    reverse: Callable[[Any], Any]
+    restore: Callable[[Any], Any]
+
+
+def split_limited(primitives: SplitPrimitives, text: Any, separator: Any, maximum: Any) -> Any:
+    sequence = primitives.sequence
+    bounds = sequence.bounds
+    zero = bounds.literal(0)
+    pieces = primitives.split(text, separator)
+    size = sequence.length(pieces)
+    count = bounds.clip(maximum, zero, size)
+    prefix = sequence.slice(pieces, zero, count)
+    offset = primitives.length(primitives.join(separator, prefix)) + primitives.length(separator)
+    tail = primitives.suffix(text, bounds.when(count == zero, zero, offset))
+    word_offset = primitives.length(primitives.word_prefix(text, count))
+    word_tail = primitives.lstrip(primitives.suffix(text, word_offset))
+    remainder = bounds.when(primitives.is_null(separator), word_tail, tail)
+    limited = primitives.append(prefix, remainder)
+    return bounds.when((maximum < zero) | (maximum >= size), pieces, limited)
+
+
+def split_right(primitives: SplitPrimitives, text: Any, separator: Any, maximum: Any = None) -> Any:
+    reversed_text = primitives.reverse(text)
+    reversed_separator = primitives.reverse(separator)
+    pieces = (
+        primitives.split(reversed_text, reversed_separator)
+        if maximum is None
+        else split_limited(primitives, reversed_text, reversed_separator, maximum)
+    )
+    return primitives.restore(pieces)
 
 
 @dataclass(frozen=True)

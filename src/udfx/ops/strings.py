@@ -10,7 +10,7 @@ STRINGS = list_of(STR)
 OPTIONAL_STRINGS = list_of(STR.or_none())
 
 
-def empty_separator(_: Node, separator: Node) -> tuple[Fault, ...]:
+def empty_separator(_: Node, separator: Node, *limits: Node) -> tuple[Fault, ...]:
     return (Fault(ValueError, apply("__eq__", separator, lit(""))),)
 
 
@@ -25,8 +25,14 @@ def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
     return (Fault(IndexError, apply("or", too_high, too_low)),)
 
 
-def slice_of(value: str, start: int | None, stop: int | None) -> str:
-    return value[start:stop]
+def slice_of[Sequence: (str, list[str], list[str | None])](
+    value: Sequence, start: int | None, stop: int | None, step: int | None = None
+) -> Sequence:
+    return value[start:stop:step]
+
+
+def zero_step(_: Node, start: Node, stop: Node, step: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("__eq__", step, lit(0))),)
 
 
 register(Op(".lower", (STR,), STR, str.lower))
@@ -34,8 +40,10 @@ register(Op(".upper", (STR,), STR, str.upper))
 register(Op(".strip", (STR,), STR, str.strip))
 register(Op(".lstrip", (STR,), STR, str.lstrip))
 register(Op(".rstrip", (STR,), STR, str.rstrip))
-register(Op(".split", (STR,), STRINGS, str.split))
-register(Op(".split", (STR, STR.or_none()), STRINGS, str.split, empty_separator))
+for name, method in ((".split", str.split), (".rsplit", str.rsplit)):
+    register(Op(name, (STR,), STRINGS, method))
+    register(Op(name, (STR, STR.or_none()), STRINGS, method, empty_separator))
+    register(Op(name, (STR, STR.or_none(), INT), STRINGS, method, empty_separator))
 register(Op(".find", (STR, STR), INT, str.find))
 register(Op(".rfind", (STR, STR), INT, str.rfind))
 register(Op(".count", (STR, STR), INT, str.count))
@@ -44,6 +52,7 @@ register(Op(".endswith", (STR, STR), BOOL, str.endswith))
 register(Op(".replace", (STR, STR, STR), STR, str.replace))
 register(Op(".join", (STR, STRINGS), STR, str.join))
 register(Op(".join", (STR, OPTIONAL_STRINGS), STR, str.join, none_item))
+register(Op(".join", (STR, STR), STR, str.join))
 register(Op("__add__", (STR, STR), STR, operator.add))
 register(Op("__eq__", (STR.or_none(), STR.or_none()), BOOL, operator.eq))
 register(Op("__ne__", (STR.or_none(), STR.or_none()), BOOL, operator.ne))
@@ -54,4 +63,14 @@ register(Op("len", (OPTIONAL_STRINGS,), INT, len))
 register(Op("__getitem__", (STR, INT), STR, operator.getitem, out_of_range))
 register(Op("__getitem__", (STRINGS, INT), STR, operator.getitem, out_of_range))
 register(Op("__getitem__", (OPTIONAL_STRINGS, INT), STR.or_none(), operator.getitem, out_of_range))
-register(Op("slice", (STR, INT.or_none(), INT.or_none()), STR, slice_of))
+for sequence in (STR, STRINGS, OPTIONAL_STRINGS):
+    register(Op("slice", (sequence, INT.or_none(), INT.or_none()), sequence, slice_of))
+    register(
+        Op(
+            "slice",
+            (sequence, INT.or_none(), INT.or_none(), INT.or_none()),
+            sequence,
+            slice_of,
+            zero_step,
+        )
+    )

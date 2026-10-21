@@ -49,8 +49,10 @@ class PolarsBackend(Backend[pl.Expr]):
             def gather(rows: list[int]) -> list[list[object]]:
                 return [column.gather(rows).to_list() for column in columns]
 
-            patched = self.evaluate_pending_rows(program, pending, gather)
-            return values.scatter(pending, pl.Series(patched, dtype=result)) if pending else values
+            if not pending:
+                return values
+            patched = self.fallback_values(program, length, pending, gather)
+            return values.zip_with(flags.fill_null(False), pl.Series(patched, dtype=result))
 
         inputs = [exact, native, *(pl.col(name) for name in program.schema)]
         return pl.map_batches(inputs, patch, return_dtype=result, is_elementwise=True)

@@ -126,6 +126,90 @@ def constant_part(i):
         return None
 
 
+def reverse_text(text):
+    return text[::-1]
+
+
+def stride_text(text, start, stop):
+    return text[start:stop:2]
+
+
+def reverse_stride_text(text, start, stop):
+    return text[start:stop:-2]
+
+
+def slice_parts(text):
+    return text.split("_")[:3]
+
+
+def join_parts(text):
+    return "_".join(text.split("_")[:3])
+
+
+def stride_parts(text):
+    return text.split("_")[::2]
+
+
+def reverse_stride_parts(text, start, stop):
+    return text.split("_")[start:stop:-2]
+
+
+def index_sliced_parts(text, index):
+    try:
+        return text.split("_")[::-2][index]
+    except IndexError:
+        return None
+
+
+def join_characters(text, separator):
+    return separator.join(text)
+
+
+def zero_slice_step(text):
+    try:
+        return text[::0]
+    except ValueError:
+        return "zero"
+
+
+def split_limit(text, separator, maximum):
+    return text.split(separator, maximum)
+
+
+def rsplit_limit(text, separator, maximum):
+    return text.rsplit(separator, maximum)
+
+
+def split_word_limit(text, maximum):
+    return text.split(None, maximum)
+
+
+def rsplit_word_limit(text, maximum):
+    return text.rsplit(None, maximum)
+
+
+def rsplit_words(text):
+    return text.rsplit()
+
+
+def rsplit_by(text, separator):
+    return text.rsplit(separator)
+
+
+def index_split_limit(text, maximum, index):
+    try:
+        return text.split("_", maximum)[index]
+    except IndexError:
+        return None
+
+
+def index_rsplit_limit(text, maximum, index):
+    try:
+        return text.rsplit("_", maximum)[index]
+    except IndexError:
+        return None
+
+
 CASES = [
     Case("truthy_guard", truthy_guard, {"value": STR.or_none()}, "native"),
     Case("bare_except", bare_except, {"s": STR.or_none()}, "native"),
@@ -149,4 +233,57 @@ CASES = [
     Case("split_on_none", split_on_none, {"text": STR}, "native"),
     Case("constant_receiver", constant_receiver, {"s": STR}, "native"),
     Case("constant_part", constant_part, {"i": INT}, "native"),
+    Case("reverse_text", reverse_text, {"text": STR}, "native"),
+    Case(
+        "stride_text",
+        stride_text,
+        {"text": STR, "start": INT.or_none(), "stop": INT.or_none()},
+        "native",
+    ),
+    Case(
+        "reverse_stride_text",
+        reverse_stride_text,
+        {"text": STR, "start": INT.or_none(), "stop": INT.or_none()},
+        "native",
+    ),
+    Case("slice_parts", slice_parts, {"text": STR}, "native"),
+    Case("join_parts", join_parts, {"text": STR}, "native"),
+    Case("stride_parts", stride_parts, {"text": STR}, "native"),
+    Case(
+        "reverse_stride_parts",
+        reverse_stride_parts,
+        {"text": STR, "start": INT.or_none(), "stop": INT.or_none()},
+        "native",
+    ),
+    Case("index_sliced_parts", index_sliced_parts, {"text": STR, "index": INT}, "native"),
+    Case("join_characters", join_characters, {"text": STR, "separator": STR}, "native"),
+    Case("zero_slice_step", zero_slice_step, {"text": STR}, "native"),
+    Case(
+        "split_limit",
+        split_limit,
+        {"text": STR, "separator": STR.or_none(), "maximum": INT},
+        "native",
+    ),
+    Case(
+        "rsplit_limit",
+        rsplit_limit,
+        {"text": STR, "separator": STR.or_none(), "maximum": INT},
+        "native",
+    ),
+    Case("split_word_limit", split_word_limit, {"text": STR, "maximum": INT}, "native"),
+    Case("rsplit_word_limit", rsplit_word_limit, {"text": STR, "maximum": INT}, "native"),
+    Case("rsplit_words", rsplit_words, {"text": STR}, "native"),
+    Case("rsplit_by", rsplit_by, {"text": STR, "separator": STR.or_none()}, "native"),
+    Case(
+        "index_split_limit",
+        index_split_limit,
+        {"text": STR, "maximum": INT, "index": INT},
+        "native",
+    ),
+    Case(
+        "index_rsplit_limit",
+        index_rsplit_limit,
+        {"text": STR, "maximum": INT, "index": INT},
+        "native",
+    ),
 ]

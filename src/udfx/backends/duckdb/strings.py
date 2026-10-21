@@ -23,13 +23,19 @@ from udfx.semantics.text import (
     SIGMA,
     CaseDrift,
     SearchPrimitives,
+    SequencePrimitives,
     SlicePrimitives,
+    SplitPrimitives,
     case_guard,
     count_occurrences,
     non_whitespace_pattern,
     reverse_find,
     slice_bounds,
+    slice_sequence,
+    split_limited,
+    split_right,
     whitespace,
+    word_prefix_pattern,
 )
 from udfx.types import Kind
 
@@ -91,11 +97,14 @@ def split_words(text: Expression) -> Expression:
 
 
 RULES(".split", Kind.STR)(split_words)
+RULES(".rsplit", Kind.STR)(split_words)
 
 
-@RULES(".split", Kind.STR, Kind.STR)
 def split(text: Expression, separator: Expression) -> Expression:
     return when(separator.isnull(), split_words(text), function("string_split", text, separator))
+
+
+RULES(".split", Kind.STR, Kind.STR)(split)
 
 
 def find(text: Expression, pattern: Expression) -> Expression:
@@ -141,12 +150,19 @@ def replace(text: Expression, old: Expression, new: Expression) -> Expression:
     return when(old == constant(""), between, function("replace", text, old, new))
 
 
-@RULES(".join", Kind.STR, Kind.LIST)
 def join(separator: Expression, words: Expression) -> Expression:
     first = column(INDEX) == constant(1)
     prefixed = when(first, column(ITEM), function("concat", separator, column(ITEM)))
     pieces = function("list_transform", words, duckdb.LambdaExpression((ITEM, INDEX), prefixed))
     return function("array_to_string", pieces, constant(""))
+
+
+RULES(".join", Kind.STR, Kind.LIST)(join)
+
+
+@RULES(".join", Kind.STR, Kind.STR)
+def join_characters(separator: Expression, text: Expression) -> Expression:
+    return join(separator, function("string_split", text, constant("")))
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
@@ -207,3 +223,76 @@ def str_slice(
 ) -> Expression:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return function("substring", text, bounds.start + constant(1), bounds.length)
+
+
+SEQUENCE = SequencePrimitives(
+    bounds=SLICE,
+    length=length,
+    slice=lambda value, start, size: function(
+        "list_slice", value, start + constant(1), start + size
+    ),
+    reverse=lambda value: function("list_reverse", value),
+    stride=lambda value, step: function("list_slice", value, constant(1), length(value), step),
+)
+
+
+def list_slice(
+    container: Expression, start: Expression, stop: Expression, step: Expression | None = None
+) -> Expression:
+    return slice_sequence(SEQUENCE, container, start, stop, step)
+
+
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice_step(
+    text: Expression, start: Expression, stop: Expression, step: Expression
+) -> Expression:
+    characters = function("string_split", text, constant(""))
+    return join(constant(""), list_slice(characters, start, stop, step))
+
+
+SPLIT = SplitPrimitives(
+    sequence=SEQUENCE,
+    split=split,
+    join=join,
+    append=lambda values, value: function("list_append", values, value),
+    length=length,
+    suffix=lambda value, start: function("substring", value, start + constant(1)),
+    word_prefix=lambda value, count: function(
+        "array_to_string",
+        function(
+            "list_slice",
+            function("regexp_extract_all", value, constant(word_prefix_pattern())),
+            constant(1),
+            count,
+        ),
+        constant(""),
+    ),
+    lstrip=lstrip,
+    is_null=Expression.isnull,
+    reverse=lambda value: function("reverse", value),
+    restore=lambda values: function(
+        "list_transform",
+        function("list_reverse", values),
+        duckdb.LambdaExpression(ITEM, function("reverse", column(ITEM))),
+    ),
+)
+
+
+@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
+def split_limit(text: Expression, separator: Expression, maximum: Expression) -> Expression:
+    return split_limited(SPLIT, text, separator, maximum)
+
+
+@RULES(".rsplit", Kind.STR, Kind.STR)
+@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
+def rsplit(
+    text: Expression, separator: Expression, maximum: Expression | None = None
+) -> Lowered[Expression]:
+    exact = single_code_point_clusters(text) & duckdb.CoalesceOperator(
+        single_code_point_clusters(separator), constant(True)
+    )
+    return Lowered(split_right(SPLIT, text, separator, maximum), exact)

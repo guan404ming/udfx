@@ -16,12 +16,18 @@ from udfx.semantics.text import (
     SIGMA,
     CaseDrift,
     SearchPrimitives,
+    SequencePrimitives,
     SlicePrimitives,
+    SplitPrimitives,
     case_guard,
     char_class,
     count_occurrences,
+    non_whitespace_pattern,
     reverse_find,
     slice_bounds,
+    slice_sequence,
+    split_limited,
+    split_right,
     whitespace,
 )
 from udfx.types import STR, Kind
@@ -83,15 +89,18 @@ def split_words(text: Expr) -> Expr:
 
 
 RULES(".split", Kind.STR)(split_words)
+RULES(".rsplit", Kind.STR)(split_words)
 
 
-@RULES(".split", Kind.STR, Kind.STR)
 def split(text: Expr, separator: Expr) -> Expr:
     return (
         functions.when(separator.is_null(), split_words(text))
         .when(text == lit(""), functions.make_array(lit("")))
         .otherwise(functions.string_to_array(text, separator))
     )
+
+
+RULES(".split", Kind.STR, Kind.STR)(split)
 
 
 def find(text: Expr, pattern: Expr) -> Expr:
@@ -126,10 +135,13 @@ def endswith(text: Expr, suffix: Expr) -> Expr:
     return functions.ends_with(text, suffix)
 
 
+def characters(text: Expr) -> Expr:
+    return functions.string_to_array(text, typed_literal(None, STR.or_none()))
+
+
 @RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
 def replace(text: Expr, old: Expr, new: Expr) -> Expr:
-    characters = functions.string_to_array(text, typed_literal(None, STR.or_none()))
-    padded = functions.concat(new, functions.array_to_string(characters, new), new)
+    padded = functions.concat(new, functions.array_to_string(characters(text), new), new)
     return (
         functions.when((old == lit("")) & (text == lit("")), new)
         .when(old == lit(""), padded)
@@ -137,9 +149,16 @@ def replace(text: Expr, old: Expr, new: Expr) -> Expr:
     )
 
 
-@RULES(".join", Kind.STR, Kind.LIST)
 def join(separator: Expr, words: Expr) -> Expr:
     return functions.array_to_string(words, separator)
+
+
+RULES(".join", Kind.STR, Kind.LIST)(join)
+
+
+@RULES(".join", Kind.STR, Kind.STR)
+def join_characters(separator: Expr, text: Expr) -> Expr:
+    return join(separator, characters(text))
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
@@ -209,3 +228,61 @@ SLICE = SlicePrimitives(
 def str_slice(text: Expr, start: Expr | int | None, stop: Expr | int | None) -> Expr:
     bounds = slice_bounds(SLICE, length(text), start, stop)
     return functions.substr(text, bounds.start + lit(1), bounds.length)
+
+
+SEQUENCE = SequencePrimitives(
+    bounds=SLICE,
+    length=list_len,
+    slice=lambda value, start, size: functions.array_slice(value, start + lit(1), start + size),
+    reverse=functions.array_reverse,
+    stride=lambda value, step: functions.array_slice(value, lit(1), list_len(value), step),
+)
+
+
+def list_slice(container: Expr, start: Expr, stop: Expr, step: Expr | None = None) -> Expr:
+    return slice_sequence(SEQUENCE, container, start, stop, step)
+
+
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
+RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice_step(text: Expr, start: Expr, stop: Expr, step: Expr) -> Expr:
+    return join(lit(""), list_slice(characters(text), start, stop, step))
+
+
+SPLIT = SplitPrimitives(
+    sequence=SEQUENCE,
+    split=split,
+    join=join,
+    append=functions.array_append,
+    length=length,
+    suffix=lambda value, start: functions.substr(value, start + lit(1)),
+    word_prefix=lambda value, count: functions.substr(
+        value,
+        lit(1),
+        functions.greatest(
+            functions.regexp_instr(value, lit(non_whitespace_pattern()), lit(1), count + lit(1))
+            - lit(1),
+            lit(0),
+        ),
+    ),
+    lstrip=lstrip,
+    is_null=Expr.is_null,
+    reverse=functions.reverse,
+    restore=lambda values: functions.array_transform(
+        functions.array_reverse(values), functions.reverse
+    ),
+)
+
+
+@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
+def split_limit(text: Expr, separator: Expr, maximum: Expr) -> Expr:
+    return split_limited(SPLIT, text, separator, maximum)
+
+
+@RULES(".rsplit", Kind.STR, Kind.STR)
+@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
+def rsplit(text: Expr, separator: Expr, maximum: Expr | None = None) -> Expr:
+    return split_right(SPLIT, text, separator, maximum)

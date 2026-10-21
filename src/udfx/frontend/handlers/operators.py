@@ -11,7 +11,7 @@ from udfx.frontend.formatting import format_percent
 from udfx.frontend.logic import fold, negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
-from udfx.frontend.values import Item, Opaque, Row, Tuple, Value
+from udfx.frontend.values import Item, Opaque, Row, Slice, Tuple, Value
 from udfx.ir import Lit, lit
 from udfx.types import Kind
 
@@ -128,11 +128,29 @@ def binary_subscr(context: Context, state: State, instruction: dis.Instruction) 
         return [rest.push(container.column(index.node.value)).advance()]
     if isinstance(container, Opaque) and any(container.value is generic for generic in GENERICS):
         return [rest.push(annotation(operator.getitem, container, index)).advance()]
-    if isinstance(container, Opaque):
+    if isinstance(index, Opaque) and isinstance(index.value, slice):
+        index = Slice(
+            tuple(
+                node_of(constant(bound))
+                for bound in (index.value.start, index.value.stop, index.value.step)
+            )
+        )
+    if isinstance(index, Slice):
+        node, faults = invoke("slice", [node_of(container), *index.bounds], TypeError)
+    elif isinstance(container, Opaque):
         node, faults = lookup(container.value, node_of(index))
     else:
         node, faults = invoke("__getitem__", [node_of(container), node_of(index)], TypeError)
     return emit(context, rest, Value(node), faults)
+
+
+@handles("BUILD_SLICE")
+def build_slice(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    items, rest = state.pop(instruction.argval)
+    bounds = tuple(node_of(item) for item in items)
+    if len(bounds) == 3 and not isinstance(bounds[2], Lit):
+        raise Unsupported("slice step must be a literal", context.where(state))
+    return [rest.push(Slice(bounds)).advance()]
 
 
 @handles("BINARY_SLICE")
