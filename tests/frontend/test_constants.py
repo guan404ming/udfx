@@ -1,3 +1,5 @@
+# ruff: noqa: PLW0108, SIM401
+
 from collections.abc import Callable
 
 import pytest
@@ -194,3 +196,45 @@ def test_static_lookup_fault_is_total() -> None:
     program = trace(guarded, {"s": STR})
     assert program.fault == apply("bool", S)
     assert program.value == Lit(0.0, FLOAT)
+
+
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda value: {"a": "b", "c": "d"}.get(value),
+        lambda value: {"a": "b", "c": "d"}.get(value, "missing"),
+        lambda value: {"a": "b", "c": "d"}.get(value, value),
+        lambda value: {}.get(value),
+        lambda value: {}.get(value, value),
+        lambda value: value in {"a": "b", "c": "d"},
+        lambda value: value not in {"a": "b", "c": "d"},
+        lambda value: {"a": "b"}.get("missing", value),
+        lambda value: {"a": "b"}.get("a", value),
+    ],
+)
+def test_dict_methods(function: Callable[..., object]) -> None:
+    schema = {"value": STR.or_none()}
+    rows = [("a",), ("c",), ("missing",), (None,)]
+    assert trace(function, schema).fault == FALSE
+    assert check_function(function, schema, PolarsBackend(), rows) == []
+
+
+def test_dict_membership_guards_lookup() -> None:
+    def replace(value: str) -> str:
+        mapping = {"a": "b", "c": "d"}
+        return mapping[value] if value in mapping else value
+
+    rows = [("a",), ("c",), ("missing",), (None,)]
+    assert check_function(replace, {"value": STR.or_none()}, PolarsBackend(), rows) == []
+
+
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda value: {"a": 1}.get(),  # pyright: ignore[reportCallIssue]
+        lambda value: {"a": 1}.get(value, 1, 2),  # pyright: ignore[reportCallIssue]
+    ],
+)
+def test_dict_get_arity(function: Callable[..., object]) -> None:
+    with pytest.raises(Unsupported, match=r"dict.get takes one or two arguments"):
+        trace(function, {"value": STR})

@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from udfx.ir import FALSE, Node
+from udfx.semantics.scalars import python_scalar
 from udfx.types import Type, fits
 
 
@@ -41,7 +42,7 @@ class Program:
     def run(self, rows: Iterable[Sequence[object]]) -> list[object]:
         values: list[object] = []
         for row in rows:
-            value = self.function(*self.arguments(row))
+            value = python_scalar(self.function(*self.arguments(row)))
             if not fits(value, self.result):
                 raise OverflowError(f"udfx result {value!r} does not fit {self.result}")
             values.append(value)

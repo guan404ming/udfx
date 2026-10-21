@@ -5,7 +5,12 @@ import polars as pl
 from udfx.backends.polars.conversions import float_int
 from udfx.backends.polars.numbers import ORDER, cast_float64
 from udfx.backends.polars.rules import RULES, broadcast, when
-from udfx.backends.registration import Lowered, register_extremum, register_float_variants
+from udfx.backends.registration import (
+    Lowered,
+    register_extremum,
+    register_float_variants,
+    register_numpy_math,
+)
 from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
 
@@ -59,3 +64,14 @@ def round_digits(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
 def round_overflows(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(pl.lit(False), round_overflow_safe(ROUND, value, digits))
+
+
+register_numpy_math(
+    RULES,
+    ROUND,
+    root=pl.Expr.sqrt,
+    floor=pl.Expr.floor,
+    ceil=pl.Expr.ceil,
+    is_nan=pl.Expr.is_nan,
+    round_digits=round_digits,
+)

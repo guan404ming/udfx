@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.registration import Lowered, register_extremum, register_float_variants
+from udfx.backends.registration import (
+    Lowered,
+    register_extremum,
+    register_float_variants,
+    register_numpy_math,
+)
 from udfx.backends.spark.conversions import float_int
 from udfx.backends.spark.numbers import ORDER, cast_float64, floor
 from udfx.backends.spark.rules import RULES, when
@@ -57,3 +62,14 @@ def round_digits(value: Column, digits: Column) -> Lowered[Column]:
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
 def round_overflows(value: Column, digits: Column) -> Lowered[Column]:
     return Lowered(functions.lit(False), round_overflow_safe(ROUND, value, digits))
+
+
+register_numpy_math(
+    RULES,
+    ROUND,
+    root=functions.sqrt,
+    floor=floor,
+    ceil=lambda value: -floor(-value),
+    is_nan=functions.isnan,
+    round_digits=round_digits,
+)

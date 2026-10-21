@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import itertools
-import math
 import string
 import threading
 import weakref
@@ -19,7 +18,7 @@ from udfx import __version__
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.duckdb.dtypes import dtype
-from udfx.backends.duckdb.rules import NAN, RULES, column, constant, function, when
+from udfx.backends.duckdb.rules import RULES, column, constant, function, when
 from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
@@ -73,8 +72,6 @@ class DuckDBBackend(Backend[Expression]):
         return column(node.name)
 
     def literal(self, node: Lit) -> Expression:
-        if isinstance(node.value, float) and math.isnan(node.value):
-            return NAN
         return constant(node.value).cast(dtype(node.type))
 
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:

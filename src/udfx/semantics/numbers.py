@@ -87,6 +87,19 @@ class RoundPrimitives:
     when: Callable[[Any, Any, Any], Any]
 
 
+def numpy_root(primitives: RoundPrimitives, root: Callable[[Any], Any], value: Any) -> Any:
+    negative = value < primitives.literal(0.0)
+    safe = primitives.when(negative, primitives.literal(0.0), value)
+    return primitives.when(negative, primitives.literal(float("nan")), root(safe))
+
+
+def signed_round(primitives: RoundPrimitives, value: Any) -> Any:
+    rounded = primitives.round(value)
+    return primitives.when(
+        rounded == primitives.literal(0.0), value * primitives.literal(0.0), rounded
+    )
+
+
 def round_half_even(primitives: RoundPrimitives, value: Any) -> Any:
     literal = primitives.literal
     tie = primitives.abs(value) % literal(1.0) == literal(0.5)

@@ -36,6 +36,11 @@ class Opaque:
 
 
 @dataclass(frozen=True)
+class RuntimeType:
+    node: Node
+
+
+@dataclass(frozen=True)
 class Tuple:
     items: tuple[Item, ...]
 
@@ -61,7 +66,7 @@ class Cell:
 
 NULL = Null()
 
-Item = Value | Row | Method | Opaque | Tuple | Null | Function
+Item = Value | Row | Method | Opaque | RuntimeType | Tuple | Null | Function
 
 
 def named(value: object) -> str:
@@ -90,6 +95,8 @@ def describe(item: Item) -> str:
             return f"method .{name}"
         case Opaque(value=value):
             return named(value)
+        case RuntimeType(node=node):
+            return f"type of a {node.type} value"
         case Tuple():
             return "a tuple"
         case Function(code=code):

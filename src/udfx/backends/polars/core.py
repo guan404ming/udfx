@@ -3,7 +3,10 @@ from __future__ import annotations
 import polars as pl
 
 from udfx.backends.polars.rules import RULES
+from udfx.backends.registration import register_missing
 from udfx.types import Kind
+
+register_missing(RULES, pl.Expr.is_null, pl.Expr.is_nan)
 
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(pl.Expr.is_null)

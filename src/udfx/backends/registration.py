@@ -16,10 +16,14 @@ from udfx.semantics.literals import (
 from udfx.semantics.numbers import (
     Binary,
     OrderPrimitives,
+    RoundPrimitives,
     float_compare,
     float_extremum,
+    numpy_root,
+    signed_round,
     widened_exact,
 )
+from udfx.semantics.scalars import missing_expression
 from udfx.types import Kind
 
 
@@ -71,6 +75,48 @@ def register_float_variants[E](
     rules(name, Kind.FLOAT, Kind.FLOAT)(rule)
     rules(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(to_float(left), right))
     rules(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, to_float(right)))
+
+
+def register_missing[E](
+    rules: RuleSet[E], is_null: Callable[[E], Any], is_nan: Callable[[E], Any]
+) -> None:
+    def missing(value: E) -> Any:
+        return missing_expression(is_null, is_nan, value)
+
+    rules("pandas.isna", Kind.FLOAT)(missing)
+    rules("pandas.notna", Kind.FLOAT)(lambda value: ~missing(value))
+    for kind in (Kind.STR, Kind.INT, Kind.BOOL):
+        rules("pandas.isna", kind)(is_null)
+        rules("pandas.notna", kind)(lambda value: ~is_null(value))
+
+
+def register_numpy_math[E](
+    rules: RuleSet[E],
+    rounding: RoundPrimitives,
+    *,
+    root: Callable[[E], E],
+    floor: Callable[[E], E],
+    ceil: Callable[[E], E],
+    is_nan: Callable[[E], E],
+    round_digits: BinaryRule[E],
+) -> None:
+    def square_root(value: E) -> E:
+        return numpy_root(rounding, root, value)
+
+    def fallback(value: E) -> Lowered[E]:
+        return Lowered(value, rounding.literal(False))
+
+    for name, rule in (("sqrt", square_root), ("log", fallback), ("exp", fallback)):
+        rules(f"numpy.{name}", Kind.FLOAT)(rule)
+        rules(f"numpy.{name}", Kind.INT)(lambda value, rule=rule: rule(rounding.to_float(value)))
+    rules("numpy.isnan", Kind.FLOAT)(is_nan)
+    for kind in (Kind.INT, Kind.BOOL):
+        rules("numpy.isnan", kind)(lambda value: rounding.literal(False))
+    rules("numpy.abs", Kind.FLOAT)(rounding.abs)
+    rules("numpy.floor", Kind.FLOAT)(floor)
+    rules("numpy.ceil", Kind.FLOAT)(ceil)
+    rules("numpy.round", Kind.FLOAT)(lambda value: signed_round(rounding, value))
+    rules("numpy.round", Kind.FLOAT, Kind.INT)(round_digits)
 
 
 def register_widened_variants[E](

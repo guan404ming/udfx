@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke
+from udfx.frontend.calls import invoke, none_test
 from udfx.frontend.logic import choose, conjunction, negate
-from udfx.frontend.values import Function, Item, Opaque, Value, describe, named
-from udfx.ir import TRUE, Lit, Node, lit
+from udfx.frontend.values import Function, Item, Opaque, RuntimeType, Value, describe, named
+from udfx.ir import TRUE, Col, Lit, Node, lit
 from udfx.ops import Fault
+from udfx.semantics.scalars import PYTHON_TYPES
 from udfx.types import list_of
 
 SCALARS = (str, int, float, bool)
@@ -18,6 +20,41 @@ ITEMS = (str, int)
 ANNOTATIONS = (type, UnionType, GenericAlias)
 
 GENERICS = (list, dict, tuple, set, frozenset, type)
+
+
+def runtime_type(item: Item) -> Item:
+    if isinstance(item, Value) and isinstance(item.node, Col):
+        return RuntimeType(item.node)
+    return Opaque(type(constant_value(item)))
+
+
+def type_test(item: Item, expected: object, subclasses: bool = False) -> Node:
+    if isinstance(expected, tuple) and subclasses:
+        tests = [type_test(item, member, True) for member in expected]
+        return negate(reduce(conjunction, map(negate, tests), TRUE))
+    if not isinstance(expected, type) or expected not in PYTHON_TYPES.values():
+        raise Unsupported(f"type test against {named(expected)}")
+    if not isinstance(item, RuntimeType):
+        actual = constant_value(item)
+        if not isinstance(actual, type):
+            raise Unsupported(f"type test of {named(actual)}")
+        return lit(issubclass(actual, expected) if subclasses else actual is expected)
+    actual = PYTHON_TYPES[item.node.type.kind]
+    matches = issubclass(actual, expected) if subclasses else actual is expected
+    if not item.node.type.nullable or matches == (expected is type(None)):
+        return lit(matches)
+    missing = none_test(Value(item.node))
+    return negate(missing) if matches else missing
+
+
+def type_comparison(left: Item, right: Item) -> Node | None:
+    if isinstance(left, RuntimeType):
+        return type_test(left, constant_value(right))
+    if isinstance(right, RuntimeType):
+        return type_test(right, constant_value(left))
+    if isinstance(left, Opaque) and isinstance(left.value, type):
+        return type_test(left, constant_value(right))
+    return None
 
 
 def is_scalar(value: object) -> bool:
@@ -78,14 +115,14 @@ def scalar_map(pairs: Iterable[tuple[object, object]]) -> dict[object, object]:
     return entries
 
 
-def lookup(mapping: object, key: Node) -> tuple[Node, list[Fault]]:
+def lookup(mapping: object, key: Node, default: Node | None = None) -> tuple[Node, list[Fault]]:
     if not isinstance(mapping, dict):
         raise Unsupported(f"subscript of {named(mapping)}")
     entries = scalar_map(mapping.items())
     if isinstance(key, Lit) or not entries:
         if isinstance(key, Lit) and key.value in entries:
             return lit(entries[key.value]), []
-        return lit(None), [Fault(KeyError, TRUE)]
+        return (default, []) if default is not None else (lit(None), [Fault(KeyError, TRUE)])
     cases: list[tuple[Node, Node]] = []
     faults: list[Fault] = []
     miss: Node = TRUE
@@ -94,4 +131,6 @@ def lookup(mapping: object, key: Node) -> tuple[Node, list[Fault]]:
         cases.append((test, lit(value)))
         faults.extend(test_faults)
         miss = conjunction(miss, negate(test))
+    if default is not None:
+        return choose([*cases, (miss, default)]), faults
     return choose(cases), [*faults, Fault(KeyError, miss)]

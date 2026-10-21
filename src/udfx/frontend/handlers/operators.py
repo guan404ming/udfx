@@ -5,14 +5,14 @@ import operator
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, node_of, none_test, truth
-from udfx.frontend.constants import GENERICS, annotation, constant, lookup
+from udfx.frontend.constants import GENERICS, annotation, constant, lookup, type_comparison
 from udfx.frontend.context import Context
 from udfx.frontend.formatting import format_percent
 from udfx.frontend.logic import fold, negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Row, Tuple, Value
-from udfx.ir import Lit
+from udfx.ir import Lit, lit
 from udfx.types import Kind
 
 BINARY_OPS: dict[str, str] = {
@@ -66,6 +66,10 @@ def compare_op(context: Context, state: State, instruction: dis.Instruction) -> 
     if name is None:
         raise Unsupported(f"comparison {instruction.argval}", context.where(state))
     (left, right), rest = state.pop(2)
+    if name in ("__eq__", "__ne__"):
+        test = type_comparison(left, right)
+        if test is not None:
+            return [rest.push(Value(negate(test) if name == "__ne__" else test)).advance()]
     node, faults = invoke(name, [node_of(left), node_of(right)], TypeError)
     return emit(context, rest, Value(node), faults)
 
@@ -92,13 +96,20 @@ def is_op(context: Context, state: State, instruction: dis.Instruction) -> list[
     elif is_none_constant(left):
         test = none_test(right)
     else:
-        raise Unsupported("identity check against a value other than None", context.where(state))
+        test = type_comparison(left, right)
+        if test is None:
+            raise Unsupported(
+                "identity check against a value other than None", context.where(state)
+            )
     return [rest.push(Value(negate(test) if instruction.arg else test)).advance()]
 
 
 @handles("CONTAINS_OP")
 def contains_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item, container), rest = state.pop(2)
+    if isinstance(container, Opaque) and isinstance(container.value, dict):
+        node, faults = lookup(dict.fromkeys(container.value, True), node_of(item), lit(False))
+        return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
     members = container.node if isinstance(container, Value) else node_of(container)
     node, faults = invoke("__contains__", [members, node_of(item)], TypeError)
     return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)

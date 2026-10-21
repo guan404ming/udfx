@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, cast
 
 import duckdb
@@ -18,6 +19,8 @@ def column(name: str) -> Expression:
 
 
 def constant(value: object) -> Expression:
+    if isinstance(value, float) and math.isnan(value):
+        return NAN
     return duckdb.ConstantExpression(cast("Any", value))
 
 

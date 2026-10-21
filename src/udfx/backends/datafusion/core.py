@@ -3,7 +3,10 @@ from __future__ import annotations
 from datafusion import Expr, functions, lit
 
 from udfx.backends.datafusion.rules import RULES
+from udfx.backends.registration import register_missing
 from udfx.types import Kind
+
+register_missing(RULES, Expr.is_null, functions.isnan)
 
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(Expr.is_null)

@@ -99,8 +99,11 @@ def test_module_function_resolves_by_identity() -> None:
 def test_other_attribute_loads_are_unsupported() -> None:
     with pytest.raises(Unsupported, match="attribute load real"):
         trace(real_part, {"x": FLOAT})
-    with pytest.raises(Unsupported, match="attribute load get"):
-        trace(get_rate, {"s": STR})
+
+
+def test_constant_dict_get_is_supported() -> None:
+    assert trace(get_rate, {"s": STR}).fault == FALSE
+    assert check_function(get_rate, {"s": STR}, POLARS, [("a",), ("missing",)]) == []
 
 
 def test_parameters_ignore_wraps() -> None:

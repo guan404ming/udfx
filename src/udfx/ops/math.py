@@ -3,10 +3,12 @@ from __future__ import annotations
 import math
 import operator
 from collections.abc import Callable
+from functools import partial
 
 from udfx.ir import Node, lit
 from udfx.ops.numbers import not_finite, zero
 from udfx.ops.registry import Fault, Op, apply, register
+from udfx.semantics.scalars import numpy_scalar
 from udfx.types import BOOL, FLOAT, INT, STR, Kind
 
 
@@ -64,3 +66,15 @@ register(Op("math.ceil", (FLOAT,), INT, math.ceil, not_finite))
 register(Op("math.floor", (FLOAT,), INT, math.floor, not_finite))
 register(Op("math.ceil", (INT,), INT, math.ceil))
 register(Op("math.floor", (INT,), INT, math.floor))
+
+for scalar in (INT, FLOAT, BOOL):
+    register(Op("numpy.isnan", (scalar,), BOOL, partial(numpy_scalar, "isnan")))
+
+for name in ("log", "sqrt", "exp"):
+    for scalar in (INT, FLOAT):
+        register(Op(f"numpy.{name}", (scalar,), FLOAT, partial(numpy_scalar, name)))
+
+for name in ("abs", "floor", "ceil", "round"):
+    register(Op(f"numpy.{name}", (FLOAT,), FLOAT, partial(numpy_scalar, name)))
+
+register(Op("numpy.round", (FLOAT, INT), FLOAT, partial(numpy_scalar, "round")))

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from duckdb import Expression
 
 from udfx.backends.duckdb.conversions import float_int
 from udfx.backends.duckdb.numbers import ORDER, cast_float64
 from udfx.backends.duckdb.rules import RULES, constant, function, when
-from udfx.backends.registration import Lowered, register_extremum, register_float_variants
+from udfx.backends.registration import (
+    Lowered,
+    register_extremum,
+    register_float_variants,
+    register_numpy_math,
+)
 from udfx.semantics.numbers import (
     RoundPrimitives,
     round_half_even,
@@ -72,3 +79,14 @@ def round_digits(value: Expression, digits: Expression) -> Lowered[Expression]:
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
 def round_overflows(value: Expression, digits: Expression) -> Lowered[Expression]:
     return Lowered(constant(False), round_overflow_safe(ROUND, value, digits))
+
+
+register_numpy_math(
+    RULES,
+    replace(ROUND, round=half_even),
+    root=root,
+    floor=lambda value: function("floor", value),
+    ceil=lambda value: function("ceil", value),
+    is_nan=lambda value: function("isnan", value),
+    round_digits=round_digits,
+)

@@ -8,8 +8,15 @@ from typing import cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.binding import bind, helper_signature
-from udfx.frontend.calls import call
-from udfx.frontend.constants import constant, constant_value, scalar_map
+from udfx.frontend.calls import call, node_of
+from udfx.frontend.constants import (
+    constant,
+    constant_value,
+    lookup,
+    runtime_type,
+    scalar_map,
+    type_test,
+)
 from udfx.frontend.context import Context
 from udfx.frontend.frozen import closure
 from udfx.frontend.machine import emit, explore, handles
@@ -26,7 +33,7 @@ from udfx.frontend.values import (
     Value,
     describe,
 )
-from udfx.ir import Lit
+from udfx.ir import Lit, lit
 
 DEFAULTS = 0x01
 KEYWORD_DEFAULTS = 0x02
@@ -61,6 +68,8 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             attribute = owner.column(name)
         case Opaque(value=ModuleType() as module) if name in context.snapshot.members(module):
             attribute = constant(context.snapshot.attribute(module, name))
+        case Opaque(value=dict()) if name == "get" and method:
+            return [rest.push(Method(name), owner).advance()]
         case Value() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():
@@ -99,6 +108,20 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
         rest = replace(rest, keywords=())
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments, keywords)
+    if isinstance(callee, Opaque) and not keywords:
+        if callee.value is type and len(arguments) == 1:
+            return [rest.push(runtime_type(arguments[0])).advance()]
+        if callee.value is isinstance and len(arguments) == 2:
+            test = type_test(runtime_type(arguments[0]), constant_value(arguments[1]), True)
+            return [rest.push(Value(test)).advance()]
+    if isinstance(callee, Method) and callee.name == "get" and arguments and not keywords:
+        owner, *parameters = arguments
+        if isinstance(owner, Opaque) and isinstance(owner.value, dict):
+            if len(parameters) not in (1, 2):
+                raise Unsupported("dict.get takes one or two arguments", context.where(state))
+            key, *defaults = map(node_of, parameters)
+            node, faults = lookup(owner.value, key, defaults[0] if defaults else lit(None))
+            return emit(context, rest, Value(node), faults)
     node, faults = call(callee, arguments, keywords)
     return emit(context, rest, Value(node), faults)
 

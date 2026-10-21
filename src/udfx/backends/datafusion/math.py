@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from datafusion import Expr, functions, lit
 
 from udfx.backends.datafusion.conversions import float_int
@@ -11,7 +13,12 @@ from udfx.backends.datafusion.numbers import (
     is_nan,
 )
 from udfx.backends.datafusion.rules import RULES, when
-from udfx.backends.registration import Lowered, register_extremum, register_float_variants
+from udfx.backends.registration import (
+    Lowered,
+    register_extremum,
+    register_float_variants,
+    register_numpy_math,
+)
 from udfx.semantics.numbers import (
     RoundPrimitives,
     round_half_even,
@@ -83,3 +90,14 @@ def round_digits(value: Expr, digits: Expr) -> Lowered[Expr]:
 @RULES("round_overflows", Kind.FLOAT, Kind.INT)
 def round_overflows(value: Expr, digits: Expr) -> Lowered[Expr]:
     return Lowered(lit(False), round_overflow_safe(ROUND, value, digits))
+
+
+register_numpy_math(
+    RULES,
+    replace(ROUND, round=half_even),
+    root=root,
+    floor=functions.floor,
+    ceil=functions.ceil,
+    is_nan=functions.isnan,
+    round_digits=round_digits,
+)

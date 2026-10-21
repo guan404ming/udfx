@@ -3,8 +3,11 @@ from __future__ import annotations
 import duckdb
 from duckdb import Expression
 
-from udfx.backends.duckdb.rules import RULES, constant, length
+from udfx.backends.duckdb.rules import RULES, constant, function, length
+from udfx.backends.registration import register_missing
 from udfx.types import Kind
+
+register_missing(RULES, Expression.isnull, lambda value: function("isnan", value))
 
 for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST):
     RULES("is_none", _kind)(Expression.isnull)

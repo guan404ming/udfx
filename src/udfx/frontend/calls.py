@@ -32,6 +32,21 @@ CALLABLES: tuple[tuple[object, str], ...] = (
     (math.sqrt, "math.sqrt"),
 )
 
+CALLABLE_IDENTITIES = {
+    ("builtins", "pandas", "isna"): "pandas.isna",
+    ("builtins", "pandas", "notna"): "pandas.notna",
+    ("builtins", "pandas.core.dtypes.missing", "isna"): "pandas.isna",
+    ("builtins", "pandas.core.dtypes.missing", "notna"): "pandas.notna",
+    ("numpy", "ufunc", "isnan"): "numpy.isnan",
+    ("numpy", "ufunc", "log"): "numpy.log",
+    ("numpy", "ufunc", "sqrt"): "numpy.sqrt",
+    ("numpy", "ufunc", "exp"): "numpy.exp",
+    ("numpy", "ufunc", "absolute"): "numpy.abs",
+    ("numpy", "ufunc", "floor"): "numpy.floor",
+    ("numpy", "ufunc", "ceil"): "numpy.ceil",
+    ("numpy", "numpy", "round"): "numpy.round",
+}
+
 
 def node_of(item: Item) -> Node:
     if not isinstance(item, Value):
@@ -45,6 +60,14 @@ def op_name(callee: object) -> str:
     for known, name in CALLABLES:
         if known is callee:
             return name
+    owner = type(callee)
+    module = getattr(callee, "__module__", "")
+    name = getattr(callee, "__qualname__", None) or getattr(callee, "__name__", "")
+    if owner.__module__ == "numpy" and owner.__name__ == "ufunc":
+        module = "ufunc"
+    found = CALLABLE_IDENTITIES.get((owner.__module__, module, name))
+    if found is not None:
+        return found
     raise Unsupported(f"unknown callable {named(callee)}")
 
 

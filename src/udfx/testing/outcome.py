@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
+from udfx.semantics.scalars import python_scalar
 from udfx.types import Type, fits
 
 
@@ -25,7 +26,7 @@ def run(
     function: Callable[..., object], arguments: Sequence[object], result: Type | None = None
 ) -> Outcome:
     try:
-        value = function(*arguments)
+        value = python_scalar(function(*arguments))
     except Exception as error:
         return Raised(type(error))
     if result is not None and not fits(value, result):
