@@ -10,7 +10,7 @@ def year(text: str) -> int:
 
 
 def row_year(row: Any) -> int:
-    return int(row["text"][:4]) + row.offset
+    return int(row["text"]) + row.offset
 
 
 def row_inverse(row: Any) -> float:

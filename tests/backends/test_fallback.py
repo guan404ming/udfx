@@ -148,7 +148,7 @@ def test_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
 @pytest.mark.parametrize("backend", backend_params())
 def test_row_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
     schema = {"offset": INT, "text": STR, "unused": INT}
-    rows = [(1, "2024-01", 99), (2, "\uff11\uff12\uff13\uff14", 98)]
+    rows = [(1, "2024", 99), (2, "\uff11\uff12\uff13\uff14", 98)]
     translation = compile(row_year, schema, backend)
     assert translation.program is not None, translation.unsupported
     exact = backend.lower(translation.program.value).exact
