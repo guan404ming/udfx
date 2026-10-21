@@ -11,7 +11,7 @@ from udfx.frontend import trace
 from udfx.ir import Col, Lit
 from udfx.ops import apply
 from udfx.testing import check_function
-from udfx.types import FLOAT, STR, Type
+from udfx.types import FLOAT, INT, STR, Type
 
 from .test_helpers import clean_text, keyword
 
@@ -102,5 +102,6 @@ def test_replace_count_respects_the_python_signature() -> None:
 
 
 def test_keyword_binding_fills_a_skipped_default() -> None:
-    with pytest.raises(Unsupported, match=r"no op .split\(str, none, int\)"):
-        trace(lambda text: text.split(maxsplit=1), {"text": STR})
+    assert trace(lambda text: text.split(maxsplit=1), {"text": STR}).value == apply(
+        ".split", Col("text", STR), Lit(None, STR.or_none()), Lit(1, INT)
+    )

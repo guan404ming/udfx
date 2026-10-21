@@ -30,7 +30,6 @@ from udfx.semantics.text import (
     count_occurrences,
     non_whitespace_pattern,
     reverse_find,
-    slice_bounds,
     slice_sequence,
     split_limited,
     split_right,
@@ -210,19 +209,11 @@ def list_getitem(container: Expression, index: Expression) -> Expression:
 
 SLICE = SlicePrimitives(
     maximum=2**32 - 1,
-    literal=constant,
+    literal=lambda value: constant(value).cast("BIGINT"),
     when=when,
     coalesce=duckdb.CoalesceOperator,
     clip=lambda value, lower, upper: function("least", function("greatest", value, lower), upper),
 )
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(
-    text: Expression, start: Expression | int | None, stop: Expression | int | None
-) -> Expression:
-    bounds = slice_bounds(SLICE, length(text), start, stop)
-    return function("substring", text, bounds.start + constant(1), bounds.length)
 
 
 SEQUENCE = SequencePrimitives(
@@ -231,27 +222,64 @@ SEQUENCE = SequencePrimitives(
     slice=lambda value, start, size: function(
         "list_slice", value, start + constant(1), start + size
     ),
+    head=lambda value, size: function(
+        "list_slice", value, constant(1), constant(size - 1 if size < 0 else size)
+    ),
+    tail=lambda value, size: function(
+        "list_slice", value, constant(-size if size > 0 else 1 - size), constant(SLICE.maximum)
+    ),
     reverse=lambda value: function("list_reverse", value),
-    stride=lambda value, step: function("list_slice", value, constant(1), length(value), step),
+    stride=lambda value, step: function(
+        "list_slice", value, constant(1), constant(SLICE.maximum), constant(step)
+    ),
+    bind=lambda value, transform: function(
+        "list_extract",
+        function(
+            "list_transform",
+            function("list_value", value),
+            duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
+        ),
+        constant(1),
+    ),
 )
 
 
+TEXT = SequencePrimitives(
+    bounds=SLICE,
+    length=length,
+    slice=lambda value, start, size: function("substring", value, start + constant(1), size),
+    head=lambda value, size: function("left", value, constant(size)),
+    tail=lambda value, size: function("right", value, constant(size)),
+    reverse=lambda value: join(
+        constant(""), SEQUENCE.reverse(function("string_split", value, constant("")))
+    ),
+    stride=lambda value, step: join(
+        constant(""), SEQUENCE.stride(function("string_split", value, constant("")), step)
+    ),
+    bind=SEQUENCE.bind,
+)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice(
+    text: Expression,
+    start: Expression | int | None,
+    stop: Expression | int | None,
+    step: int | None = None,
+) -> Expression:
+    return slice_sequence(TEXT, text, start, stop, step)
+
+
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)
 def list_slice(
-    container: Expression, start: Expression, stop: Expression, step: Expression | None = None
+    container: Expression,
+    start: Expression | int | None,
+    stop: Expression | int | None,
+    step: int | None = None,
 ) -> Expression:
     return slice_sequence(SEQUENCE, container, start, stop, step)
-
-
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
-def str_slice_step(
-    text: Expression, start: Expression, stop: Expression, step: Expression
-) -> Expression:
-    characters = function("string_split", text, constant(""))
-    return join(constant(""), list_slice(characters, start, stop, step))
 
 
 SPLIT = SplitPrimitives(

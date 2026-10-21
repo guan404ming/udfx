@@ -170,7 +170,7 @@ class Backend[E](ABC):
         arguments = [self.lower(argument) for argument in node.arguments]
         operands = [argument.expr for argument in arguments]
         if node.op.name == "slice":
-            for index in (1, 2):
+            for index in range(1, len(node.arguments)):
                 bound = node.arguments[index]
                 if isinstance(bound, Lit):
                     operands[index] = cast("Any", bound.value)

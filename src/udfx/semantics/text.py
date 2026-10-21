@@ -139,7 +139,7 @@ class SliceBounds(NamedTuple):
 
 
 def slice_bounds(
-    primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any, reverse: Any = None
+    primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any
 ) -> SliceBounds:
     zero = primitives.literal(0)
     maximum = primitives.literal(primitives.maximum)
@@ -155,9 +155,6 @@ def slice_bounds(
                 primitives.literal(min(max(end - begin, 0), primitives.maximum)),
             )
 
-    lower = zero if reverse is None else primitives.when(reverse, primitives.literal(-1), zero)
-    upper = text_length + lower
-
     def clamp(bound: Any, default: Any) -> Any:
         if bound is None:
             return default
@@ -168,15 +165,10 @@ def slice_bounds(
                 text_length + primitives.literal(max(bound, -INT64_MAX)), zero, text_length
             )
         shifted = bound + primitives.when(bound < zero, text_length, zero)
-        bounded = primitives.clip(primitives.coalesce(shifted, default), lower, upper)
-        return (
-            bounded
-            if reverse is None
-            else primitives.when(reverse, text_length - primitives.literal(1) - bounded, bounded)
-        )
+        return primitives.clip(primitives.coalesce(shifted, default), zero, text_length)
 
-    begin = clamp(start, zero if reverse is None else primitives.when(reverse, upper, zero))
-    end = clamp(stop, maximum if reverse is None else primitives.when(reverse, lower, maximum))
+    begin = clamp(start, zero)
+    end = clamp(stop, maximum)
     return SliceBounds(begin, primitives.clip(end - begin, zero, maximum))
 
 
@@ -185,31 +177,58 @@ class SequencePrimitives:
     bounds: SlicePrimitives
     length: Callable[[Any], Any]
     slice: Callable[[Any, Any, Any], Any]
+    head: Callable[[Any, int], Any]
+    tail: Callable[[Any, int], Any]
     reverse: Callable[[Any], Any]
-    stride: Callable[[Any, Any], Any]
+    stride: Callable[[Any, int], Any]
+    bind: Callable[[Any, Callable[[Any], Any]], Any]
+
+
+def slice_forward(primitives: SequencePrimitives, container: Any, start: Any, stop: Any) -> Any:
+    bounds = primitives.bounds
+
+    def bounded(value: Any) -> Any:
+        begin, length = slice_bounds(bounds, primitives.length(value), start, stop)
+        return primitives.slice(value, begin, length)
+
+    if (start is None or isinstance(start, int)) and (stop is None or isinstance(stop, int)):
+        start = max(min(start or 0, bounds.maximum), -bounds.maximum)
+        if start == bounds.maximum or (stop is not None and stop <= -bounds.maximum):
+            return primitives.head(container, 0)
+        if stop is None:
+            return primitives.tail(container, -start) if start else container
+        stop = max(min(stop, bounds.maximum), -bounds.maximum)
+        if start == 0 or stop == 0:
+            return primitives.head(container, stop)
+        if stop < 0:
+            if start > 0:
+                return primitives.tail(primitives.head(container, stop), -start)
+            return primitives.head(primitives.tail(container, -start), stop)
+        if start < 0:
+            return primitives.bind(container, bounded)
+    return bounded(container)
 
 
 def slice_sequence(
-    primitives: SequencePrimitives, container: Any, start: Any, stop: Any, step: Any = None
+    primitives: SequencePrimitives, container: Any, start: Any, stop: Any, step: int | None = None
 ) -> Any:
-    size = primitives.length(container)
-    bounds = primitives.bounds
-    if step is None:
-        begin, length = slice_bounds(bounds, size, start, stop)
-        return primitives.slice(container, begin, length)
-    zero, one = bounds.literal(0), bounds.literal(1)
-    step = bounds.coalesce(step, one)
-    reverse = step < zero
-    begin, length = slice_bounds(bounds, size, start, stop, reverse)
-    ordered = bounds.when(reverse, primitives.reverse(container), container)
-    sliced = primitives.slice(ordered, begin, length)
-    maximum = bounds.clip(size, one, bounds.literal(INT64_MAX))
-    stride = bounds.when(
-        reverse,
-        zero - bounds.clip(step, zero - maximum, bounds.literal(-1)),
-        bounds.clip(step, one, maximum),
-    )
-    return primitives.stride(sliced, stride)
+    step = step or 1
+    if step < 0:
+        container = primitives.reverse(container)
+        start = reverse_bound(primitives.bounds, start)
+        stop = reverse_bound(primitives.bounds, stop)
+    sliced = slice_forward(primitives, container, start, stop)
+    if abs(step) == 1:
+        return sliced
+    return primitives.stride(sliced, min(abs(step), primitives.bounds.maximum))
+
+
+def reverse_bound(primitives: SlicePrimitives, bound: Any) -> Any:
+    if bound is None:
+        return None
+    if isinstance(bound, int):
+        return -1 - bound
+    return primitives.literal(-1) - bound
 
 
 @dataclass(frozen=True)
@@ -286,7 +305,9 @@ def maximum_length(node: Node) -> int | None:
         return maximum_length(node.arguments[0])
     if node.op.name != "slice":
         return None
-    text, start, stop = node.arguments
+    text, start, stop, *steps = node.arguments
+    if steps and (not isinstance(steps[0], Lit) or steps[0].value not in (None, 1)):
+        return maximum_length(text)
     bounds = [maximum_length(text)]
     if isinstance(start, Lit) and isinstance(start.value, int) and start.value < 0:
         bounds.append(-start.value)

@@ -30,12 +30,21 @@ def test_expression_size(
 
 
 @pytest.mark.parametrize("backend", backend_params())
-@pytest.mark.parametrize(("start", "stop"), [(None, 4), (1, None), (1, 4)])
-def test_nested_literal_slices(backend: Backend[Any], start: int | None, stop: int | None) -> None:
+@pytest.mark.parametrize(
+    ("start", "stop"),
+    [(None, 4), (1, None), (1, 4), (None, -1), (-4, None), (1, -1), (-4, -1), (-4, 4)],
+)
+@pytest.mark.parametrize("step", [None, 1, -1, 2, -2])
+def test_nested_literal_slices(
+    backend: Backend[Any], start: int | None, stop: int | None, step: int | None
+) -> None:
     node = Col("text", STR)
     sizes = []
     for _ in range(8):
-        node = apply("slice", node, lit(start, INT.or_none()), lit(stop, INT.or_none()))
+        arguments = [node, lit(start, INT.or_none()), lit(stop, INT.or_none())]
+        if step is not None:
+            arguments.append(lit(step))
+        node = apply("slice", *arguments)
         expr = str(backend.lower(node).expr)
         assert expr.count("text") == 1
         sizes.append(len(expr))
@@ -43,8 +52,24 @@ def test_nested_literal_slices(backend: Backend[Any], start: int | None, stop: i
 
 
 @pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("step", [None, 1])
+def test_unit_step_is_plain_slice(backend: Backend[Any], step: int | None) -> None:
+    arguments = (Col("text", STR), lit(None, INT.or_none()), lit(-1))
+    plain = backend.lower(apply("slice", *arguments))
+    stepped = backend.lower(apply("slice", *arguments, lit(step, INT.or_none())))
+    assert str(stepped.expr) == str(plain.expr)
+
+
+@pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("length", [18, 19])
-def test_bounded_integer_guard(backend: Backend[Any], length: int) -> None:
-    text = apply("slice", Col("text", STR), lit(None, INT.or_none()), lit(length))
+@pytest.mark.parametrize("step", [(), (1,), (-1,), (2,)])
+def test_bounded_integer_guard(backend: Backend[Any], length: int, step: tuple[int, ...]) -> None:
+    text = apply(
+        "slice",
+        Col("text", STR),
+        lit(None, INT.or_none()),
+        lit(length),
+        *(lit(value) for value in step),
+    )
     lowered = backend.lower(apply("int", text))
-    assert (lowered.exact is None) == (length <= 18)
+    assert (lowered.exact is None) == (length <= 18 and step in ((), (1,)))

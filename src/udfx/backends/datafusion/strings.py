@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace as replace_record
 from functools import cache, partial
 from typing import cast
 
@@ -24,7 +25,6 @@ from udfx.semantics.text import (
     count_occurrences,
     non_whitespace_pattern,
     reverse_find,
-    slice_bounds,
     slice_sequence,
     split_limited,
     split_right,
@@ -224,32 +224,58 @@ SLICE = SlicePrimitives(
 )
 
 
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(text: Expr, start: Expr | int | None, stop: Expr | int | None) -> Expr:
-    bounds = slice_bounds(SLICE, length(text), start, stop)
-    return functions.substr(text, bounds.start + lit(1), bounds.length)
-
-
 SEQUENCE = SequencePrimitives(
-    bounds=SLICE,
+    bounds=replace_record(SLICE, maximum=2**31 - 1),
     length=list_len,
     slice=lambda value, start, size: functions.array_slice(value, start + lit(1), start + size),
+    head=lambda value, size: functions.array_slice(value, 1, size - 1 if size < 0 else size),
+    tail=lambda value, size: functions.array_slice(
+        value, -size if size > 0 else min(1 - size, 2**31 - 1), 2**31 - 1
+    ),
     reverse=functions.array_reverse,
-    stride=lambda value, step: functions.array_slice(value, lit(1), list_len(value), step),
+    stride=lambda value, step: functions.array_slice(value, 1, 2**31 - 1, step),
+    bind=lambda value, transform: functions.array_element(
+        functions.array_transform(functions.make_array(value), transform).cast(
+            pa.list_(pa.list_(pa.string()))
+        ),
+        1,
+    ),
 )
 
 
-def list_slice(container: Expr, start: Expr, stop: Expr, step: Expr | None = None) -> Expr:
-    return slice_sequence(SEQUENCE, container, start, stop, step)
+TEXT = SequencePrimitives(
+    bounds=SLICE,
+    length=length,
+    slice=lambda value, start, size: functions.substr(value, start + lit(1), size),
+    head=functions.left,
+    tail=functions.right,
+    reverse=functions.reverse,
+    stride=lambda value, step: join(
+        lit(""), SEQUENCE.stride(characters(value), min(step, 2**31 - 1))
+    ),
+    bind=lambda value, transform: functions.array_element(
+        functions.array_transform(functions.make_array(value), transform).cast(
+            pa.list_(pa.string())
+        ),
+        1,
+    ),
+)
 
 
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
-
-
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
-def str_slice_step(text: Expr, start: Expr, stop: Expr, step: Expr) -> Expr:
-    return join(lit(""), list_slice(characters(text), start, stop, step))
+def str_slice(
+    text: Expr, start: Expr | int | None, stop: Expr | int | None, step: int | None = None
+) -> Expr:
+    return slice_sequence(TEXT, text, start, stop, step)
+
+
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)
+def list_slice(
+    container: Expr, start: Expr | int | None, stop: Expr | int | None, step: int | None = None
+) -> Expr:
+    return slice_sequence(SEQUENCE, container, start, stop, step)
 
 
 SPLIT = SplitPrimitives(

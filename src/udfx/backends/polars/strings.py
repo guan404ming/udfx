@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace as replace_record
 from functools import cache, partial
 
 import polars as pl
@@ -20,7 +21,6 @@ from udfx.semantics.text import (
     has_prefix_suffix_overlap,
     non_whitespace_pattern,
     reverse_find,
-    slice_bounds,
     slice_sequence,
     split_limited,
     split_right,
@@ -212,34 +212,57 @@ SLICE = SlicePrimitives(
 )
 
 
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(text: pl.Expr, start: pl.Expr | int | None, stop: pl.Expr | int | None) -> pl.Expr:
-    bounds = slice_bounds(SLICE, length(text), start, stop)
-    return text.str.slice(bounds.start, bounds.length)
-
-
 SEQUENCE = SequencePrimitives(
-    bounds=SLICE,
+    bounds=replace_record(SLICE, maximum=2**32 - 1),
     length=list_len,
     slice=lambda value, start, length: value.list.slice(start.fill_null(0), length.fill_null(0)),
+    head=lambda value, size: (
+        value.list.head(size)
+        if size >= 0
+        else value.list.reverse().list.slice(-size).list.reverse()
+    ),
+    tail=lambda value, size: value.list.slice(-size),
     reverse=lambda value: value.list.reverse(),
     stride=lambda value, step: value.list.gather_every(step),
+    bind=lambda value, transform: (
+        pl.concat_list(pl.struct(value.alias("udfx value")))
+        .list.eval(transform(pl.element().struct.field("udfx value")))
+        .list.first()
+    ),
 )
 
 
+TEXT = SequencePrimitives(
+    bounds=SLICE,
+    length=length,
+    slice=lambda value, start, size: value.str.slice(start, size),
+    head=lambda value, size: value.str.head(size),
+    tail=lambda value, size: value.str.tail(size),
+    reverse=lambda value: value.str.split("").list.reverse().list.join(""),
+    stride=lambda value, step: SEQUENCE.stride(value.str.split(""), min(step, 2**32 - 1)).list.join(
+        ""
+    ),
+    bind=SEQUENCE.bind,
+)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice(
+    text: pl.Expr, start: pl.Expr | int | None, stop: pl.Expr | int | None, step: int | None = None
+) -> pl.Expr:
+    return slice_sequence(TEXT, text, start, stop, step)
+
+
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)
 def list_slice(
-    container: pl.Expr, start: pl.Expr, stop: pl.Expr, step: pl.Expr | None = None
+    container: pl.Expr,
+    start: pl.Expr | int | None,
+    stop: pl.Expr | int | None,
+    step: int | None = None,
 ) -> pl.Expr:
     return slice_sequence(SEQUENCE, container, start, stop, step)
-
-
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
-def str_slice_step(text: pl.Expr, start: pl.Expr, stop: pl.Expr, step: pl.Expr) -> pl.Expr:
-    return list_slice(text.str.split(""), start, stop, step).list.join("")
 
 
 SPLIT = SplitPrimitives(

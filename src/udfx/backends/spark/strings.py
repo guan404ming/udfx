@@ -23,7 +23,6 @@ from udfx.semantics.text import (
     count_occurrences,
     non_whitespace_pattern,
     reverse_find,
-    slice_bounds,
     slice_sequence,
     split_limited,
     split_right,
@@ -229,36 +228,69 @@ SLICE = SlicePrimitives(
 )
 
 
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-def str_slice(text: Column, start: Column | int | None, stop: Column | int | None) -> Column:
-    bounds = slice_bounds(SLICE, length(text), start, stop)
-    return functions.substring(text, (bounds.start + 1).cast("int"), bounds.length.cast("int"))
-
-
 SEQUENCE = SequencePrimitives(
     bounds=SLICE,
     length=list_len,
     slice=lambda value, start, size: functions.slice(
         value, (start + 1).cast("int"), size.cast("int")
     ),
+    head=lambda value, size: (
+        functions.slice(value, 1, size)
+        if size >= 0
+        else functions.reverse(
+            functions.slice(functions.reverse(value), 1 - size, INT32_MAX + size)
+        )
+    ),
+    tail=lambda value, size: (
+        functions.reverse(functions.slice(functions.reverse(value), 1, size))
+        if size > 0
+        else functions.slice(value, 1 - size, INT32_MAX + size)
+    ),
     reverse=functions.reverse,
     stride=lambda value, step: functions.filter(value, lambda item, index: index % step == 0),
+    bind=lambda value, transform: functions.transform(functions.array(value), transform)[0],
 )
 
 
+TEXT = SequencePrimitives(
+    bounds=SLICE,
+    length=length,
+    slice=lambda value, start, size: functions.substring(
+        value, (start + 1).cast("int"), size.cast("int")
+    ),
+    head=lambda value, size: (
+        functions.substring(value, 1, size)
+        if size >= 0
+        else functions.reverse(
+            functions.substring(functions.reverse(value), min(1 - size, INT32_MAX), INT32_MAX)
+        )
+    ),
+    tail=lambda value, size: functions.substring(
+        value, -size if size > 0 else min(1 - size, INT32_MAX), INT32_MAX
+    ),
+    reverse=functions.reverse,
+    stride=lambda value, step: join(functions.lit(""), SEQUENCE.stride(characters(value), step)),
+    bind=SEQUENCE.bind,
+)
+
+
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+def str_slice(
+    text: Column, start: Column | int | None, stop: Column | int | None, step: int | None = None
+) -> Column:
+    return slice_sequence(TEXT, text, start, stop, step)
+
+
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)
 def list_slice(
-    container: Column, start: Column, stop: Column, step: Column | None = None
+    container: Column,
+    start: Column | int | None,
+    stop: Column | int | None,
+    step: int | None = None,
 ) -> Column:
     return slice_sequence(SEQUENCE, container, start, stop, step)
-
-
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT)(list_slice)
-RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)(list_slice)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
-def str_slice_step(text: Column, start: Column, stop: Column, step: Column) -> Column:
-    return join(functions.lit(""), list_slice(characters(text), start, stop, step))
 
 
 SPLIT = SplitPrimitives(
