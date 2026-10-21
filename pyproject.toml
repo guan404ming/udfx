@@ -83,9 +83,11 @@ reportUnknownLambdaType = "none"
 reportMissingTypeArgument = "none"
 reportUnknownParameterType = "none"
 include = ["src", "tests"]
+extraPaths = ["tests"]
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-n auto --dist loadgroup -m \"not corpus\" --durations=5"
 markers = ["corpus: acceptance corpus, run with -m corpus"]
