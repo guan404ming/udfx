@@ -175,7 +175,7 @@ def test_helper_is_inlined() -> None:
 def test_global_helpers_are_inlined(function: Callable[[str], str]) -> None:
     assert check_function(function, {"text": STR}, POLARS, [(" A ",), ("İ",)]) == []
     assert trace(function, {"text": STR}).value == apply(
-        "__add__", apply(".lower", apply(".strip", Col("text", STR))), Lit("!", STR)
+        "__add__", apply(".strip", apply(".lower", Col("text", STR))), Lit("!", STR)
     )
 
 

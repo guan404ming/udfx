@@ -11,6 +11,7 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, Comprehension, Element, If, ListValue, Lit, Node
 from udfx.ops import OpKey
 from udfx.program import Program
+from udfx.semantics.numbers import bounded_integer_division
 from udfx.semantics.text import maximum_length
 from udfx.types import Kind, Type, fits
 
@@ -68,7 +69,7 @@ class Backend[E](ABC):
         if not pending:
             return []
         columns = gather(pending)
-        rows = [tuple(column[position] for column in columns) for position in range(len(pending))]
+        rows = zip(*columns, strict=True) if columns else [()] * len(pending)
         return self.run_fallback_rows(program, rows)
 
     def fallback_values(
@@ -209,18 +210,20 @@ class Backend[E](ABC):
             for index, argument in enumerate(node.arguments)
         ]
         operands = [argument.expr for argument in arguments]
+        result: RuleResult[E]
         if node.op.name == "slice":
             for index in range(1, len(node.arguments)):
                 bound = node.arguments[index]
                 if isinstance(bound, Lit):
                     operands[index] = cast("Any", bound.value)
-        if node.op.name in {"int", "int_parses"} and node.arguments[0].type.kind is Kind.STR:
-            result: RuleResult[E] = rule(
-                *operands, maximum_length=maximum_length(node.arguments[0])
-            )
+            result = rule(*operands, result=node.type)
+        elif node.op.name in {"int", "int_parses"} and node.arguments[0].type.kind is Kind.STR:
+            result = rule(*operands, maximum_length=maximum_length(node.arguments[0]))
         else:
             result = rule(*operands)
         lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
+        if bounded_integer_division(node):
+            lowered = Lowered(lowered.expr)
         return Lowered(
             lowered.expr, self._all(*(argument.exact for argument in arguments), lowered.exact)
         )

@@ -181,7 +181,7 @@ def build_slice(context: Context, state: State, instruction: dis.Instruction) ->
 def binary_slice(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, start, stop), rest = state.pop(3)
     node, faults = invoke("slice", [node_of(container), node_of(start), node_of(stop)], TypeError)
-    return emit(context, rest, Value(node), faults)
+    return emit(context, rest, Value(fold(node)), faults)
 
 
 def is_none_constant(item: Item) -> bool:

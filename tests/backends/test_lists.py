@@ -33,6 +33,16 @@ def test_comprehension_native_rows(backend: Backend[Any]) -> None:
 
 
 @pytest.mark.parametrize("backend", backend_params())
+def test_comprehension_membership_fallback(backend: Backend[Any]) -> None:
+    def filtered(words: list[str | None]) -> list[str | None]:
+        return [word for word in words if word not in ("a", None)]
+
+    schema = {"words": list_of(STR.or_none()).or_none()}
+    rows = [(["a", "b", None],), ([],), (None,)]
+    assert check_function(filtered, schema, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("function", [any, all], ids=["any", "all"])
 def test_nullable_list_reductions(backend: Backend[Any], function: Any) -> None:
     def reduced(words: list[str] | None) -> bool:

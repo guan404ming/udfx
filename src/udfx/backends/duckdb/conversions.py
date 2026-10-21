@@ -12,6 +12,7 @@ from udfx.backends.duckdb.rules import (
     length,
     when,
 )
+from udfx.backends.duckdb.strings import trim
 from udfx.backends.registration import Lowered, register_text_conversions
 from udfx.semantics.literals import (
     FLOAT_LITERAL,
@@ -28,6 +29,10 @@ def matches(text: Expression, pattern: str) -> Expression:
 
 
 def try_int(digits: Expression) -> Expression:
+    try:
+        return duckdb.SQLExpression(f"TRY_CAST({digits} AS BIGINT)")
+    except duckdb.ParserException:
+        pass
     convert = duckdb.LambdaExpression(
         "udfx digits", duckdb.SQLExpression('TRY_CAST("udfx digits" AS BIGINT)')
     )
@@ -43,10 +48,10 @@ def try_float(digits: Expression) -> Expression:
 
 
 TEXT = TextPrimitives(
-    when=when,
+    coalesce=duckdb.CoalesceOperator,
     translate=lambda text, old, new: function("translate", text, constant(old), constant(new)),
     matches=matches,
-    strip=lambda text, chars: function("trim", text, constant(chars)),
+    strip=lambda text, chars: trim(text, chars, "strip"),
     replace=lambda text, old, new: function("replace", text, constant(old), constant(new)),
     char_length=length,
     not_null=Expression.isnotnull,

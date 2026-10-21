@@ -10,7 +10,7 @@ from typing import Any
 from udfx.semantics.text import char_class, code_points, whitespace
 
 ASCII_SPACE = "\t\n\x0b\x0c\r "
-DIGITS = "[0-9](_?[0-9])*"
+DIGITS = "[0-9]([0-9_]*[0-9])?"
 INT_LITERAL = f"^[{ASCII_SPACE}]*[+-]?{DIGITS}[{ASCII_SPACE}]*$"
 FLOAT_LITERAL = (
     f"(?i)^[{ASCII_SPACE}]*[+-]?"
@@ -21,7 +21,7 @@ FLOAT_LITERAL = (
 
 @dataclass(frozen=True)
 class TextPrimitives:
-    when: Callable[[Any, Any, Any], Any]
+    coalesce: Callable[[Any, Any], Any]
     matches: Callable[[Any, str], Any]
     strip: Callable[[Any, str], Any]
     replace: Callable[[Any, str, str], Any]
@@ -63,16 +63,22 @@ def integer_pattern() -> str:
         point for point, digit in zip(original, replacement, strict=True) if digit == " "
     )
     padding = char_class(spaces)
-    return f"^{padding}*[+-]?{digits}(_?{digits})*{padding}*$"
+    middle = digits[:-1] + "_]"
+    return f"^{padding}*[+-]?{digits}({middle}*{digits})?{padding}*$"
+
+
+def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
+    return primitives.matches(text, pattern) & ~primitives.matches(text, "__")
+
+
+def integer_matches(primitives: TextPrimitives, text: Any) -> Any:
+    valid = primitives.matches(text, INT_LITERAL) | primitives.matches(text, integer_pattern())
+    return valid & ~primitives.matches(text, "__")
 
 
 def normalize_integer(primitives: TextPrimitives, text: Any) -> Any:
     original, replacement = integer_characters()
-    return primitives.when(
-        is_ascii(primitives, text),
-        primitives.replace(text, "_", ""),
-        primitives.translate(text, original + "_", replacement),
-    )
+    return primitives.translate(text, original + "_", replacement)
 
 
 def is_ascii(primitives: TextPrimitives, text: Any) -> Any:
@@ -82,42 +88,35 @@ def is_ascii(primitives: TextPrimitives, text: Any) -> Any:
 def int_parses(
     primitives: TextPrimitives, text: Any, maximum_length: int | None = None
 ) -> tuple[Any, Any]:
-    if maximum_length is not None and maximum_length <= 18:
-        return primitives.matches(text, integer_pattern()), None
-    limit = sys.get_int_max_str_digits() or sys.maxsize
-    exact = is_ascii(primitives, text)
-    if maximum_length is None or maximum_length > limit:
-        exact = exact & (primitives.char_length(text) <= limit)
-    return primitives.matches(text, INT_LITERAL), exact
+    valid = integer_matches(primitives, text)
+    limit = sys.get_int_max_str_digits()
+    if limit and (maximum_length is None or maximum_length > limit):
+        digits = primitives.replace(primitives.strip(text, whitespace() + "+-"), "_", "")
+        valid = valid & (
+            (primitives.char_length(text) <= limit) | (primitives.char_length(digits) <= limit)
+        )
+    return valid, None
 
 
 def float_parses(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
-    return primitives.matches(text, FLOAT_LITERAL), is_ascii(primitives, text)
+    return literal_matches(primitives, text, FLOAT_LITERAL), is_ascii(primitives, text)
 
 
 def parse_int(
     primitives: TextPrimitives, text: Any, maximum_length: int | None = None
 ) -> tuple[Any, Any]:
-    return _parse(primitives, text, INT_LITERAL, primitives.try_int, maximum_length)
+    cleaned = primitives.strip(normalize_integer(primitives, text), ASCII_SPACE)
+    value = primitives.coalesce(primitives.try_int(text), primitives.try_int(cleaned))
+    if maximum_length is not None and maximum_length <= 18:
+        return value, None
+    present = value == value  # noqa: PLR0124
+    return value, primitives.coalesce(present, ~integer_matches(primitives, text))
 
 
 def parse_float(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
-    return _parse(primitives, text, FLOAT_LITERAL, primitives.try_float)
-
-
-def _parse(
-    primitives: TextPrimitives,
-    text: Any,
-    pattern: str,
-    cast: Callable[[Any], Any],
-    maximum_length: int | None = None,
-) -> tuple[Any, Any]:
-    if maximum_length is not None and maximum_length <= 18:
-        cleaned = primitives.strip(normalize_integer(primitives, text), ASCII_SPACE)
-        return cast(cleaned), None
     cleaned = primitives.replace(primitives.strip(text, ASCII_SPACE), "_", "")
-    value = cast(cleaned)
-    literal = primitives.matches(text, pattern)
+    value = primitives.try_float(cleaned)
+    literal = literal_matches(primitives, text, FLOAT_LITERAL)
     return value, is_ascii(primitives, text) & (primitives.not_null(value) | ~literal)
 
 

@@ -25,6 +25,7 @@ from udfx.program import Program
 from udfx.types import Type
 
 EXACT = f"{RESERVED}exact"
+NATIVE = f"{RESERVED}native"
 ROW = f"{RESERVED}row"
 FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
@@ -101,15 +102,16 @@ class DuckDBBackend(Backend[Expression]):
         name = fallback_name(program, connection)
         fields = {
             EXACT: sqltypes.BOOLEAN,
+            NATIVE: dtype(program.result),
             **{field: dtype(type) for field, type in program.schema.items()},
         }
-
-        result = arrow.dtype(program.result)
 
         def patch(packed: pa.ChunkedArray) -> pa.Array:
             batch = cast(pa.StructArray, packed.combine_chunks())
             columns = [batch.field(field) for field in program.schema]
-            return arrow.fallback(DuckDBBackend(), program, batch.field(EXACT), columns, result)
+            return arrow.fallback(
+                DuckDBBackend(), program, batch.field(EXACT), batch.field(NATIVE), columns
+            )
 
         with suppress(duckdb.NotImplementedException):
             connection.create_function(
@@ -123,6 +125,7 @@ class DuckDBBackend(Backend[Expression]):
         packed = function(
             "struct_pack",
             exact.alias(EXACT),
+            constant(None).cast(dtype(program.result)).alias(NATIVE),
             *(column(field).alias(field) for field in program.schema),
         )
         return when(exact, native, function(name, packed))

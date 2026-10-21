@@ -38,7 +38,7 @@ from udfx.semantics.text import (
     whitespace,
     word_prefix_pattern,
 )
-from udfx.types import STR, Kind
+from udfx.types import STR, Kind, Type, list_of
 
 INT32_MAX = 2**31 - 1
 POINT = "point"
@@ -138,6 +138,11 @@ def split(text: Column, separator: Column) -> Column:
 RULES(".split", Kind.STR, Kind.STR)(split)
 
 
+@RULES("last_split", Kind.STR, Kind.STR)
+def last_split(text: Column, separator: Column) -> Column:
+    return functions.split_part(text, separator, functions.lit(-1))
+
+
 def find(text: Column, pattern: Column) -> Column:
     return (functions.instr(text, pattern) - 1).cast("bigint")
 
@@ -212,7 +217,7 @@ def str_contains(text: Column, item: Column) -> Column:
 
 
 def list_contains(container: Column, item: Column) -> Column:
-    return functions.exists(container, lambda element: element.eqNullSafe(item))
+    return functions.size(functions.array_intersect(container, functions.array(item))) > 0
 
 
 RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
@@ -267,7 +272,7 @@ SEQUENCE = SequencePrimitives(
     ),
     reverse=functions.reverse,
     stride=lambda value, step: functions.filter(value, lambda item, index: index % step == 0),
-    bind=lambda value, transform: functions.transform(functions.array(value), transform)[0],
+    bind=lambda value, transform, result: functions.transform(functions.array(value), transform)[0],
 )
 
 
@@ -296,9 +301,14 @@ TEXT = SequencePrimitives(
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
 def str_slice(
-    text: Column, start: Column | int | None, stop: Column | int | None, step: int | None = None
+    text: Column,
+    start: Column | int | None,
+    stop: Column | int | None,
+    step: int | None = None,
+    *,
+    result: Type,
 ) -> Column:
-    return slice_sequence(TEXT, text, start, stop, step)
+    return slice_sequence(TEXT, text, start, stop, step, result=result)
 
 
 @RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
@@ -308,12 +318,19 @@ def list_slice(
     start: Column | int | None,
     stop: Column | int | None,
     step: int | None = None,
+    *,
+    result: Type,
 ) -> Column:
-    return slice_sequence(SEQUENCE, container, start, stop, step)
+    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
 
 
 SPLIT = SplitPrimitives(
     sequence=SEQUENCE,
+    bind=lambda values, transform: SEQUENCE.bind(
+        functions.struct(*(value.alias(str(index)) for index, value in enumerate(values))),
+        lambda value: transform(*(value.getField(str(index)) for index in range(len(values)))),
+        list_of(STR),
+    ),
     split=split,
     join=join,
     append=functions.array_append,

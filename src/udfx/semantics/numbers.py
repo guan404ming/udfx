@@ -5,7 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
-from udfx.types import INT64_MIN
+from udfx.ir import Call, Lit
+from udfx.types import INT64_MIN, Kind
 
 FLOAT_INT_MAX = 2**53
 EXACT_POWERS_OF_TEN = 22
@@ -15,6 +16,18 @@ REPR_FIXED_MIN = 1e-4
 REPR_FIXED_MAX = 1e16
 
 Binary = Callable[[Any, Any], Any]
+
+
+def bounded_integer_division(node: Call) -> bool:
+    if node.op.name not in {"__floordiv__", "__mod__"}:
+        return False
+    if any(argument.type.kind is not Kind.INT for argument in node.arguments):
+        return False
+    divisor = node.arguments[1]
+    return (
+        isinstance(divisor, Lit) and isinstance(divisor.value, int) and divisor.value not in (0, -1)
+    )
+
 
 ARITHMETIC: dict[str, Binary] = {
     "__add__": operator.add,

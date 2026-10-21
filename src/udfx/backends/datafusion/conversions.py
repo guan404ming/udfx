@@ -19,7 +19,7 @@ from udfx.semantics.numbers import (
 from udfx.types import Kind
 
 TEXT = TextPrimitives(
-    when=when,
+    coalesce=functions.coalesce,
     translate=lambda text, old, new: functions.translate(text, lit(old), lit(new)),
     matches=lambda text, pattern: functions.regexp_like(text, lit(pattern)),
     strip=lambda text, chars: functions.btrim(text, lit(chars)),

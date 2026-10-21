@@ -17,6 +17,8 @@ from udfx.program import Program
 from udfx.types import BOOL, Type
 
 ROW = f"{RESERVED}row"
+EXACT = f"{RESERVED}exact"
+NATIVE = f"{RESERVED}native"
 FALLBACKS = count()
 
 
@@ -49,20 +51,27 @@ class DataFusionBackend(Backend[Expr]):
 
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)
+        fields = pa.struct(
+            [(EXACT, dtype(BOOL)), (NATIVE, result)]
+            + [(name, dtype(type)) for name, type in program.schema.items()]
+        )
 
-        def run(flags: pa.Array, *columns: pa.Array) -> pa.Array:
-            return arrow.fallback(self, program, flags, columns, result)
+        def run(packed: pa.Array) -> pa.Array:
+            batch = cast(pa.StructArray, packed)
+            columns = [batch.field(name) for name in program.schema]
+            return arrow.fallback(self, program, batch.field(EXACT), batch.field(NATIVE), columns)
 
         slow = udf(
             run,
-            [dtype(BOOL), *(dtype(type) for type in program.schema.values())],
+            [fields],
             result,
             "volatile",
             f"udfx fallback {next(FALLBACKS)}",
         )
-        return functions.when(exact, native).otherwise(
-            slow(exact, *(column(name) for name in program.schema))
+        packed = functions.named_struct(
+            [(EXACT, exact), (NATIVE, native), *((name, column(name)) for name in program.schema)]
         )
+        return slow(packed.cast(fields))
 
     def evaluate(
         self, exprs: Sequence[Expr], schema: Mapping[str, Type], rows: Sequence[Row]

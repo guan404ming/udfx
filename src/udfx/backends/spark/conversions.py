@@ -18,7 +18,7 @@ JAVA_FIXED_MAX = 1e7
 
 
 TEXT = TextPrimitives(
-    when=when,
+    coalesce=functions.coalesce,
     translate=functions.translate,
     matches=lambda text, pattern: text.rlike(pattern),
     strip=lambda text, chars: functions.btrim(text, functions.lit(chars)),

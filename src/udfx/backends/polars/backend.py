@@ -49,23 +49,34 @@ class PolarsBackend(Backend[pl.Expr]):
 
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         result = dtype(program.result)
+        flag_name, value_name = output_names(2)
+        expressions = [exact.alias(flag_name), native.alias(value_name)]
 
         def patch(series: Sequence[pl.Series]) -> pl.Series:
-            length = len(series[2] if len(series) > 2 else series[0])
-            flags, values, *columns = (
-                item if len(item) == length else item.new_from_index(0, length) for item in series
+            length = len(series[0])
+            outputs = (
+                pl.DataFrame(series)
+                .lazy()
+                .select(expressions)
+                .collect(engine="in-memory")
+                .get_columns()
+            )
+            flags, values = (
+                item if len(item) == length else item.new_from_index(0, length) for item in outputs
             )
             pending = (~flags.fill_null(False)).arg_true().to_list()
 
             def gather(rows: list[int]) -> list[list[object]]:
-                return [column.gather(rows).to_list() for column in columns]
+                return (
+                    [column.gather(rows).to_list() for column in series] if program.schema else []
+                )
 
             if not pending:
                 return values
             patched = self.fallback_values(program, length, pending, gather)
             return values.zip_with(flags.fill_null(False), pl.Series(patched, dtype=result))
 
-        inputs = [exact, native, *(pl.col(name) for name in program.schema)]
+        inputs = [pl.col(name) for name in program.schema] or [pl.int_range(pl.len()).alias(ROW)]
         return pl.map_batches(inputs, patch, return_dtype=result, is_elementwise=True)
 
     def evaluate(

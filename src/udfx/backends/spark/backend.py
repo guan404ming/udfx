@@ -18,15 +18,16 @@ from udfx.program import Program
 from udfx.types import Kind, Type
 
 EXACT = f"{RESERVED}exact"
+NATIVE = f"{RESERVED}native"
 
 
 def fallback_patch(program: Program) -> Callable[[pa.Array], pa.Array]:
-    result = arrow.dtype(program.result)
-
     def patch(batch: pa.Array) -> pa.Array:
         packed = cast(pa.StructArray, batch)
         columns = [packed.field(name) for name in program.schema]
-        return arrow.fallback(SparkBackend(), program, packed.field(EXACT), columns, result)
+        return arrow.fallback(
+            SparkBackend(), program, packed.field(EXACT), packed.field(NATIVE), columns
+        )
 
     return patch
 
@@ -83,10 +84,13 @@ class SparkBackend(Backend[Column]):
         flag = functions.coalesce(exact, functions.lit(False))
         packed = functions.struct(
             flag.alias(EXACT),
-            *(self.column(Col(name, type)) for name, type in program.schema.items()),
+            native.alias(NATIVE),
+            *(
+                functions.when(~flag, self.column(Col(name, type))).alias(name)
+                for name, type in program.schema.items()
+            ),
         )
-        slow = functions.arrow_udf(fallback_patch(program), result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
-        return functions.when(flag, native).otherwise(slow)
+        return functions.arrow_udf(fallback_patch(program), result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
 
     def evaluate(
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]

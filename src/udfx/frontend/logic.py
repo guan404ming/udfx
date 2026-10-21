@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, If, Lit, Node
 from udfx.ops import apply
+from udfx.semantics.text import simplify_text
 from udfx.types import Kind, Type, fits, unify
 
 EXCLUSIVE = frozenset({"bool", "is_none"})
@@ -13,7 +14,7 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 def fold(node: Node) -> Node:
     if not isinstance(node, Call):
         return node
-    folded = Call(node.op, tuple(fold(argument) for argument in node.arguments))
+    folded = simplify_text(Call(node.op, tuple(fold(argument) for argument in node.arguments)))
     values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]
     if len(values) < len(folded.arguments):
         return folded

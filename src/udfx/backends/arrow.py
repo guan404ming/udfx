@@ -43,18 +43,23 @@ def make_gather(columns: Sequence[pa.Array]) -> Gather:
     return gather
 
 
-def pending(flags: pa.Array) -> list[int]:
-    exact = cast(pa.BooleanArray, compute.fill_null(flags, pa.scalar(False)))
-    missing = compute.invert(exact)
-    return cast("list[int]", compute.indices_nonzero(missing).to_pylist())
-
-
 def fallback(
     backend: Backend[Any],
     program: Program,
     flags: pa.Array,
+    native: pa.Array,
     columns: Sequence[pa.Array],
-    result: pa.DataType,
 ) -> pa.Array:
-    values = backend.fallback_values(program, len(flags), pending(flags), make_gather(columns))
-    return pa.array(values, type=result)
+    exact = cast(pa.BooleanArray, compute.fill_null(flags, pa.scalar(False)))
+    missing = compute.invert(exact)
+    pending = cast("list[int]", compute.indices_nonzero(missing).to_pylist())
+    if not pending:
+        return native
+    values = backend.evaluate_pending_rows(program, pending, make_gather(columns))
+    replacements = pa.array(values, type=native.type)
+    if pa.types.is_list(native.type):
+        indices = list(range(len(native)))
+        for offset, index in enumerate(pending, len(native)):
+            indices[index] = offset
+        return pa.concat_arrays([native, replacements]).take(indices)
+    return compute.replace_with_mask(native, missing, replacements)

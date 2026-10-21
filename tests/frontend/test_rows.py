@@ -93,7 +93,7 @@ def test_row_access(
 
 def test_row_column_passes_through_nested_helpers() -> None:
     program = trace(nested, {"image": STR})
-    assert program.value == apply(".lower", apply(".strip", Col("image", STR)))
+    assert program.value == apply(".strip", apply(".lower", Col("image", STR)))
     assert program.run([(" PHOTO ",)]) == ["photo"]
 
 

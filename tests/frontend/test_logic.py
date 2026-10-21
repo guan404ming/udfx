@@ -1,3 +1,5 @@
+import pytest
+
 from udfx.frontend import trace
 from udfx.frontend.calls import invoke
 from udfx.frontend.logic import conjunction, disjunction, fold, negate
@@ -43,6 +45,19 @@ def test_fold_evaluates_literal_calls() -> None:
 def test_fold_keeps_raising_calls() -> None:
     parse = apply("int", Lit("x", STR))
     assert fold(parse) == parse
+
+
+@pytest.mark.parametrize("method", [".lower", ".upper"])
+@pytest.mark.parametrize("strip", [".strip", ".lstrip", ".rstrip"])
+def test_case_guard_precedes_strip(method: str, strip: str) -> None:
+    assert fold(apply(method, apply(strip, S))) == apply(strip, apply(method, S))
+
+
+@pytest.mark.parametrize("method", [".lower", ".upper"])
+@pytest.mark.parametrize("strip", [".strip", ".lstrip", ".rstrip"])
+def test_case_keeps_explicit_strip_characters(method: str, strip: str) -> None:
+    node = apply(method, apply(strip, S, lit("A")))
+    assert fold(node) == node
 
 
 def test_constant_receiver_folds() -> None:

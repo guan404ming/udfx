@@ -53,7 +53,7 @@ def test_keyword_state_does_not_leak_to_next_call() -> None:
 
     assert trace(function, {"text": STR}).value == apply(
         ".upper",
-        apply("__add__", apply(".lower", apply(".strip", Col("text", STR))), Lit("!", STR)),
+        apply("__add__", apply(".strip", apply(".lower", Col("text", STR))), Lit("!", STR)),
     )
 
 

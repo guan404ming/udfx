@@ -18,7 +18,7 @@ from udfx.semantics.numbers import (
 from udfx.types import Kind
 
 TEXT = TextPrimitives(
-    when=when,
+    coalesce=pl.coalesce,
     translate=lambda text, old, new: text.str.replace_many(
         list(old), list(new) + [""] * (len(old) - len(new))
     ),

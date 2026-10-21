@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import operator
 
-from udfx.ir import Node, lit
+from udfx.ir import Call, Lit, Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.semantics.text import CASE_METHODS, PADDING_METHODS, PREDICATES
 from udfx.types import BOOL, INT, STR, list_of
@@ -20,8 +20,19 @@ def none_item(_: Node, items: Node) -> tuple[Fault, ...]:
 
 
 def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
+    if isinstance(index, Lit) and index.value == 0:
+        if (
+            isinstance(container, Call)
+            and container.op.name == ".split"
+            and len(container.arguments) == 2
+            and container.arguments[1].type == STR
+        ):
+            return ()
+        return (Fault(IndexError, apply("not", apply("bool", container))),)
     length = apply("len", container)
     too_high = apply("not", apply("__gt__", length, index))
+    if isinstance(index, Lit) and isinstance(index.value, int) and index.value >= 0:
+        return (Fault(IndexError, too_high),)
     too_low = apply("__gt__", lit(0), apply("__add__", index, length))
     return (Fault(IndexError, apply("or", too_high, too_low)),)
 
@@ -51,10 +62,18 @@ for name in PREDICATES:
 for name in ("strip", "lstrip", "rstrip"):
     register(Op(f".{name}", (STR,), STR, getattr(str, name)))
     register(Op(f".{name}", (STR, STR.or_none()), STR, getattr(str, name)))
+
+
+def last_split(value: str, separator: str) -> str:
+    parts = value.split(separator)
+    return parts[-1]
+
+
 for name, method in ((".split", str.split), (".rsplit", str.rsplit)):
     register(Op(name, (STR,), STRINGS, method))
     register(Op(name, (STR, STR.or_none()), STRINGS, method, empty_separator))
     register(Op(name, (STR, STR.or_none(), INT), STRINGS, method, empty_separator))
+register(Op("last_split", (STR, STR), STR, last_split, empty_separator))
 register(Op(".find", (STR, STR), INT, str.find))
 register(Op(".rfind", (STR, STR), INT, str.rfind))
 register(Op(".count", (STR, STR), INT, str.count))

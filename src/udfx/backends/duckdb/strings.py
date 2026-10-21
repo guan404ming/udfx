@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import cache, partial
 
 import duckdb
@@ -42,10 +42,11 @@ from udfx.semantics.text import (
     slice_sequence,
     split_limited,
     split_right,
+    strip_pattern,
     whitespace,
     word_prefix_pattern,
 )
-from udfx.types import Kind
+from udfx.types import Kind, Type
 
 POINT = "udfx point"
 ITEM = "udfx item"
@@ -75,37 +76,38 @@ def recase(value: Expression, method: str) -> RuleResult[Expression]:
     return expr if exact is None else Lowered(expr, exact)
 
 
+def trim(text: Expression, characters: str, method: str) -> Expression:
+    return function(
+        "regexp_replace",
+        text,
+        constant(strip_pattern(characters, method)),
+        constant(""),
+        constant("g"),
+    )
+
+
 @RULES(".strip", Kind.STR)
 @RULES(".strip", Kind.STR, Kind.STR)
 def strip(text: Expression, characters: Expression | None = None) -> Expression:
-    characters = (
-        duckdb.CoalesceOperator(characters, constant(whitespace()))
-        if characters is not None
-        else constant(whitespace())
-    )
-    return function("trim", text, characters)
+    if characters is None:
+        return trim(text, whitespace(), "strip")
+    return function("trim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
 
 
 @RULES(".lstrip", Kind.STR)
 @RULES(".lstrip", Kind.STR, Kind.STR)
 def lstrip(text: Expression, characters: Expression | None = None) -> Expression:
-    characters = (
-        duckdb.CoalesceOperator(characters, constant(whitespace()))
-        if characters is not None
-        else constant(whitespace())
-    )
-    return function("ltrim", text, characters)
+    if characters is None:
+        return trim(text, whitespace(), "lstrip")
+    return function("ltrim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
 
 
 @RULES(".rstrip", Kind.STR)
 @RULES(".rstrip", Kind.STR, Kind.STR)
 def rstrip(text: Expression, characters: Expression | None = None) -> Expression:
-    characters = (
-        duckdb.CoalesceOperator(characters, constant(whitespace()))
-        if characters is not None
-        else constant(whitespace())
-    )
-    return function("rtrim", text, characters)
+    if characters is None:
+        return trim(text, whitespace(), "rstrip")
+    return function("rtrim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
 
 
 def split_words(text: Expression) -> Expression:
@@ -121,6 +123,11 @@ def split(text: Expression, separator: Expression) -> Expression:
 
 
 RULES(".split", Kind.STR, Kind.STR)(split)
+
+
+@RULES("last_split", Kind.STR, Kind.STR)
+def last_split(text: Expression, separator: Expression) -> Expression:
+    return function("split_part", text, separator, constant(-1))
 
 
 def find(text: Expression, pattern: Expression) -> Expression:
@@ -235,6 +242,20 @@ SLICE = SlicePrimitives(
 )
 
 
+def bind(
+    value: Expression, transform: Callable[[Expression], Expression], name: str = ITEM
+) -> Expression:
+    return function(
+        "list_extract",
+        function(
+            "list_transform",
+            function("list_value", value),
+            duckdb.LambdaExpression(name, transform(column(name))),
+        ),
+        constant(1),
+    )
+
+
 SEQUENCE = SequencePrimitives(
     bounds=SLICE,
     length=length,
@@ -251,15 +272,7 @@ SEQUENCE = SequencePrimitives(
     stride=lambda value, step: function(
         "list_slice", value, constant(1), constant(SLICE.maximum), constant(step)
     ),
-    bind=lambda value, transform: function(
-        "list_extract",
-        function(
-            "list_transform",
-            function("list_value", value),
-            duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
-        ),
-        constant(1),
-    ),
+    bind=lambda value, transform, result: bind(value, transform),
 )
 
 
@@ -286,8 +299,10 @@ def str_slice(
     start: Expression | int | None,
     stop: Expression | int | None,
     step: int | None = None,
+    *,
+    result: Type,
 ) -> Expression:
-    return slice_sequence(TEXT, text, start, stop, step)
+    return slice_sequence(TEXT, text, start, stop, step, result=result)
 
 
 @RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
@@ -297,12 +312,24 @@ def list_slice(
     start: Expression | int | None,
     stop: Expression | int | None,
     step: int | None = None,
+    *,
+    result: Type,
 ) -> Expression:
-    return slice_sequence(SEQUENCE, container, start, stop, step)
+    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
 
 
 SPLIT = SplitPrimitives(
     sequence=SEQUENCE,
+    bind=lambda values, transform: bind(
+        function("struct_pack", *(value.alias(str(index)) for index, value in enumerate(values))),
+        lambda value: transform(
+            *(
+                function("struct_extract", value, constant(str(index)))
+                for index in range(len(values))
+            )
+        ),
+        f"udfx split {len(values)}",
+    ),
     split=split,
     join=join,
     append=lambda values, value: function("list_append", values, value),

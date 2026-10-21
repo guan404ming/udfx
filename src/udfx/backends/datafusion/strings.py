@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace as replace_record
 from functools import cache, partial
 from typing import cast
@@ -9,6 +9,7 @@ import datafusion
 import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
+from udfx.backends.arrow import dtype
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
 from udfx.backends.registration import (
@@ -39,7 +40,7 @@ from udfx.semantics.text import (
     split_right,
     whitespace,
 )
-from udfx.types import STR, Kind
+from udfx.types import STR, Kind, Type, list_of
 
 POINT = "point"
 
@@ -118,6 +119,11 @@ def split(text: Expr, separator: Expr) -> Expr:
 
 
 RULES(".split", Kind.STR, Kind.STR)(split)
+
+
+@RULES("last_split", Kind.STR, Kind.STR)
+def last_split(text: Expr, separator: Expr) -> Expr:
+    return functions.split_part(text, separator, lit(-1))
 
 
 def find(text: Expr, pattern: Expr) -> Expr:
@@ -199,6 +205,13 @@ def str_contains(text: Expr, item: Expr) -> Expr:
 
 
 def list_contains(container: Expr, item: Expr) -> Expr:
+    if container.variant_name() == "Literal":
+        values = container.python_value()
+        if isinstance(values, pa.ListScalar):
+            values = values.as_py()
+        if isinstance(values, list):
+            found = functions.in_list(item, [lit(value) for value in values if value is not None])
+            return functions.coalesce(found, lit(False)) | (item.is_null() & lit(None in values))
     return functions.array_position(container, item).is_not_null()
 
 
@@ -243,6 +256,14 @@ SLICE = SlicePrimitives(
 )
 
 
+def array_transform(values: Expr, transform: Callable[[Expr], Expr], result: pa.DataType) -> Expr:
+    nested = functions.array_transform(
+        functions.make_array(lit(0)),
+        lambda ignored: functions.array_transform(values, transform).cast(pa.list_(result)),
+    )
+    return functions.array_element(nested.cast(pa.list_(pa.list_(result))), 1)
+
+
 SEQUENCE = SequencePrimitives(
     bounds=replace_record(SLICE, maximum=2**31 - 1),
     length=list_len,
@@ -253,11 +274,8 @@ SEQUENCE = SequencePrimitives(
     ),
     reverse=functions.array_reverse,
     stride=lambda value, step: functions.array_slice(value, 1, 2**31 - 1, step),
-    bind=lambda value, transform: functions.array_element(
-        functions.coalesce(
-            functions.array_transform(functions.make_array(value), transform),
-            functions.make_array(value),
-        ),
+    bind=lambda value, transform, result: functions.array_element(
+        array_transform(functions.make_array(value), transform, dtype(result)),
         1,
     ),
 )
@@ -273,33 +291,45 @@ TEXT = SequencePrimitives(
     stride=lambda value, step: join(
         lit(""), SEQUENCE.stride(characters(value), min(step, 2**31 - 1))
     ),
-    bind=lambda value, transform: functions.array_element(
-        functions.array_transform(functions.make_array(value), transform).cast(
-            pa.list_(pa.string())
-        ),
-        1,
-    ),
+    bind=SEQUENCE.bind,
 )
 
 
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
 def str_slice(
-    text: Expr, start: Expr | int | None, stop: Expr | int | None, step: int | None = None
+    text: Expr,
+    start: Expr | int | None,
+    stop: Expr | int | None,
+    step: int | None = None,
+    *,
+    result: Type,
 ) -> Expr:
-    return slice_sequence(TEXT, text, start, stop, step)
+    return slice_sequence(TEXT, text, start, stop, step, result=result)
 
 
 @RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
 @RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)
 def list_slice(
-    container: Expr, start: Expr | int | None, stop: Expr | int | None, step: int | None = None
+    container: Expr,
+    start: Expr | int | None,
+    stop: Expr | int | None,
+    step: int | None = None,
+    *,
+    result: Type,
 ) -> Expr:
-    return slice_sequence(SEQUENCE, container, start, stop, step)
+    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
 
 
 SPLIT = SplitPrimitives(
     sequence=SEQUENCE,
+    bind=lambda values, transform: SEQUENCE.bind(
+        functions.named_struct([(str(index), value) for index, value in enumerate(values)]),
+        lambda value: transform(
+            *(functions.get_field(value, str(index)) for index in range(len(values)))
+        ),
+        list_of(STR),
+    ),
     split=split,
     join=join,
     append=functions.array_append,
@@ -317,8 +347,8 @@ SPLIT = SplitPrimitives(
     lstrip=lstrip,
     is_null=Expr.is_null,
     reverse=functions.reverse,
-    restore=lambda values: functions.array_transform(
-        functions.array_reverse(values), functions.reverse
+    restore=lambda values: array_transform(
+        functions.array_reverse(values), functions.reverse, pa.string()
     ),
 )
 

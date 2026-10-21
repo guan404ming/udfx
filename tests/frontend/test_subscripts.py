@@ -5,9 +5,9 @@ import pytest
 
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.logic import conjunction, disjunction, negate
+from udfx.frontend.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.opcodes import py312, py313, py314
-from udfx.ir import Col, Lit
+from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
 from udfx.types import INT, STR
 
@@ -96,3 +96,30 @@ def test_slice_opcode_versions(
     monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
     monkeypatch.setattr("udfx.frontend.context.normalize", normalizer.normalize)
     assert trace(function, {"s": STR}).value == apply("slice", S, OPEN, OPEN, Lit(step, INT))
+
+
+@pytest.mark.parametrize(
+    ("pattern", "offset", "rewritten"),
+    [("-", 1, True), ("ab", 2, False), ("aba", 3, False), ("", 0, False), ("ab", 1, False)],
+)
+def test_suffix_slice_reuses_split(pattern: str, offset: int, rewritten: bool) -> None:
+    separator = Lit(pattern, STR)
+    start = apply("__add__", apply(".rfind", S, separator), Lit(offset, INT))
+    node = apply("slice", S, start, OPEN)
+    expected = apply("last_split", S, separator)
+    assert fold(node) == (expected if rewritten else node)
+
+
+def test_suffix_slice_compiles_without_search() -> None:
+    program = trace(lambda s: s[s.rfind("-") + 1 :], {"s": STR})
+    assert program.value == apply("last_split", S, Lit("-", STR))
+
+
+def test_explicit_split_has_first_item() -> None:
+    program = trace(lambda s: s.split("::")[0], {"s": STR})
+    assert program.fault == FALSE
+
+
+def test_truthy_string_has_first_item() -> None:
+    program = trace(lambda s: s[0] if s else "", {"s": STR})
+    assert program.fault == FALSE

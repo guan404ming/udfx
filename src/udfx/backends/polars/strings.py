@@ -36,7 +36,7 @@ from udfx.semantics.text import (
     whitespace,
     word_prefix_pattern,
 )
-from udfx.types import Kind
+from udfx.types import STR, Kind, Type, list_of
 
 
 def native_recase(method: str, samples: Sequence[str]) -> list[str]:
@@ -106,6 +106,11 @@ def split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
 
 
 RULES(".split", Kind.STR, Kind.STR)(split)
+
+
+@RULES("last_split", Kind.STR, Kind.STR)
+def last_split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
+    return text.str.split(separator).list.last()
 
 
 def length(text: pl.Expr) -> pl.Expr:
@@ -248,7 +253,7 @@ SEQUENCE = SequencePrimitives(
     tail=lambda value, size: value.list.slice(-size),
     reverse=lambda value: value.list.reverse(),
     stride=lambda value, step: value.list.gather_every(step),
-    bind=lambda value, transform: (
+    bind=lambda value, transform, result: (
         pl.concat_list(pl.struct(value.alias("udfx value")))
         .list.eval(transform(pl.element().struct.field("udfx value")))
         .list.first()
@@ -273,9 +278,14 @@ TEXT = SequencePrimitives(
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT)
 @RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
 def str_slice(
-    text: pl.Expr, start: pl.Expr | int | None, stop: pl.Expr | int | None, step: int | None = None
+    text: pl.Expr,
+    start: pl.Expr | int | None,
+    stop: pl.Expr | int | None,
+    step: int | None = None,
+    *,
+    result: Type,
 ) -> pl.Expr:
-    return slice_sequence(TEXT, text, start, stop, step)
+    return slice_sequence(TEXT, text, start, stop, step, result=result)
 
 
 @RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
@@ -285,12 +295,19 @@ def list_slice(
     start: pl.Expr | int | None,
     stop: pl.Expr | int | None,
     step: int | None = None,
+    *,
+    result: Type,
 ) -> pl.Expr:
-    return slice_sequence(SEQUENCE, container, start, stop, step)
+    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
 
 
 SPLIT = SplitPrimitives(
     sequence=SEQUENCE,
+    bind=lambda values, transform: SEQUENCE.bind(
+        pl.struct(value.alias(str(index)) for index, value in enumerate(values)),
+        lambda value: transform(*(value.struct.field(str(index)) for index in range(len(values)))),
+        list_of(STR),
+    ),
     split=split,
     join=join,
     append=lambda values, value: values.list.concat(value),

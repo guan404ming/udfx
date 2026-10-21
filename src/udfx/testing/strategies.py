@@ -95,6 +95,10 @@ STRING_TRAPS = (
     "\U00010000",
     "Func=a;Other=b;Func=c",
     "Func;Func=",
+    "\x00",
+    "0" * 4301,
+    " " * 4301 + "1",
+    "1_" * 2150 + "1",
 )
 
 REGEX_PATTERNS = (

@@ -9,7 +9,8 @@ from udfx.backends.base import Backend
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops.registry import apply
-from udfx.types import INT, STR, Type, list_of
+from udfx.testing import check_function
+from udfx.types import BOOL, FLOAT, INT, STR, Type, list_of
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -28,6 +29,57 @@ def test_expression_size(
     translation = compile(function, schema, backend)
     assert translation.ok
     assert len(str(translation.expr)) < 2 * size
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("op", [".split", ".rsplit"])
+def test_split_operands_are_bound(backend: Backend[Any], op: str) -> None:
+    names = ("text_operand", "separator_operand", "maximum_operand")
+    text, separator, maximum = Col(names[0], STR), Col(names[1], STR.or_none()), Col(names[2], INT)
+    for _ in range(8):
+        expr = str(backend.lower(apply(op, text, separator, maximum)).expr)
+        assert all(expr.count(name) == 1 for name in names)
+        assert len(expr) < 6000
+        text = apply("__add__", text, lit("x"))
+        separator = apply("__add__", separator, lit("x"))
+        maximum = apply("__add__", maximum, lit(1))
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda text, maximum: text.split(",", maximum)[-4:4],
+        lambda text, maximum: text.rsplit(",", maximum)[0].split(",", maximum),
+    ],
+    ids=["slice", "nested"],
+)
+def test_split_bindings_compose(backend: Backend[Any], function: Callable[..., object]) -> None:
+    rows = [("a,b,c,d,e", 2), ("", 0), ("a,b", -1)]
+    assert check_function(function, {"text": STR, "maximum": INT}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    ("item", "values"),
+    [
+        (STR, ["a", "b", "c"]),
+        (STR.or_none(), ["a", None, "c"]),
+        (INT, [1, 2, 3]),
+        (FLOAT, [1.5, -0.0, -2.5]),
+        (BOOL, [True, False, True]),
+    ],
+    ids=["str", "nullable-str", "int", "float", "bool"],
+)
+def test_list_bindings_compose(backend: Backend[Any], item: Type, values: list[object]) -> None:
+    schema = {"items": list_of(item).or_none()}
+    program = trace(lambda items: items[-4:4][-3:3], schema)
+    lowered = backend.lower(program.value)
+    assert lowered.exact is None
+    assert str(lowered.expr).count("items") == 1
+    rows = [(None,), ([],), (values,), (values * 3,)]
+    (actual,) = backend.evaluate([lowered.expr], schema, rows)
+    assert actual == [None, [], values[-4:4][-3:3], (values * 3)[-4:4][-3:3]]
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -89,3 +141,24 @@ def test_nested_unpacking_uses_source_once(backend: Backend[Any]) -> None:
     expr = str(backend.lower(program.value).expr)
     assert expr.count("items") == 1
     assert len(expr) < 1000
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_integer_validation_is_native(backend: Backend[Any]) -> None:
+    assert backend.lower(apply("int_parses", Col("text", STR))).exact is None
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_nonnegative_index_fault_is_native(backend: Backend[Any]) -> None:
+    node = apply("__getitem__", Col("text", STR), lit(1))
+    (fault,) = node.op.faults(*node.arguments)
+    assert backend.lower(fault.when).exact is None
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_literal_integer_division_is_native(backend: Backend[Any]) -> None:
+    assert backend.lower(apply("__floordiv__", Col("value", INT), lit(4))).exact is None
+    assert (
+        check_function(lambda value: (value + 1) // 4, {"value": INT}, backend, [(2**63 - 1,)])
+        == []
+    )

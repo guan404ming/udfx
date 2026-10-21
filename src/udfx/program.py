@@ -41,9 +41,13 @@ class Program:
 
     def run(self, rows: Iterable[Sequence[object]]) -> list[object]:
         values: list[object] = []
+        result = self.result
+        function = self.function
+        if self.row_mode:
+            rows = (self.arguments(row) for row in rows)
         for row in rows:
-            value = python_scalar(self.function(*self.arguments(row)))
-            if not fits(value, self.result):
-                raise OverflowError(f"udfx result {value!r} does not fit {self.result}")
+            value = python_scalar(function(*row))
+            if not fits(value, result):
+                raise OverflowError(f"udfx result {value!r} does not fit {result}")
             values.append(value)
         return values
