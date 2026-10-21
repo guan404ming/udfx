@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import polars as pl
 
-from udfx.backends.base import Lowered, register_extremum, register_float_variants
 from udfx.backends.polars.conversions import float_int
 from udfx.backends.polars.numbers import ORDER, cast_float64
 from udfx.backends.polars.rules import RULES, broadcast, when
+from udfx.backends.registration import Lowered, register_extremum, register_float_variants
 from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
 

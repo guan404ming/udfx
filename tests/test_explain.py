@@ -1,3 +1,5 @@
+import pytest
+
 from udfx import compile, explain
 from udfx.explain import render
 from udfx.ir import Col, If, lit
@@ -21,7 +23,7 @@ def test_supported_report() -> None:
     translation = compile(project_name, schema)
 
     assert "Function: project_name" in report
-    assert "Schema: {'project': str?}" in report
+    assert "Schema: {project: str?}" in report
     assert "bool(col project)" in report
     assert ".split(col project, '::')[0]" in report
     assert translation.program is not None
@@ -34,7 +36,7 @@ def test_unsupported_report() -> None:
     report = explain(loop, {"value": INT})
 
     assert "Function: loop" in report
-    assert "Schema: {'value': int}" in report
+    assert "Schema: {value: int}" in report
     assert "Unsupported: loops and comprehensions at loop+" in report
     assert "JUMP_BACKWARD" not in report
 
@@ -60,3 +62,11 @@ def test_report_escapes_control_characters() -> None:
     unsupported = explain(lambda column: column, {"column\n\v": STR})
     assert "Schema: {'column\\n\\x0b': str}" in unsupported
     assert len(unsupported.splitlines()) == 3
+
+
+@pytest.mark.parametrize("name", ["first name", "line\n\v", "a'b", 'a"b', "a\\b"])
+def test_column_names_are_escaped(name: str) -> None:
+    assert render(Col(name, STR)) == f"col {name!r}"
+    report = explain(lambda column: column, {name: STR})
+    assert f"Schema: {{{name!r}: str}}" in report
+    assert len(report.splitlines()) == 3

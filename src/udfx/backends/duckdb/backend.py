@@ -17,9 +17,10 @@ from duckdb.func import ARROW, SPECIAL
 
 from udfx import __version__
 from udfx.backends import arrow
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names, transpose_rows
+from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import NAN, RULES, column, constant, function, when
+from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Type
@@ -92,7 +93,7 @@ class DuckDBBackend(Backend[Expression]):
         def patch(packed: pa.ChunkedArray) -> pa.Array:
             batch = cast(pa.StructArray, packed.combine_chunks())
             columns = [batch.field(field) for field in program.schema]
-            return arrow.fallback(self, program, batch.field(EXACT), columns, result)
+            return arrow.fallback(DuckDBBackend(), program, batch.field(EXACT), columns, result)
 
         with suppress(duckdb.NotImplementedException):
             connection.create_function(

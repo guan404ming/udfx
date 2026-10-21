@@ -5,13 +5,6 @@ import operator
 import duckdb
 from duckdb import Expression, sqltypes
 
-from udfx.backends.base import (
-    BinaryRule,
-    Lowered,
-    register_comparison,
-    register_equality,
-    register_float_variants,
-)
 from udfx.backends.duckdb.rules import (
     NAN,
     NULL,
@@ -20,6 +13,13 @@ from udfx.backends.duckdb.rules import (
     function,
     null_safe_equal,
     when,
+)
+from udfx.backends.registration import (
+    BinaryRule,
+    Lowered,
+    register_comparison,
+    register_equality,
+    register_float_variants,
 )
 from udfx.semantics.numbers import (
     ARITHMETIC,
@@ -115,7 +115,7 @@ def float_mod(left: Expression, right: Expression) -> Lowered[Expression]:
 INTEGERS = IntegerPrimitives(constant, when, operator.floordiv, operator.mod)
 
 
-ORDER = OrderPrimitives(when, either_nan, Expression.isnull, within_exact_float_range)
+ORDER = OrderPrimitives(either_nan, Expression.isnull, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import RuleSet
+from udfx.backends.registration import RuleSet
 
 RULES: RuleSet[Column] = RuleSet()
 

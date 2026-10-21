@@ -4,14 +4,14 @@ import operator
 
 import polars as pl
 
-from udfx.backends.base import (
+from udfx.backends.polars.rules import RULES, broadcast, when
+from udfx.backends.registration import (
     BinaryRule,
     Lowered,
     register_comparison,
     register_equality,
     register_float_variants,
 )
-from udfx.backends.polars.rules import RULES, broadcast, when
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -79,7 +79,7 @@ def float_mod(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(remainder, exact)
 
 
-ORDER = OrderPrimitives(when, either_nan, pl.Expr.is_null, within_exact_float_range)
+ORDER = OrderPrimitives(either_nan, pl.Expr.is_null, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():

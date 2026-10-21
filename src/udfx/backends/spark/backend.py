@@ -8,7 +8,8 @@ from pyspark.sql import Column, SparkSession, functions
 from pyspark.sql.types import StructField, StructType
 
 from udfx.backends import arrow
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names
+from udfx.backends.base import RESERVED, Backend, Row, output_names
+from udfx.backends.registration import RuleSet
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
 from udfx.ir import Col, Lit

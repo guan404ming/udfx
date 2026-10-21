@@ -56,7 +56,6 @@ def float_divmod(primitives: FloatPrimitives, left: Any, right: Any) -> tuple[An
 
 @dataclass(frozen=True)
 class OrderPrimitives:
-    when: Callable[[Any, Any, Any], Any]
     either_nan: Callable[[Any, Any], Any]
     is_null: Callable[[Any], Any]
     within_exact_float_range: Callable[[Any], Any]

@@ -3,7 +3,6 @@ from __future__ import annotations
 import duckdb
 from duckdb import Expression, sqltypes
 
-from udfx.backends.base import Lowered, register_text_conversions
 from udfx.backends.duckdb.numbers import cast_float64, cast_int128, is_nan, try_truncate_int64
 from udfx.backends.duckdb.rules import (
     NULL,
@@ -13,6 +12,7 @@ from udfx.backends.duckdb.rules import (
     length,
     when,
 )
+from udfx.backends.registration import Lowered, register_text_conversions
 from udfx.semantics.literals import (
     FLOAT_LITERAL,
     INT_LITERAL,

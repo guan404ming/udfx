@@ -5,14 +5,14 @@ import operator
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.base import (
+from udfx.backends.datafusion.rules import RULES, null_safe_equal, when
+from udfx.backends.registration import (
     BinaryRule,
     Lowered,
     register_comparison,
     register_equality,
     register_float_variants,
 )
-from udfx.backends.datafusion.rules import RULES, null_safe_equal, when
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -80,7 +80,7 @@ def finite(value: Expr) -> Expr:
     return ~functions.isnan(value) & (functions.abs(value) != lit(INFINITY))
 
 
-ORDER = OrderPrimitives(when, either_nan, Expr.is_null, within_exact_float_range)
+ORDER = OrderPrimitives(either_nan, Expr.is_null, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():

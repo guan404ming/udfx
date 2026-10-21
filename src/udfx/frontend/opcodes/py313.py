@@ -46,12 +46,12 @@ def split(instruction: dis.Instruction) -> tuple[dis.Instruction, ...]:
     if instruction.opname not in PAIRS:
         return (instruction,)
     (first, second), (head, tail) = PAIRS[instruction.opname], instruction.argval
-    arg = instruction.arg or 0
+    argument = instruction.arg or 0
     return (
-        instruction._replace(opname=first, arg=arg >> 4, argval=head, argrepr=head),
+        instruction._replace(opname=first, arg=argument >> 4, argval=head, argrepr=head),
         instruction._replace(
             opname=second,
-            arg=arg & 15,
+            arg=argument & 15,
             argval=tail,
             argrepr=tail,
             offset=instruction.offset + 1,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered, register_extremum, register_float_variants
+from udfx.backends.registration import Lowered, register_extremum, register_float_variants
 from udfx.backends.spark.conversions import float_int
 from udfx.backends.spark.numbers import ORDER, cast_float64, floor
 from udfx.backends.spark.rules import RULES, when

@@ -7,7 +7,6 @@ import duckdb
 import pyarrow as pa
 from duckdb import Expression
 
-from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.duckdb.rules import (
     RULES,
     column,
@@ -17,6 +16,7 @@ from udfx.backends.duckdb.rules import (
     null_safe_equal,
     when,
 )
+from udfx.backends.registration import Lowered, RuleResult
 from udfx.semantics import text
 from udfx.semantics.text import (
     CLUSTER_JOINERS,

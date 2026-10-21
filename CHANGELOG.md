@@ -23,7 +23,7 @@ All notable changes to this project are documented in this file. The format foll
 - Cache DuckDB fallback registrations per connection object; use a separate connection or cursor per thread.
 - Reduce operand repetition in int64 clamps, integer division, slicing, rounding, and min/max; document the remaining nested-chain growth limits.
 - Round large half-integers to even on DuckDB.
-- Raise the original Python exception type from Polars eager, lazy, and streaming queries.
+- Rebuild exceptions from their messages in raw Polars queries for builtin types and single-argument constructors; restore the exact exception object through `backend.execute(run)`.
 - Preserve rebuilt fallback error messages so `backend.execute(run)` can restore builtin exception types that accept a message.
 - Raise a clear `RuntimeError` when an explicit Spark session has stopped.
 - Escape string literals and schema names in `udfx.explain` output.

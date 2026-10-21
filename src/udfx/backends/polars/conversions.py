@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import polars as pl
 
-from udfx.backends.base import Lowered, register_text_conversions
 from udfx.backends.polars.numbers import cast_float64
 from udfx.backends.polars.rules import RULES, when
+from udfx.backends.registration import Lowered, register_text_conversions
 from udfx.semantics.literals import (
     SpellingPrimitives,
     TextPrimitives,
@@ -37,9 +37,7 @@ def float_int(value: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(whole, whole.is_not_null() | ~value.is_finite())
 
 
-@RULES("float", Kind.INT)
-def int_float(value: pl.Expr) -> pl.Expr:
-    return cast_float64(value)
+RULES("float", Kind.INT)(cast_float64)
 
 
 @RULES("float", Kind.FLOAT)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Mapping
 from functools import reduce
-from types import FunctionType
+from types import CellType, CodeType, FunctionType
 
 from udfx.errors import Unsupported
 from udfx.frontend.constants import constant
@@ -31,12 +31,43 @@ def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Progra
     names = parameters(function.__code__)
     if list(schema) != names:
         raise Unsupported(f"schema {list(schema)} does not match parameters {names}")
+    function = FunctionType(
+        function.__code__,
+        {
+            "__builtins__": function.__builtins__,
+            **{
+                name: function.__globals__[name]
+                for name in _global_names(function.__code__)
+                if name in function.__globals__
+            },
+        },
+        function.__name__,
+        None,
+        tuple(_freeze_cell(cell) for cell in function.__closure__)
+        if function.__closure__
+        else None,
+    )
     context = Context.from_code(
         function.__code__, function.__globals__, function.__builtins__, None
     )
     columns = {name: Value(Col(name, type)) for name, type in schema.items()}
     start = State(0, (), {**columns, **_closure(function)}, TRUE)
     return _merge(function, schema, explore(context, start))
+
+
+def _global_names(code: CodeType) -> set[str]:
+    names = set(code.co_names)
+    for value in code.co_consts:
+        if isinstance(value, CodeType):
+            names.update(_global_names(value))
+    return names
+
+
+def _freeze_cell(cell: CellType) -> CellType:
+    try:
+        return CellType(cell.cell_contents)
+    except ValueError:
+        return CellType()
 
 
 def _closure(function: FunctionType) -> dict[str, Item]:

@@ -5,8 +5,8 @@ from functools import cache, partial
 
 import polars as pl
 
-from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
+from udfx.backends.registration import Lowered, RuleResult
 from udfx.semantics import text
 from udfx.semantics.text import (
     CLUSTER_JOINERS,

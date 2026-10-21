@@ -7,7 +7,7 @@ from typing import cast
 import pyspark
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered, RuleResult
+from udfx.backends.registration import Lowered, RuleResult
 from udfx.backends.spark.backend import SparkBackend
 from udfx.backends.spark.rules import RULES, when
 from udfx.ir import Col

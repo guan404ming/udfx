@@ -8,10 +8,14 @@ from udfx.ir import Call, Col, If, Lit, Node
 from udfx.types import Type
 
 
+def render_name(name: str) -> str:
+    return name if name.isidentifier() else repr(name)
+
+
 def render(node: Node) -> str:
     match node:
         case Col():
-            return f"col {node.name}"
+            return f"col {render_name(node.name)}"
         case Lit():
             return repr(node.value)
         case Call(op=op, arguments=(container, index)) if op.name == "__getitem__":
@@ -29,7 +33,9 @@ def explain[E](
 ) -> str:
     translation = compile(function, schema, backend)
     name = getattr(function, "__name__", repr(function))
-    columns = ", ".join(f"{name!r}: {column_type}" for name, column_type in schema.items())
+    columns = ", ".join(
+        f"{render_name(name)}: {column_type}" for name, column_type in schema.items()
+    )
     lines = [f"Function: {name}", f"Schema: {{{columns}}}"]
     if translation.unsupported is not None:
         lines.append(f"Unsupported: {translation.unsupported}")

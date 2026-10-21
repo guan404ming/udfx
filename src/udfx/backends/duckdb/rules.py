@@ -5,7 +5,7 @@ from typing import Any, cast
 import duckdb
 from duckdb import Expression
 
-from udfx.backends.base import RuleSet
+from udfx.backends.registration import RuleSet
 
 RULES: RuleSet[Expression] = RuleSet()
 

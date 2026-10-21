@@ -5,9 +5,10 @@ from typing import ClassVar
 
 import polars as pl
 
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names, transpose_rows
+from udfx.backends.base import RAISED, RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES
+from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Type
@@ -20,7 +21,11 @@ class PolarsBackend(Backend[pl.Expr]):
     rules: ClassVar[RuleSet[pl.Expr]] = RULES
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
-        return program.run(rows)
+        try:
+            return program.run(rows)
+        except Exception as error:
+            RAISED.error = error
+            raise
 
     def column(self, node: Col) -> pl.Expr:
         return pl.col(node.name)

@@ -4,7 +4,7 @@ import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
 from udfx.backends.arrow import dtype
-from udfx.backends.base import RuleSet
+from udfx.backends.registration import RuleSet
 from udfx.types import Type
 
 RULES: RuleSet[Expr] = RuleSet()

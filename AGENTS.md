@@ -19,7 +19,8 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/ops/` | Op specs. One file per family: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py` |
 | `src/udfx/semantics/` | Facts about Python that every backend needs: whitespace, literal grammars, operator tables, Unicode drift, and policies that build expressions from a primitives record |
 | `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
-| `src/udfx/backends/base.py` | Generic lowering, fallback composition, boolean rules, mixed int and float registration, and `evaluate` helpers. Backends never reimplement it |
+| `src/udfx/backends/base.py` | Generic lowering, fallback composition, and `evaluate` helpers. Backends never reimplement it |
+| `src/udfx/backends/registration.py` | Rule types, `RuleSet`, boolean rules, and shared registration helpers |
 | `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, `dtypes.py`, and one rule file per op family with the same names as `ops/` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
@@ -69,7 +70,7 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 - Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
 - Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
 - For a Python policy, fill the primitives record from `semantics/` with engine calls and call its function. The records are `FloatPrimitives`, `OrderPrimitives`, `RoundPrimitives`, and `IntegerPrimitives` in `numbers.py`, `TextPrimitives` and `SpellingPrimitives` in `literals.py`, and `SlicePrimitives` and `SearchPrimitives` in `text.py`.
-- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, `register_equality`, and `register_extremum` from `base.py`. Give them the engine cast to float and the `OrderPrimitives` record.
+- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, `register_equality`, and `register_extremum` from `registration.py`. Give them the engine cast to float and the `OrderPrimitives` record.
 
 ## Backend contract
 
@@ -78,7 +79,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and calls `run_fallback_rows(program, rows)`.
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
-- `rules.py`: `RULES = RuleSet()` and engine helpers shared by rule files.
+- `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type.
 - `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`: rules, one file per op family.
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.

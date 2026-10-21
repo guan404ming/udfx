@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from duckdb import Expression
 
-from udfx.backends.base import Lowered, register_extremum, register_float_variants
 from udfx.backends.duckdb.conversions import float_int
 from udfx.backends.duckdb.numbers import ORDER, cast_float64
 from udfx.backends.duckdb.rules import RULES, constant, function, when
+from udfx.backends.registration import Lowered, register_extremum, register_float_variants
 from udfx.semantics.numbers import (
     RoundPrimitives,
     round_half_even,

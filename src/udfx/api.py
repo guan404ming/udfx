@@ -13,6 +13,7 @@ from udfx.types import Type
 
 @dataclass(frozen=True)
 class Translation[E]:
+    function: Callable[..., object]
     expr: E | None
     program: Program | None
     unsupported: Unsupported | None
@@ -39,6 +40,6 @@ def compile[E](
     target: Backend[E] = named(backend) if isinstance(backend, str) else backend
     try:
         program = trace(function, schema)
-        return Translation(target.build(program), program, None, target.name)
+        return Translation(function, target.build(program), program, None, target.name)
     except Unsupported as reason:
-        return Translation(None, None, reason, target.name)
+        return Translation(function, None, None, reason, target.name)

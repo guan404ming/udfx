@@ -21,10 +21,14 @@ SAMPLE_WORDS = ["Hello World", "funder::class::id", "a::b", "", "  padded  "]
 
 
 def column(name: str, type: Type, seed: random.Random) -> pl.Series:
+    pool = SAMPLE_DATES if "date" in name else SAMPLE_WORDS
     match type.kind:
         case Kind.STR:
-            pool = SAMPLE_DATES if "date" in name else SAMPLE_WORDS
             values = [seed.choice(pool) for _ in range(ROWS)]
+        case Kind.LIST:
+            assert type.item is not None
+            items = [*pool, None] if type.item.nullable else pool
+            values = [[seed.choice(items) for _ in range(seed.randint(0, 3))] for _ in range(ROWS)]
         case Kind.INT:
             values = [seed.randint(-1000, 1000) for _ in range(ROWS)]
         case Kind.FLOAT:

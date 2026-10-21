@@ -3,9 +3,9 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.base import Lowered, register_text_conversions
 from udfx.backends.datafusion.numbers import cast_float64, finite
 from udfx.backends.datafusion.rules import RULES, length, when
+from udfx.backends.registration import Lowered, register_text_conversions
 from udfx.semantics.literals import (
     SpellingPrimitives,
     TextPrimitives,
@@ -38,9 +38,7 @@ def float_int(value: Expr) -> Lowered[Expr]:
     return Lowered(whole, whole.is_not_null() | ~finite(value))
 
 
-@RULES("float", Kind.INT)
-def int_float(value: Expr) -> Expr:
-    return cast_float64(value)
+RULES("float", Kind.INT)(cast_float64)
 
 
 @RULES("float", Kind.FLOAT)

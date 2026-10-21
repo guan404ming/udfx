@@ -13,7 +13,7 @@ udfx cannot show the same result run the original Python function.
 - One expression per function for Polars, DuckDB, DataFusion, and Spark.
 - Python semantics for truthiness, exceptions, int64 overflow, Unicode case, and literal parsing.
 - Row-level fallback to the original Python function.
-- `udfx.explain` prints the traced program and the native expression.
+- `udfx.explain` returns a report with the traced program and the native expression.
 
 ## Install
 
@@ -49,7 +49,7 @@ print(df.select(year=translation.expr)["year"].to_list())
 [2024, None, None, -1, 123]
 ```
 
-`compile(function, schema, backend="polars")` returns a `Translation`: `ok`, `expr`, `program`,
+`compile(function, schema, backend="polars")` returns a `Translation`: `function`, `ok`, `expr`, `program`,
 `backend`, and `unsupported` (the reason when the function cannot be compiled).
 
 ## How it works
@@ -95,16 +95,17 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 
 - Each row equals the Python result, or the row runs the Python function. Checked by tests, not
   by proof.
-- A raising row fails the query. Polars raises the original exception type. DuckDB, DataFusion,
-  and Spark raise their own UDF error whose message carries the Python type and message.
+- A raising row fails the query. Raw Polars queries rebuild the exception from its message,
+  which works for builtin types and single-argument constructors. `backend.execute(run)`
+  restores the exact exception object on Polars. DuckDB, DataFusion, and Spark raise their own
+  UDF error whose message carries the Python type and message.
   `backend.execute(run)` restores builtin Python exception types that accept a message,
   for example `backend.execute(lambda: relation.fetchall())`.
-- Globals and closure constants are read once at compile time.
+- Globals and closure constants are frozen at compile time for both native and fallback paths.
 - udfx does not validate data against the schema. Declare nullable columns with `.or_none()`.
 - On Polars, a `LazyFrame` gives the best speed.
 - Nested slice and round chains can grow rapidly on every engine; integer division chains can also grow rapidly on DuckDB, DataFusion, and Spark.
-- Spark pickles the user function by reference, so executors need the same modules and the same
-  udfx version.
+- Spark executors need the modules referenced by the function and the same udfx version.
 - DuckDB expressions are bound to the connection object they were built on. Pass your connection with
   `DuckDBBackend(connection)` and run the query on it. Compiling the same function again reuses
   its fallback function on that connection object. Each thread must use its own connection or cursor.

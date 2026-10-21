@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import (
+from udfx.backends.registration import (
     BinaryRule,
     Lowered,
     register_comparison,
@@ -90,7 +90,7 @@ def float_isinf(value: Column) -> Column:
     return functions.abs(value) == INFINITY
 
 
-ORDER = OrderPrimitives(when, either_nan, Column.isNull, within_exact_float_range)
+ORDER = OrderPrimitives(either_nan, Column.isNull, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():

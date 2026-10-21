@@ -8,9 +8,9 @@ import datafusion
 import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
-from udfx.backends.base import Lowered, RuleResult
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
+from udfx.backends.registration import Lowered, RuleResult
 from udfx.semantics import text
 from udfx.semantics.text import (
     SIGMA,

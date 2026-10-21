@@ -31,3 +31,6 @@ jobs:
       - run: uv run --python ${{ matrix.python }} pytest
         env:
           HYPOTHESIS_PROFILE: ci
+      - run: uv run --python ${{ matrix.python }} pytest -m corpus
+        env:
+          HYPOTHESIS_PROFILE: ci

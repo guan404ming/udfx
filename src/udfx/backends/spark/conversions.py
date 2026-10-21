@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.base import Lowered, register_text_conversions
+from udfx.backends.registration import Lowered, register_text_conversions
 from udfx.backends.spark.numbers import cast_float64, float_isinf
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import (
@@ -37,9 +37,7 @@ def float_int(value: Column) -> Lowered[Column]:
     return Lowered(value.try_cast("bigint"), in_range | functions.isnan(value) | float_isinf(value))
 
 
-@RULES("float", Kind.INT)
-def int_float(value: Column) -> Column:
-    return cast_float64(value)
+RULES("float", Kind.INT)(cast_float64)
 
 
 @RULES("float", Kind.FLOAT)

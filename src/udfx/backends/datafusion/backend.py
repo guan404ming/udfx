@@ -9,8 +9,9 @@ from datafusion import Expr, SessionContext, functions, udf
 
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
-from udfx.backends.base import RESERVED, Backend, Row, RuleSet, output_names, transpose_rows
+from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.datafusion.rules import RULES, column, typed_literal
+from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import BOOL, Type

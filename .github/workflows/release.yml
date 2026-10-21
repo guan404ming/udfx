@@ -30,5 +30,8 @@ jobs:
       - run: uv run pytest
         env:
           HYPOTHESIS_PROFILE: ci
+      - run: uv run pytest -m corpus
+        env:
+          HYPOTHESIS_PROFILE: ci
       - run: uv build --no-sources
       - uses: pypa/gh-action-pypi-publish@release/v1
