@@ -47,9 +47,8 @@ def test_row_columns_use_mixed_hints_and_reach_compiler() -> None:
     attempts = list(schemas(candidate))
     assert attempts[0] == {"text": STR.or_none(), "amount": FLOAT.or_none()}
     result = measure(candidate)
-    assert not result.ok
-    assert result.category == "row schema unsupported"
-    assert result.reason is not None and "does not match parameters" in result.reason
+    assert result.ok
+    assert result.schema == {"text": "str?", "amount": "float?"}
 
 
 @pytest.mark.parametrize(
