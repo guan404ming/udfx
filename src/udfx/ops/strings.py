@@ -26,7 +26,7 @@ def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
     return (Fault(IndexError, apply("or", too_high, too_low)),)
 
 
-def slice_of[Sequence: (str, list[str], list[str | None])](
+def slice_of[Sequence: (str, list[str], list[str | None], list[int], list[float], list[bool])](
     value: Sequence, start: int | None, stop: int | None, step: int | None = None
 ) -> Sequence:
     return value[start:stop:step]

@@ -6,9 +6,10 @@ from conftest import backend_params
 
 from udfx import compile
 from udfx.backends.base import Backend
+from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops.registry import apply
-from udfx.types import INT, STR, Type
+from udfx.types import INT, STR, Type, list_of
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -73,3 +74,18 @@ def test_bounded_integer_guard(backend: Backend[Any], length: int, step: tuple[i
     )
     lowered = backend.lower(apply("int", text))
     assert (lowered.exact is None) == (length <= 18 and step in ((), (1,)))
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_nested_unpacking_uses_source_once(backend: Backend[Any]) -> None:
+    def unpack(items: list[str]) -> list[str]:
+        _first, *middle, _last = items
+        _first, *middle, _last = middle
+        _first, *middle, _last = middle
+        _first, *middle, _last = middle
+        return middle
+
+    program = trace(unpack, {"items": list_of(STR)})
+    expr = str(backend.lower(program.value).expr)
+    assert expr.count("items") == 1
+    assert len(expr) < 1000

@@ -3,14 +3,15 @@ from __future__ import annotations
 import dis
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import node_of
+from udfx.frontend.calls import invoke, node_of
 from udfx.frontend.constants import constant, constant_value, scalar_map
 from udfx.frontend.context import Context
 from udfx.frontend.machine import handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import NULL, Opaque, Set, Tuple, Value
-from udfx.ir import ListValue, Lit
-from udfx.types import STR, list_of
+from udfx.ir import ListValue, Lit, lit
+from udfx.ops import Fault, apply
+from udfx.types import INT, STR, Kind, list_of
 
 
 @handles("RESUME", "NOP", "CACHE")
@@ -112,6 +113,56 @@ def build_container(context: Context, state: State, instruction: dis.Instruction
         else ListValue(nodes, result)
     )
     return [rest.push(Value(value, list)).advance()]
+
+
+@handles("UNPACK_SEQUENCE", "UNPACK_EX")
+def unpack_sequence(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    (item,), rest = state.pop()
+    starred = instruction.opname == "UNPACK_EX"
+    before = instruction.argval & 255 if starred else instruction.argval
+    after = instruction.argval >> 8 if starred else 0
+    match item:
+        case Tuple(items=items):
+            pass
+        case Value(node=Lit(value=tuple() as values), container=container) if container is tuple:
+            items = tuple(constant(value) for value in values)
+        case Opaque(value=tuple() as values):
+            items = tuple(constant(value) for value in values)
+        case Value(node=source, container=container) if (
+            source.type.kind is Kind.LIST and container in (None, list)
+        ):
+            length, faults = invoke("len", [source], TypeError)
+            comparison = "__lt__" if starred else "__ne__"
+            faults.append(Fault(ValueError, apply(comparison, length, lit(before + after))))
+            survivor, steps = context.guard(rest, faults)
+            if survivor is not None:
+                items = tuple(
+                    Value(apply("__getitem__", source, lit(index))) for index in range(before)
+                )
+                if starred:
+                    middle, _ = invoke(
+                        "slice",
+                        [source, lit(before), lit(-after or None, INT.or_none())],
+                        TypeError,
+                    )
+                    items = (
+                        *items,
+                        Value(middle, list),
+                        *(
+                            Value(apply("__getitem__", source, lit(index)))
+                            for index in range(-after, 0)
+                        ),
+                    )
+                steps.append(survivor.push(*reversed(items)).advance())
+            return steps
+        case _:
+            raise Unsupported("unpacking requires a list or tuple", context.where(state))
+    if starred:
+        raise Unsupported("starred unpacking requires a list", context.where(state))
+    survivor, steps = context.guard(rest, [Fault(ValueError, lit(len(items) != before))])
+    if survivor is not None:
+        steps.append(survivor.push(*reversed(items)).advance())
+    return steps
 
 
 @handles("LIST_EXTEND", "SET_UPDATE")

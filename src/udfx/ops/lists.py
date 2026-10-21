@@ -4,7 +4,7 @@ import operator
 
 from udfx.ops.core import is_none
 from udfx.ops.registry import Op, register
-from udfx.ops.strings import out_of_range
+from udfx.ops.strings import out_of_range, slice_of
 from udfx.semantics.lists import set_list, set_size, sorted_set
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
 
@@ -13,6 +13,7 @@ for item in (STR, INT, FLOAT, BOOL):
     register(Op("list", (sequence,), sequence, list))
     register(Op("__add__", (sequence, sequence), sequence, operator.add))
     if item != STR:
+        register(Op("slice", (sequence, INT.or_none(), INT.or_none()), sequence, slice_of))
         register(Op("len", (sequence,), INT, len))
         register(Op("bool", (sequence.or_none(),), BOOL, bool))
         register(Op("is_none", (sequence.or_none(),), BOOL, is_none))

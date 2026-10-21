@@ -20,6 +20,8 @@ def lower(code: CodeType, instructions: Iterable[dis.Instruction]) -> tuple[dis.
     lowered: list[dis.Instruction] = []
     for instruction in (part for whole in instructions for part in split(whole)):
         match instruction.opname:
+            case "EXTENDED_ARG":
+                lowered.append(instruction._replace(opname="NOP"))
             case "POP_TOP" if lowered and lowered[-1].opname == "END_FOR":
                 lowered.append(instruction._replace(opname="NOP"))
             case "GET_ITER" if [part.opname for part in lowered[-2:]] == ["BUILD_LIST", "SWAP"]:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from udfx.types import STR
+from udfx.types import INT, STR, list_of
 
 from . import Case
 
@@ -68,6 +68,51 @@ def lazy_fault(text: str) -> bool:
     return any(word[0] in text for word in ("a", ""))
 
 
+def unpack_fields(text: str) -> str:
+    key, value = text.split(",")
+    return key + ":" + value
+
+
+def unpack_words(text: str) -> str:
+    first, *rest = text.split()
+    return first + ":" + " ".join(rest)
+
+
+def unpack_ends(text: str) -> str:
+    first, *middle, last = text.split()
+    return last + " ".join(middle) + first
+
+
+def unpack_tuple(text: str) -> str:
+    pair = (text, 2)
+    value, stop = pair
+    return value[:stop]
+
+
+def unpack_constant(text: str) -> str:
+    pair = ("prefix:", 2)
+    prefix, stop = pair
+    return prefix + text[:stop]
+
+
+def unpack_caught(text: str) -> str:
+    try:
+        key, value = text.split("=")
+        return key + value
+    except ValueError:
+        return text
+
+
+def unpack_pair(pair: list[str]) -> str:
+    key, value = pair
+    return key + value
+
+
+def unpack_numbers(numbers: list[int]) -> int:
+    first, *middle, last = numbers
+    return first + sum(middle) + last
+
+
 CASES = [
     Case(function.__name__, function, {"text": STR.or_none()}, "native")
     for function in (
@@ -84,5 +129,18 @@ CASES = [
         constant_suffixes,
         selected_suffixes,
         lazy_fault,
+        unpack_fields,
+        unpack_words,
+        unpack_ends,
+        unpack_tuple,
+        unpack_constant,
+        unpack_caught,
     )
 ]
+
+CASES.extend(
+    [
+        Case("unpack_pair", unpack_pair, {"pair": list_of(STR).or_none()}, "native"),
+        Case("unpack_numbers", unpack_numbers, {"numbers": list_of(INT).or_none()}, "native"),
+    ]
+)

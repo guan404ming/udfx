@@ -146,8 +146,8 @@ def test_mixed_container_is_unsupported() -> None:
         trace(in_mixed, {"s": STR})
 
 
-def test_constant_container_outside_in_is_unsupported() -> None:
-    with pytest.raises(Unsupported, match="constant container"):
+def test_constant_tuple_return_is_unsupported() -> None:
+    with pytest.raises(Unsupported, match="tuple returns are unsupported"):
         trace(returns_tuple, {"s": STR})
 
 

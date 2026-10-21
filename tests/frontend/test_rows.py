@@ -142,7 +142,7 @@ def test_unknown_row_column_names_the_key(function: Callable[..., object]) -> No
         (assign_attribute, "STORE_ATTR"),
         (assign_alias, "assignment of a row"),
         (lambda row: row, "expected a value, got a row"),
-        (lambda row: (row,), "expected a value, got a tuple"),
+        (lambda row: (row,), "tuple returns are unsupported"),
     ],
 )
 def test_other_row_uses_are_unsupported(function: Callable[..., object], reason: str) -> None:

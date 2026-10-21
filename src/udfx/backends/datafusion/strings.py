@@ -254,8 +254,9 @@ SEQUENCE = SequencePrimitives(
     reverse=functions.array_reverse,
     stride=lambda value, step: functions.array_slice(value, 1, 2**31 - 1, step),
     bind=lambda value, transform: functions.array_element(
-        functions.array_transform(functions.make_array(value), transform).cast(
-            pa.list_(pa.list_(pa.string()))
+        functions.coalesce(
+            functions.array_transform(functions.make_array(value), transform),
+            functions.make_array(value),
         ),
         1,
     ),

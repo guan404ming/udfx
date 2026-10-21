@@ -120,7 +120,7 @@ def unpacking(s: str) -> str:
             r"return types differ: returns int on one path and str on another; return one type",
         ),
         (module_callable, {"s": STR}, r"unknown callable unicodedata\.normalize"),
-        (unpacking, {"s": STR}, r"opcode UNPACK_SEQUENCE at unpacking\+\d+"),
+        (unpacking, {"s": STR}, r"unpacking requires a list or tuple at unpacking\+\d+"),
         (len, {"s": STR}, r"len is not a Python function"),
     ],
 )
