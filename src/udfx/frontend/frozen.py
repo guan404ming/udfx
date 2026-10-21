@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import CellType, CodeType, FunctionType, ModuleType
 
+from udfx.frontend.calls import known_op
 from udfx.frontend.constants import constant
 from udfx.frontend.values import Item
 
@@ -23,7 +24,7 @@ class Snapshot:
     def value(self, value: object) -> object:
         if id(value) in self.values:
             return self.values[id(value)]
-        if isinstance(value, FunctionType):
+        if isinstance(value, FunctionType) and known_op(value) is None:
             return self.function(value)
         if isinstance(value, ModuleType):
             frozen = ModuleType(value.__name__)

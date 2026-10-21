@@ -56,7 +56,7 @@ def node_of(item: Item) -> Node:
     return item.node
 
 
-def op_name(callee: object) -> str:
+def known_op(callee: object) -> str | None:
     for known, name in CALLABLES:
         if known is callee:
             return name
@@ -65,10 +65,14 @@ def op_name(callee: object) -> str:
     name = getattr(callee, "__qualname__", None) or getattr(callee, "__name__", "")
     if owner.__module__ == "numpy" and owner.__name__ == "ufunc":
         module = "ufunc"
-    found = CALLABLE_IDENTITIES.get((owner.__module__, module, name))
-    if found is not None:
-        return found
-    raise Unsupported(f"unknown callable {named(callee)}")
+    return CALLABLE_IDENTITIES.get((owner.__module__, module, name))
+
+
+def op_name(callee: object) -> str:
+    found = known_op(callee)
+    if found is None:
+        raise Unsupported(f"unknown callable {named(callee)}")
+    return found
 
 
 def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:

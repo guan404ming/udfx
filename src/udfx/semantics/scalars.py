@@ -32,7 +32,9 @@ def missing_expression(
 
 
 def numpy_scalar(name: str, *arguments: object) -> object:
-    value = getattr(sys.modules["numpy"], name)(*arguments)
+    numpy = sys.modules["numpy"]
+    with numpy.errstate(all="ignore"):
+        value = getattr(numpy, name)(*arguments)
     return python_scalar(value)
 
 

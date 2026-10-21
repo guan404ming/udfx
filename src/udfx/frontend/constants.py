@@ -5,7 +5,7 @@ from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, none_test
+from udfx.frontend.calls import invoke, known_op, none_test
 from udfx.frontend.logic import choose, conjunction, negate
 from udfx.frontend.values import Function, Item, Opaque, RuntimeType, Value, describe, named
 from udfx.ir import TRUE, Col, Lit, Node, lit
@@ -62,7 +62,7 @@ def is_scalar(value: object) -> bool:
 
 
 def constant(value: object) -> Item:
-    if isinstance(value, FunctionType):
+    if isinstance(value, FunctionType) and known_op(value) is None:
         return Function(value.__code__, (), value)
     if is_scalar(value):
         return Value(lit(value))
