@@ -6,6 +6,7 @@ import pytest
 from conftest import backend_params
 
 from tests.corpus.cases_string_splitting import index_split_limit
+from tests.corpus.cases_strings import join_characters
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.testing import check_function
@@ -35,3 +36,11 @@ def test_split_index_empty_branch_lazy(
     frame = pl.DataFrame(ROWS, schema=["text", "maximum", "index"], orient="row")
     actual = frame.lazy().select(translation.expr).collect(engine=engine).to_series().to_list()
     assert actual == [function(*row) for row in ROWS]
+
+
+@pytest.mark.parametrize("engine", ["in-memory", "streaming"])
+def test_join_characters_on_empty_frames(engine: Literal["in-memory", "streaming"]) -> None:
+    translation = compile(join_characters, {"text": STR, "separator": STR})
+    assert translation.expr is not None, translation.unsupported
+    frame = pl.DataFrame(schema={"text": pl.String, "separator": pl.String})
+    assert frame.lazy().select(translation.expr).collect(engine=engine).to_series().to_list() == []
