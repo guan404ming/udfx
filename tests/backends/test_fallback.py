@@ -240,3 +240,13 @@ def test_nullable_list_literal(backend: Backend[Any]) -> None:
 )
 def test_float_literals(backend: Backend[Any], function: Callable[[float], object]) -> None:
     assert check_function(function, {"x": FLOAT}, backend, FLOATS) == []
+
+
+def test_fallback_rows_check_list_items() -> None:
+    for item, valid in ((STR, False), (STR.or_none(), True), (INT, False)):
+        program = Program(lambda text: [text, None], {"text": STR}, Lit((), list_of(item)))
+        if valid:
+            assert program.run([("a",)]) == [["a", None]]
+        else:
+            with pytest.raises(OverflowError, match="does not fit"):
+                program.run([("a",)])

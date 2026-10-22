@@ -102,6 +102,9 @@ def fits(value: object, type: Type) -> bool:
             return isinstance(value, int | float)
         case Kind.LIST if type.item is not None and isinstance(value, list):
             item = type.item
-            return all(fits(element, item) for element in cast("list[object]", value))
+            elements = cast("list[object]", value)
+            if item.kind in {Kind.STR, Kind.BOOL}:
+                return item.nullable or None not in elements
+            return all(fits(element, item) for element in elements)
         case _:
             return True
