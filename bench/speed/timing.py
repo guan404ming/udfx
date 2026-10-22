@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from udfx.backends.base import Backend
-from udfx.backends.lowering import lower_program
 from udfx.program import Program
 from udfx.testing.outcome import same
 
@@ -57,7 +56,10 @@ def fallback_in_plan(expr: Any, engine: str) -> bool:
 def pending_share(
     backend: Backend[Any], program: Program, evaluate: Callable[[Any], Sequence[object]]
 ) -> float:
-    exact = lower_program(backend, program).exact
+    native = backend.native_program(program)
+    if native is None:
+        return 1.0
+    exact = native.exact
     if exact is None:
         return 0.0
     flags = evaluate(exact)

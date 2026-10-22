@@ -207,14 +207,18 @@ class Backend[E](ABC):
 
     def build(self, program: Program) -> E:
         self.check_names(program.schema)
-        if not self.python_ops.isdisjoint(op_names(program.value) | op_names(program.fault)):
-            return self.python(program)
-        value = lower_program(self, program)
-        if self.too_costly(value):
+        value = self.native_program(program)
+        if value is None:
             return self.python(program)
         return (
             value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
         )
+
+    def native_program(self, program: Program) -> Lowered[E] | None:
+        if not self.python_ops.isdisjoint(op_names(program.value) | op_names(program.fault)):
+            return None
+        value = lower_program(self, program)
+        return None if self.too_costly(value) else value
 
     def python(self, program: Program) -> E:
         return self.fallback(self.literal(Lit(None, program.result)), self.literal(FALSE), program)
@@ -240,9 +244,4 @@ class Backend[E](ABC):
         if any(part is False for part in parts):
             return self.literal(FALSE)
         present = [cast("E", part) for part in parts if part is not None and part is not True]
-        if not present:
-            return None
-        combined = present[0]
-        for part in present[1:]:
-            combined = self.both(combined, part)
-        return combined
+        return reduce(self.both, present) if present else None

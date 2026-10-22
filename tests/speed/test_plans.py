@@ -5,10 +5,11 @@ from conftest import backend_params
 
 from bench.speed.timing import fallback_in_plan, pending_share
 from udfx.backends.base import Backend
+from udfx.backends.duckdb import DuckDBBackend
 from udfx.frontend import trace
 from udfx.ir import Col, Guarded
 from udfx.program import Program
-from udfx.types import BOOL, FLOAT, INT
+from udfx.types import BOOL, FLOAT, INT, STR
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -44,3 +45,10 @@ def test_exact_plan_has_zero_pending_share(backend: Backend[Any]) -> None:
     program = trace(lambda value: value == 0, {"value": FLOAT})
     assert not fallback_in_plan(backend.build(program), backend.name)
     assert pending_share(backend, program, lambda exact: pytest.fail("unneeded query")) == 0.0
+
+
+def test_python_programs_are_fully_pending() -> None:
+    backend = DuckDBBackend()
+    program = trace(lambda left, right: len(set(left) & set(right)), {"left": STR, "right": STR})
+    assert fallback_in_plan(backend.build(program), backend.name)
+    assert pending_share(backend, program, lambda exact: []) == 1.0
