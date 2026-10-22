@@ -14,7 +14,7 @@ from udfx.frontend.logic import conjunction
 from udfx.frontend.values import Item, Match, Method, Opaque, Value
 from udfx.ir import FALSE, Lit, Node, lit
 from udfx.ops import Fault
-from udfx.semantics.regex import replacement, translate
+from udfx.semantics.regex_translation import replacement, translate
 
 
 def literal(item: Item, name: str, kind: type | tuple[type, ...]) -> Any:

@@ -13,7 +13,8 @@ from udfx.ops import apply
 from udfx.testing import check_function
 from udfx.types import FLOAT, INT, STR, Type
 
-from .test_helpers import clean_text, keyword
+from .test_global_helpers import clean_text
+from .test_helpers import keyword
 
 
 def keyword_helper(text: str, /, prefix: str = "[", *, suffix: str = "]") -> str:
