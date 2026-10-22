@@ -18,6 +18,8 @@ JAVA_FIXED_MAX = 1e7
 
 
 TEXT = TextPrimitives(
+    literal=functions.lit,
+    when=when,
     coalesce=functions.coalesce,
     translate=functions.translate,
     matches=lambda text, pattern: text.rlike(pattern),
@@ -35,7 +37,9 @@ SPELLING = SpellingPrimitives(functions.lit, when, Column.isNull, functions.coal
 @RULES("int", Kind.FLOAT)
 def float_int(value: Column) -> Lowered[Column]:
     in_range = (value >= float(INT64_MIN)) & (value < float(INT64_MAX))
-    return Lowered(value.try_cast("bigint"), in_range | functions.isnan(value) | float_isinf(value))
+    return Lowered(
+        value.try_cast("bigint"), overflow=~(in_range | functions.isnan(value) | float_isinf(value))
+    )
 
 
 RULES("float", Kind.INT)(cast_float64)

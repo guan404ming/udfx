@@ -22,12 +22,16 @@ from udfx.ir import Lit
 from udfx.testing import check_function
 from udfx.types import INT, STR
 
-from .functions import inverse, year
+from .functions import inverse
 
 NO_JAVA = {**os.environ, "JAVA_HOME": "/nonexistent"}
 YEARS = "SELECT * FROM (VALUES ('2024-01'), ('\uff11\uff12\uff13\uff14')) AS years(text)"
 ZERO = "SELECT 0::BIGINT AS x"
 FALLBACKS = "SELECT count(*) FROM duckdb_functions() WHERE function_name LIKE 'udfx fallback %'"
+
+
+def guarded_year(text: str) -> int:
+    return (int(text[:4]) + 2) - 1
 
 
 def exclaim(s: str) -> str:
@@ -48,7 +52,7 @@ def test_case_drift_probe_runs_on_the_engine(
 def test_duckdb_fallback_releases_the_connection() -> None:
     connection = duckdb.connect()
     reference = weakref.ref(connection)
-    translation = compile(year, {"text": STR}, DuckDBBackend(connection))
+    translation = compile(guarded_year, {"text": STR}, DuckDBBackend(connection))
     assert translation.ok
     del connection
     gc.collect()
@@ -57,7 +61,7 @@ def test_duckdb_fallback_releases_the_connection() -> None:
 
 @pytest.mark.xdist_group("duckdb")
 def test_duckdb_string_form_runs_on_default_connection() -> None:
-    translation = compile(year, {"text": STR}, "duckdb")
+    translation = compile(guarded_year, {"text": STR}, "duckdb")
     assert translation.ok
     assert duckdb.sql(YEARS).select(translation.expr).fetchall() == [(2025,), (1235,)]
 
@@ -66,7 +70,7 @@ def test_duckdb_string_form_runs_on_default_connection() -> None:
 def test_duckdb_explicit_connection_registers_each_program_once() -> None:
     connection = duckdb.connect()
     backend = DuckDBBackend(connection)
-    translation = compile(year, {"text": STR}, backend)
+    translation = compile(guarded_year, {"text": STR}, backend)
     assert translation.program is not None
     again = backend.build(translation.program)
     for expr in (translation.expr, again):
@@ -77,7 +81,7 @@ def test_duckdb_explicit_connection_registers_each_program_once() -> None:
 def test_duckdb_recompiling_reuses_the_fallback_function() -> None:
     connection = duckdb.connect()
     for _ in range(3):
-        assert compile(year, {"text": STR}, DuckDBBackend(connection)).ok
+        assert compile(guarded_year, {"text": STR}, DuckDBBackend(connection)).ok
     assert connection.sql(FALLBACKS).fetchall() == [(1,)]
     expr = compile(inverse, {"x": INT}, DuckDBBackend(connection)).expr
     with pytest.raises(ZeroDivisionError):
@@ -85,7 +89,7 @@ def test_duckdb_recompiling_reuses_the_fallback_function() -> None:
 
 
 def run_years(connection: duckdb.DuckDBPyConnection) -> list[tuple[object, ...]]:
-    expr = compile(year, {"text": STR}, DuckDBBackend(connection)).expr
+    expr = compile(guarded_year, {"text": STR}, DuckDBBackend(connection)).expr
     return connection.sql(YEARS).select(expr).fetchall()
 
 

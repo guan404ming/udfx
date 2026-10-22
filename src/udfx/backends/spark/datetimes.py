@@ -4,7 +4,12 @@ from pyspark.sql import Column, functions
 
 from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
 from udfx.backends.spark.rules import RULES
-from udfx.semantics.datetimes import DatetimeArithmeticPrimitives, DatetimePrimitives
+from udfx.semantics.datetimes import (
+    TIMESTAMP_LITERAL,
+    DatetimeArithmeticPrimitives,
+    DatetimePrimitives,
+)
+from udfx.semantics.literals import INT_LITERAL
 
 
 def part(value: Column, name: str) -> Column:
@@ -33,8 +38,10 @@ register_datetimes(
         ),
         concatenate=lambda parts: functions.concat(*parts),
         extract=functions.regexp_extract,
-        parse=lambda text: text.try_cast("timestamp_ntz"),
-        to_integer=lambda value: value.try_cast("long"),
+        parse=lambda text: functions.when(
+            text.rlike(TIMESTAMP_LITERAL), text.try_cast("timestamp_ntz")
+        ),
+        to_integer=lambda value: functions.when(value.rlike(INT_LITERAL), value.try_cast("long")),
         select=lambda condition, then, orelse: functions.when(condition, then).otherwise(orelse),
         is_null=Column.isNull,
     ),

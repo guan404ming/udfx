@@ -12,6 +12,7 @@ from udfx.backends.registration import (
     register_equality,
     register_float_variants,
 )
+from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -40,7 +41,7 @@ def within_exact_float_range(value: pl.Expr) -> pl.Expr:
 def overflow_checked(operation: Binary) -> BinaryRule[pl.Expr]:
     def rule(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
         wide = operation(left.cast(pl.Int128), right.cast(pl.Int128))
-        return Lowered(operation(left, right), fits_int64(wide))
+        return Lowered(operation(left, right), overflow=~fits_int64(wide))
 
     return rule
 
@@ -109,19 +110,21 @@ def int_truediv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
     )
 
 
-@RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(left // right, ~division_overflows(pl.lit, left, right))
+@RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})
+def int_floordiv(left: pl.Expr, right: pl.Expr, bounded: bool = False) -> Lowered[pl.Expr]:
+    return Lowered(
+        left // right, overflow=None if bounded else division_overflows(pl.lit, left, right)
+    )
 
 
 @RULES("__neg__", Kind.INT)
 def int_neg(value: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(-value, value != INT64_MIN)
+    return Lowered(-value, overflow=value == INT64_MIN)
 
 
 @RULES("abs", Kind.INT)
 def int_abs(value: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(value.abs(), value != INT64_MIN)
+    return Lowered(value.abs(), overflow=value == INT64_MIN)
 
 
 def log10(value: pl.Expr) -> Lowered[pl.Expr]:

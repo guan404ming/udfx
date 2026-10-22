@@ -1,21 +1,17 @@
 from __future__ import annotations
 
-import operator
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
-from udfx.ops.registry import OpKey
-from udfx.semantics.datetimes import (
-    ATTRIBUTES,
-    DatetimeArithmeticPrimitives,
-    DatetimePrimitives,
-    datetime_field,
-    format_datetime,
-    parse_datetime,
-    shift_datetime,
-    shift_overflows,
+from udfx.backends.registration_datetimes import register_datetime_arithmetic, register_datetimes
+from udfx.backends.registration_text import (
+    register_padding,
+    register_regex,
+    register_string_predicates,
+    register_text_conversions,
+    register_translation,
 )
+from udfx.backends.rules import BinaryRule, Lowered, Rule, RuleOptions, RuleResult, RuleSet
 from udfx.semantics.lists import (
     ListPrimitives,
     SetPrimitives,
@@ -23,16 +19,8 @@ from udfx.semantics.lists import (
     native_set,
     repeat_list,
 )
-from udfx.semantics.literals import (
-    TextPrimitives,
-    float_parses,
-    int_parses,
-    parse_float,
-    parse_int,
-)
 from udfx.semantics.math import transcendental
 from udfx.semantics.numbers import (
-    COMPARISONS,
     Binary,
     OrderPrimitives,
     RoundPrimitives,
@@ -42,109 +30,24 @@ from udfx.semantics.numbers import (
     signed_round,
     widened_exact,
 )
-from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.scalars import missing_expression
-from udfx.semantics.text import (
-    PADDING_METHODS,
-    PREDICATES,
-    PaddingPrimitives,
-    pad_text,
-    string_predicate,
-)
-from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
 
-
-@dataclass(frozen=True)
-class Lowered[E]:
-    expr: E
-    exact: E | None = None
-
-
-type RuleResult[E] = E | Lowered[E]
-type Rule[E] = Callable[..., RuleResult[E]]
-type BinaryRule[E] = Callable[[E, E], RuleResult[E]]
-
-
-BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
-    OpKey("not", (Kind.BOOL,)): operator.invert,
-    OpKey("and", (Kind.BOOL, Kind.BOOL)): operator.and_,
-    OpKey("or", (Kind.BOOL, Kind.BOOL)): operator.or_,
-}
-
-
-class RuleSet[E]:
-    def __init__(self) -> None:
-        self._rules: dict[OpKey, Rule[E]] = dict(BOOLEAN_RULES)
-
-    def __call__[**P](
-        self, name: str, *kinds: Kind
-    ) -> Callable[[Callable[P, RuleResult[E]]], Callable[P, RuleResult[E]]]:
-        key = OpKey(name, kinds)
-
-        def decorate(rule: Callable[P, RuleResult[E]]) -> Callable[P, RuleResult[E]]:
-            if key in self._rules:
-                raise ValueError(f"duplicate rule {key}")
-            self._rules[key] = rule
-            return rule
-
-        return decorate
-
-    def get(self, key: OpKey) -> Rule[E] | None:
-        return self._rules.get(key)
-
-    def keys(self) -> frozenset[OpKey]:
-        return frozenset(self._rules)
-
-
-def register_regex[E](rules: RuleSet[E], primitives: RegexPrimitives) -> None:
-    def rule(name: str) -> Rule[E]:
-        return lambda *arguments: Lowered(*lower_regex(primitives, name, *arguments))
-
-    for name in ("search", "match", "fullmatch", "findall"):
-        rules(f"re.{name}", Kind.STR, Kind.STR, Kind.INT)(rule(name))
-    rules("re.sub", Kind.STR, Kind.STR, Kind.INT, Kind.STR, Kind.INT)(
-        lambda text, pattern, flags, substitute, count: Lowered(
-            *lower_regex(
-                primitives, "sub", text, pattern, flags, substitute=substitute, count=count
-            )
-        )
-    )
-    rules("re.split", Kind.STR, Kind.STR, Kind.INT, Kind.INT)(
-        lambda text, pattern, flags, count: Lowered(
-            *lower_regex(primitives, "split", text, pattern, flags, count=count)
-        )
-    )
-
-
-def register_string_predicates[E](rules: RuleSet[E], matches: Callable[[E, str], E]) -> None:
-    for method in PREDICATES:
-        rules(f".{method}", Kind.STR)(
-            lambda value, method=method: string_predicate(matches, value, method)
-        )
-
-
-def register_translation[E](rules: RuleSet[E], primitives: TextPrimitives) -> None:
-    rules(".translate", Kind.STR, Kind.STR, Kind.LIST)(
-        lambda text, characters, replacements: Lowered(
-            *lower_translation(primitives, text, characters, replacements)
-        )
-    )
-
-
-def register_padding[E](rules: RuleSet[E], primitives: PaddingPrimitives) -> None:
-    for method in PADDING_METHODS:
-        rules(f".{method}", Kind.STR, Kind.INT)(
-            lambda value, width, method=method: Lowered(
-                *pad_text(primitives, value, width, primitives.literal(" "), method)
-            )
-        )
-        if method != "zfill":
-            rules(f".{method}", Kind.STR, Kind.INT, Kind.STR)(
-                lambda value, width, fill, method=method: Lowered(
-                    *pad_text(primitives, value, width, fill, method)
-                )
-            )
+__all__ = [
+    "BinaryRule",
+    "Lowered",
+    "Rule",
+    "RuleOptions",
+    "RuleResult",
+    "RuleSet",
+    "register_datetime_arithmetic",
+    "register_datetimes",
+    "register_padding",
+    "register_regex",
+    "register_string_predicates",
+    "register_text_conversions",
+    "register_translation",
+]
 
 
 def register_float_variants[E](
@@ -263,58 +166,6 @@ def register_extremum[E](
     )
     for kind in (Kind.INT, Kind.STR):
         rules(name, kind, kind)(pick)
-
-
-def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> None:
-    def register(name: str, parse: Callable[[TextPrimitives, Any], tuple[Any, Any]]) -> None:
-        rules(name, Kind.STR)(lambda value: Lowered(*parse(text, value)))
-
-    rules("int_parses", Kind.STR)(
-        lambda value, maximum_length=None: Lowered(*int_parses(text, value, maximum_length))
-    )
-    rules("int", Kind.STR)(
-        lambda value, maximum_length=None: Lowered(*parse_int(text, value, maximum_length))
-    )
-    register("float_parses", float_parses)
-    register("float", parse_float)
-
-
-def register_datetimes[E](rules: RuleSet[E], primitives: DatetimePrimitives, equal: Binary) -> None:
-    for name in (*ATTRIBUTES, "weekday", "isoweekday", "toordinal"):
-        rules(f".{name}", Kind.DATETIME)(
-            lambda value, name=name: datetime_field(primitives, value, name)
-        )
-    for name, compare in COMPARISONS.items():
-        rules(name, Kind.DATETIME, Kind.DATETIME)(compare)
-    rules("__eq__", Kind.DATETIME, Kind.DATETIME)(equal)
-    rules("__ne__", Kind.DATETIME, Kind.DATETIME)(lambda left, right: ~equal(left, right))
-    rules("bool", Kind.DATETIME)(lambda value: ~primitives.is_null(value))
-    rules(".strftime", Kind.DATETIME, Kind.STR)(
-        lambda value, format: Lowered(*format_datetime(primitives, value, format))
-    )
-    rules("datetime.strptime", Kind.STR, Kind.STR)(
-        lambda text, format: Lowered(*parse_datetime(primitives, text, format))
-    )
-
-    def parses(text: E, format: Any) -> Lowered[E]:
-        parsed, exact = parse_datetime(primitives, text, format)
-        return Lowered(~primitives.is_null(parsed), exact)
-
-    rules("datetime_parses", Kind.STR, Kind.STR)(parses)
-
-
-def register_datetime_arithmetic[E](
-    rules: RuleSet[E], primitives: DatetimeArithmeticPrimitives
-) -> None:
-    rules("datetime_difference", Kind.DATETIME, Kind.DATETIME)(
-        lambda left, right: primitives.to_microseconds(left) - primitives.to_microseconds(right)
-    )
-    rules("datetime_shift", Kind.DATETIME, Kind.INT)(
-        lambda value, offset: shift_datetime(primitives, value, offset)
-    )
-    rules("datetime_shift_overflows", Kind.DATETIME, Kind.INT)(
-        lambda value, offset: shift_overflows(primitives, primitives.to_microseconds(value), offset)
-    )
 
 
 def register_lists[E](rules: RuleSet[E], primitives: ListPrimitives, sets: SetPrimitives) -> None:

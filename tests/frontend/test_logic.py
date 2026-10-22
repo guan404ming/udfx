@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from udfx.frontend import trace
@@ -80,3 +82,11 @@ def test_raising_constant_call_keeps_its_faults() -> None:
     node, faults = invoke("__getitem__", [lit("abc"), lit(5)], TypeError)
     assert node == apply("__getitem__", lit("abc"), lit(5))
     assert [fault.kind for fault in faults] == [IndexError]
+
+
+@pytest.mark.parametrize(
+    "function",
+    [lambda text: text.rsplit(",")[0], lambda text: (text.split(",") + text.rsplit(","))[1]],
+)
+def test_minimum_length_removes_index_fault(function: Callable[[str], str]) -> None:
+    assert trace(function, {"text": STR}).fault == FALSE

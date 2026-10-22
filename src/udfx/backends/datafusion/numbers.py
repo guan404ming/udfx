@@ -13,6 +13,7 @@ from udfx.backends.registration import (
     register_equality,
     register_float_variants,
 )
+from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -45,7 +46,7 @@ def cast_float64(value: Expr) -> Expr:
 def overflow_checked(operation: Binary) -> BinaryRule[Expr]:
     def rule(left: Expr, right: Expr) -> Lowered[Expr]:
         wide = operation(left.cast(WIDE), right.cast(WIDE))
-        return Lowered(operation(left, right), fits_int64(wide))
+        return Lowered(operation(left, right), overflow=~fits_int64(wide))
 
     return rule
 
@@ -104,10 +105,10 @@ def int_truediv(left: Expr, right: Expr) -> Lowered[Expr]:
     )
 
 
-@RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(left: Expr, right: Expr) -> Lowered[Expr]:
-    quotient, _, exact = int_divmod(INTEGERS, left, right)
-    return Lowered(quotient, exact)
+@RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})
+def int_floordiv(left: Expr, right: Expr, bounded: bool = False) -> Lowered[Expr]:
+    quotient, _, exact = int_divmod(INTEGERS, left, right, bounded)
+    return Lowered(quotient, overflow=None if exact is None else ~exact)
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)
@@ -117,7 +118,7 @@ def int_mod(left: Expr, right: Expr) -> Expr:
 
 @RULES("__neg__", Kind.INT)
 def int_neg(value: Expr) -> Lowered[Expr]:
-    return Lowered(lit(0) - value, value != lit(INT64_MIN))
+    return Lowered(lit(0) - value, overflow=value == lit(INT64_MIN))
 
 
 @RULES("__neg__", Kind.FLOAT)
@@ -128,7 +129,7 @@ def float_neg(value: Expr) -> Expr:
 @RULES("abs", Kind.INT)
 def int_abs(value: Expr) -> Lowered[Expr]:
     return Lowered(
-        functions.abs(functions.greatest(value, lit(-INT64_MAX))), value != lit(INT64_MIN)
+        functions.abs(functions.greatest(value, lit(-INT64_MAX))), overflow=value == lit(INT64_MIN)
     )
 
 

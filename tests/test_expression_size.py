@@ -125,7 +125,7 @@ def test_bounded_integer_guard(backend: Backend[Any], length: int, step: tuple[i
         *(lit(value) for value in step),
     )
     lowered = backend.lower(apply("int", text))
-    assert (lowered.exact is None) == (length <= 18 and step in ((), (1,)))
+    assert (backend.exact(lowered) is None) == (length <= 18 and step in ((), (1,)))
 
 
 @pytest.mark.parametrize("backend", backend_params())

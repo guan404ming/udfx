@@ -29,18 +29,7 @@ def matches(text: Expression, pattern: str) -> Expression:
 
 
 def try_int(digits: Expression) -> Expression:
-    try:
-        return duckdb.SQLExpression(f"TRY_CAST({digits} AS BIGINT)")
-    except duckdb.ParserException:
-        pass
-    convert = duckdb.LambdaExpression(
-        "udfx digits", duckdb.SQLExpression('TRY_CAST("udfx digits" AS BIGINT)')
-    )
-    return function(
-        "list_extract",
-        function("list_transform", function("list_value", digits), convert),
-        constant(1),
-    )
+    return function("from_json", function("to_json", digits), constant('"BIGINT"'))
 
 
 def try_float(digits: Expression) -> Expression:
@@ -48,6 +37,8 @@ def try_float(digits: Expression) -> Expression:
 
 
 TEXT = TextPrimitives(
+    literal=constant,
+    when=when,
     coalesce=duckdb.CoalesceOperator,
     translate=lambda text, old, new: function("translate", text, constant(old), constant(new)),
     matches=matches,
@@ -64,8 +55,8 @@ SPELLING = SpellingPrimitives(constant, when, Expression.isnull, duckdb.Coalesce
 
 @RULES("int", Kind.FLOAT)
 def float_int(value: Expression) -> Lowered[Expression]:
-    value = try_truncate_int64(value)
-    return Lowered(value, value.isnotnull() | ~function("isfinite", value))
+    whole = try_truncate_int64(value)
+    return Lowered(whole, overflow=~(whole.isnotnull() | ~function("isfinite", value)))
 
 
 RULES("float", Kind.INT)(cast_float64)

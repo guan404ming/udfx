@@ -19,6 +19,7 @@ from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, column, constant, function, when
+from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
@@ -32,6 +33,7 @@ ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 CONNECTIONS = weakref.WeakKeyDictionary[duckdb.DuckDBPyConnection, int]()
 NUMBERS = itertools.count()
 LOCK = threading.Lock()
+DEFAULT_FAULTS = NativeFaults()
 
 
 def connection_number(connection: duckdb.DuckDBPyConnection) -> int:
@@ -96,6 +98,23 @@ class DuckDBBackend(Backend[Expression]):
         return function(
             "list_filter", source, duckdb.LambdaExpression(name, predicate(column(name)))
         )
+
+    @property
+    def native_faults(self) -> NativeFaults:
+        return DEFAULT_FAULTS if self._connection is None else faults_for(self._connection)
+
+    def native_raise(self, program: Program) -> Expression:
+        packed = (
+            function(
+                "struct_pack",
+                *(column(name).alias(str(index)) for index, name in enumerate(program.schema)),
+            )
+            if program.schema
+            else constant({})
+        )
+        encoded = function("hex", function("encode", function("to_json", packed)))
+        message = function("concat", constant(self.native_faults.marker(program)), encoded)
+        return function("error", message).cast(dtype(program.result))
 
     def fallback(self, native: Expression, exact: Expression, program: Program) -> Expression:
         connection = self.connection

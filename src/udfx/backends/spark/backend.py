@@ -10,6 +10,7 @@ from pyspark.sql.types import StructField, StructType
 
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names
+from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.registration import RuleSet
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
@@ -78,6 +79,26 @@ class SparkBackend(Backend[Column]):
 
     def list_filter(self, source: Column, predicate: Callable[[Column], Column]) -> Column:
         return functions.filter(source, predicate)
+
+    @property
+    def native_faults(self) -> NativeFaults:
+        return faults_for(self.session().sparkContext)
+
+    def native_raise(self, program: Program) -> Column:
+        packed = functions.struct(
+            *(
+                self.column(Col(name, type)).alias(str(index))
+                for index, (name, type) in enumerate(program.schema.items())
+            )
+        )
+        encoded = functions.hex(
+            functions.encode(
+                functions.to_json(packed, {"timestampNTZFormat": "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"}),
+                "UTF-8",
+            )
+        )
+        message = functions.concat(functions.lit(self.native_faults.marker(program)), encoded)
+        return functions.raise_error(message).cast(dtype(program.result))
 
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
         result = dtype(program.result)

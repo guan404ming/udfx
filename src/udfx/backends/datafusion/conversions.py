@@ -19,6 +19,8 @@ from udfx.semantics.numbers import (
 from udfx.types import Kind
 
 TEXT = TextPrimitives(
+    literal=lit,
+    when=when,
     coalesce=functions.coalesce,
     translate=lambda text, old, new: functions.translate(text, lit(old), lit(new)),
     matches=lambda text, pattern: functions.regexp_like(text, lit(pattern)),
@@ -36,7 +38,7 @@ SPELLING = SpellingPrimitives(lit, when, Expr.is_null, functions.coalesce)
 @RULES("int", Kind.FLOAT)
 def float_int(value: Expr) -> Lowered[Expr]:
     whole = value.try_cast(pa.int64())
-    return Lowered(whole, whole.is_not_null() | ~finite(value))
+    return Lowered(whole, overflow=~(whole.is_not_null() | ~finite(value)))
 
 
 RULES("float", Kind.INT)(cast_float64)

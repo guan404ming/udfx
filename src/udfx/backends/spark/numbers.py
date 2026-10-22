@@ -13,6 +13,7 @@ from udfx.backends.registration import (
     register_float_variants,
 )
 from udfx.backends.spark.rules import RULES, when
+from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -45,7 +46,7 @@ def within_exact_float_range(value: Column) -> Column:
 def overflow_checked(operation: Callable[[Column, Column], Column]) -> BinaryRule[Column]:
     def rule(left: Column, right: Column) -> Lowered[Column]:
         result = operation(left, right)
-        return Lowered(result, result.isNotNull())
+        return Lowered(result, overflow=result.isNull() & left.isNotNull() & right.isNotNull())
 
     return rule
 
@@ -120,21 +121,22 @@ def int_truediv(left: Column, right: Column) -> Lowered[Column]:
     )
 
 
-@RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(left: Column, right: Column) -> Lowered[Column]:
-    quotient, _, exact = int_divmod(INTEGERS, left, right)
-    return Lowered(quotient, exact)
+@RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})
+def int_floordiv(left: Column, right: Column, bounded: bool = False) -> Lowered[Column]:
+    quotient, _, exact = int_divmod(INTEGERS, left, right, bounded)
+    return Lowered(quotient, overflow=None if exact is None else ~exact)
 
 
 @RULES("__neg__", Kind.INT)
 def int_neg(value: Column) -> Lowered[Column]:
-    return Lowered(functions.try_subtract(functions.lit(0), value), value != INT64_MIN)
+    return Lowered(functions.try_subtract(functions.lit(0), value), overflow=value == INT64_MIN)
 
 
 @RULES("abs", Kind.INT)
 def int_abs(value: Column) -> Lowered[Column]:
     return Lowered(
-        functions.abs(functions.greatest(value, functions.lit(-INT64_MAX))), value != INT64_MIN
+        functions.abs(functions.greatest(value, functions.lit(-INT64_MAX))),
+        overflow=value == INT64_MIN,
     )
 
 

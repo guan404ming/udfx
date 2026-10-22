@@ -19,8 +19,10 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/ops/` | Op specs: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py` |
 | `src/udfx/semantics/` | Shared Python facts and policies for scalars, numbers, text, literals, lists, regex, datetimes, translation, and paths |
 | `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
-| `src/udfx/backends/base.py` | Generic lowering, fallback composition, and `evaluate` helpers. Backends never reimplement it |
-| `src/udfx/backends/registration.py` | Rule types, `RuleSet`, boolean rules, and shared registration helpers |
+| `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
+| `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
+| `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
+| `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
 | `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
@@ -66,8 +68,11 @@ Op names:
 
 A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 
+- Declare `literals=(1, 2)` on a rule to receive Python values for those zero-based parameters when the IR argument is a `Lit`. Nonliteral arguments stay engine expressions. Slice bounds, steps, and translation tables use this same contract.
+- Declare `facts={"result": result_type}` to pass static facts as keyword arguments. Fact functions take the `Call` and live in `semantics/facts.py`. Keep op names out of generic lowering.
 - A rule must never raise or panic for any input, including literal arguments. Where the op faults, any value is fine.
 - If the rule matches Python only on some rows, return `Lowered(expr, exact)`. `exact` is true only on rows where `expr` equals Python. Other rows fall back to Python.
+- Use `Lowered(expr, overflow=predicate)` when a native check detects int64 overflow. Generic lowering converts an intermediate overflow to an exactness guard. It uses a native fault for a final result where the backend supports it.
 - Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
 - Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
 - For a Python policy, fill its `*Primitives` record from `semantics/` with engine calls and call the policy function.
@@ -87,6 +92,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
 - `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception: `run_fallback_rows` records it in thread-local state and raises a `FallbackError` whose message carries the type, and `unwrap` restores it from either. Engines that run the UDF in another thread or process (DuckDB, Spark) rely on the message, so only builtin exception types come back there.
+- `native_raise(program)` returns a typed engine error expression or `None`. Encode row inputs as hexadecimal UTF-8 JSON after the program marker. `execute` replays that row through `Program.run` to recover the Python exception. Spark and DuckDB keep replay programs for the engine context lifetime.
 - DuckDB names each fallback function by the program digest and a number per connection object. The catalog entry is shared by every connection of the database, but the Python callable lives only as long as the connection object that registered it. So two connection objects never share a name, and one connection object reuses its own.
 - `fold_name(name)` returns the name as the engine compares it: identity for Polars and DataFusion, ASCII lower for DuckDB, and `str.lower` for Spark when `spark.sql.caseSensitive` is false. `build` rejects schemas whose folded names collide.
 - Arrow backends implement the fallback UDF with `arrow.fallback`, which uses `arrow.make_gather`. Only batch unpacking and UDF registration stay in the backend.

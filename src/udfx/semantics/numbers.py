@@ -5,8 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
-from udfx.ir import Call, Lit
-from udfx.types import INT64_MIN, Kind
+from udfx.types import INT64_MIN
 
 FLOAT_INT_MAX = 2**53
 EXACT_POWERS_OF_TEN = 22
@@ -16,17 +15,6 @@ REPR_FIXED_MIN = 1e-4
 REPR_FIXED_MAX = 1e16
 
 Binary = Callable[[Any, Any], Any]
-
-
-def bounded_integer_division(node: Call) -> bool:
-    if node.op.name not in {"__floordiv__", "__mod__"}:
-        return False
-    if any(argument.type.kind is not Kind.INT for argument in node.arguments):
-        return False
-    divisor = node.arguments[1]
-    return (
-        isinstance(divisor, Lit) and isinstance(divisor.value, int) and divisor.value not in (0, -1)
-    )
 
 
 ARITHMETIC: dict[str, Binary] = {
@@ -159,14 +147,21 @@ def division_overflows(literal: Callable[[object], Any], left: Any, right: Any) 
     return (left == literal(INT64_MIN)) & (right == literal(-1))
 
 
-def int_divmod(primitives: IntegerPrimitives, left: Any, right: Any) -> tuple[Any, Any, Any]:
+def int_divmod(
+    primitives: IntegerPrimitives, left: Any, right: Any, bounded: bool = False
+) -> tuple[Any, Any, Any]:
     literal, when = primitives.literal, primitives.when
     negative_one = right == literal(-1)
-    divisor = when((right == literal(0)) | negative_one, literal(1), right)
+    divisor = right if bounded else when((right == literal(0)) | negative_one, literal(1), right)
     truncated = primitives.truncated_remainder(left, divisor)
     adjust = truncated * when(divisor < literal(0), literal(-1), literal(1)) < literal(0)
+    quotient = primitives.truncated_divide(left, divisor) + when(adjust, literal(-1), literal(0))
+    remainder = truncated + when(adjust, divisor, literal(0))
+    if bounded:
+        return quotient, remainder, None
+    negatable = when(left == literal(INT64_MIN), literal(0), left)
     return (
-        primitives.truncated_divide(left, divisor) + when(adjust, literal(-1), literal(0)),
-        truncated + when(adjust, divisor, literal(0)),
-        ~negative_one,
+        when(negative_one, literal(0) - negatable, quotient),
+        remainder,
+        ~division_overflows(literal, left, right),
     )

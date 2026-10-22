@@ -21,6 +21,7 @@ from udfx.backends.registration import (
     register_equality,
     register_float_variants,
 )
+from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -47,7 +48,7 @@ def checked_int64(value: Expression) -> Lowered[Expression]:
     clamped = function(
         "least", function("greatest", value, constant(INT64_MIN)), constant(INT64_MAX)
     )
-    return Lowered(clamped.cast(sqltypes.BIGINT), fits)
+    return Lowered(clamped.cast(sqltypes.BIGINT), overflow=~fits)
 
 
 def within_exact_float_range(value: Expression) -> Expression:
@@ -148,10 +149,10 @@ def int_truediv(left: Expression, right: Expression) -> Lowered[Expression]:
     )
 
 
-@RULES("__floordiv__", Kind.INT, Kind.INT)
-def int_floordiv(left: Expression, right: Expression) -> Lowered[Expression]:
-    quotient, _, exact = int_divmod(INTEGERS, left, right)
-    return Lowered(quotient, exact)
+@RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})
+def int_floordiv(left: Expression, right: Expression, bounded: bool = False) -> Lowered[Expression]:
+    quotient, _, exact = int_divmod(INTEGERS, left, right, bounded)
+    return Lowered(quotient, overflow=None if exact is None else ~exact)
 
 
 @RULES("__mod__", Kind.INT, Kind.INT)

@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
+from udfx.frontend.text import simplify_text
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, If, ListValue, Lit, Node
 from udfx.ops import apply
-from udfx.semantics.text import simplify_text
 from udfx.types import Kind, Type, fits, unify
 
 EXCLUSIVE = frozenset({"bool", "is_none"})

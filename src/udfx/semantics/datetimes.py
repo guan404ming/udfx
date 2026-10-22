@@ -19,6 +19,7 @@ DIRECTIVES = {
     "j": ("doy", 3),
     "y": ("year", 2),
 }
+TIMESTAMP_LITERAL = r"\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}\z"
 EPOCH_ORDINAL = datetime(1970, 1, 1).toordinal()
 
 

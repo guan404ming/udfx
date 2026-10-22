@@ -39,7 +39,7 @@ def total(value: Column) -> Lowered[Column]:
         functions.lit(0).cast("decimal(38,0)"),
         functions.try_add,
     ).try_cast("long")
-    return Lowered(result, result.isNotNull())
+    return Lowered(result, overflow=result.isNull() & value.isNotNull())
 
 
 @RULES("sum_float", Kind.LIST)

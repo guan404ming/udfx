@@ -6,13 +6,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
-from udfx.backends.registration import Lowered, RuleResult, RuleSet
+from udfx.backends.faults import NativeFaults
+from udfx.backends.lowering import lower_call, lower_comprehension, lower_if
+from udfx.backends.registration import Lowered, RuleSet
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Col, Comprehension, Element, If, ListValue, Lit, Node
-from udfx.ops import OpKey
 from udfx.program import Program
-from udfx.semantics.numbers import bounded_integer_division
-from udfx.semantics.text import maximum_length
 from udfx.types import Kind, Type, fits
 
 RESERVED = "udfx "
@@ -91,8 +90,20 @@ class Backend[E](ABC):
         finally:
             RAISED.error = None
 
+    @property
+    def native_faults(self) -> NativeFaults:
+        return NativeFaults()
+
     def unwrap(self, error: BaseException) -> BaseException:
-        return getattr(RAISED, "error", None) or decode_fallback_error(str(error)) or error
+        return (
+            getattr(RAISED, "error", None)
+            or self.native_faults.decode(str(error))
+            or decode_fallback_error(str(error))
+            or error
+        )
+
+    def native_raise(self, program: Program) -> E | None:
+        return None
 
     @abstractmethod
     def column(self, node: Col) -> E: ...
@@ -135,10 +146,10 @@ class Backend[E](ABC):
                 items = [self.lower(item, elements) for item in node.items]
                 return Lowered(
                     self.list_value([item.expr for item in items], node.type),
-                    self._all(*(item.exact for item in items)),
+                    self.conjunction(*(self.exact(item) for item in items)),
                 )
             case Comprehension():
-                return self._lower_comprehension(node, elements)
+                return lower_comprehension(self, node, elements)
             case Col():
                 return Lowered(self.column(node))
             case Lit() if (
@@ -151,13 +162,13 @@ class Backend[E](ABC):
                     elements,
                 )
             case Lit() if node.type.kind is Kind.INT and not fits(node.value, node.type):
-                return Lowered(self.literal(Lit(0, node.type)), self.literal(FALSE))
+                return Lowered(self.literal(Lit(0, node.type)), overflow=self.literal(TRUE))
             case Lit():
                 return Lowered(self.literal(node))
             case If():
-                return self._lower_if(node, elements)
+                return lower_if(self, node, elements)
             case Call():
-                return self._lower_call(node, elements)
+                return lower_call(self, node, elements)
 
     def fold_name(self, name: str) -> str:
         return name
@@ -177,114 +188,35 @@ class Backend[E](ABC):
     def build(self, program: Program) -> E:
         self.check_names(program.schema)
         value = self.lower(program.value)
-        exact = value.exact
+        expr, exact, failure = value.expr, value.exact, value.overflow
         if program.fault != FALSE:
             fault = self.lower(program.fault)
-            exact = self._all(exact, fault.exact, self.negate(fault.expr))
-        if exact is None:
-            return value.expr
-        return self.fallback(value.expr, exact, program)
+            exact = self.conjunction(exact, self.exact(fault))
+            failure = self._any(failure, fault.expr)
+        if failure is not None:
+            raised = self.native_raise(program)
+            if raised is None:
+                exact = self.conjunction(exact, self.negate(failure))
+            else:
+                condition = failure if exact is None else self.both(exact, failure)
+                expr = self.select(condition, raised, expr)
+        return expr if exact is None else self.fallback(expr, exact, program)
 
-    def _lower_if(self, node: If, elements: Mapping[Element, E]) -> Lowered[E]:
-        condition = self.lower(node.condition, elements)
-        then, orelse = self.lower(node.then, elements), self.lower(node.orelse, elements)
-        expr = self.select(condition.expr, then.expr, orelse.expr)
-        if then.exact is None and orelse.exact is None:
-            return Lowered(expr, condition.exact)
-        branch = self.select(condition.expr, self._exact(then), self._exact(orelse))
-        return Lowered(expr, self._all(condition.exact, branch))
-
-    def _lower_call(self, node: Call, elements: Mapping[Element, E]) -> Lowered[E]:
-        rule = self.rules.get(node.op.key)
-        if rule is None:
-            raise Unsupported(f"{self.name} has no rule for {node.op.key}")
-        arguments = [
-            Lowered(cast("Any", argument.value))
-            if (
-                node.op.name.startswith("re.")
-                or node.op.name
-                in {".strftime", ".translate", "datetime.strptime", "datetime_parses"}
-            )
-            and index > 0
-            and isinstance(argument, Lit)
-            else self.lower(argument, elements)
-            for index, argument in enumerate(node.arguments)
-        ]
-        operands = [argument.expr for argument in arguments]
-        result: RuleResult[E]
-        if node.op.name == "slice":
-            for index in range(1, len(node.arguments)):
-                bound = node.arguments[index]
-                if isinstance(bound, Lit):
-                    operands[index] = cast("Any", bound.value)
-            result = rule(*operands, result=node.type)
-        elif node.op.name in {"int", "int_parses"} and node.arguments[0].type.kind is Kind.STR:
-            result = rule(*operands, maximum_length=maximum_length(node.arguments[0]))
-        else:
-            result = rule(*operands)
-        lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
-        if bounded_integer_division(node):
-            lowered = Lowered(lowered.expr)
-        return Lowered(
-            lowered.expr, self._all(*(argument.exact for argument in arguments), lowered.exact)
+    def exact(self, lowered: Lowered[E]) -> E | None:
+        return self.conjunction(
+            lowered.exact,
+            self.negate(lowered.overflow) if lowered.overflow is not None else None,
         )
 
-    def _lower_comprehension(
-        self, node: Comprehension, elements: Mapping[Element, E]
-    ) -> Lowered[E]:
-        source = self.lower(node.source, elements)
+    def exact_expression(self, lowered: Lowered[E]) -> E:
+        exact = self.exact(lowered)
+        return exact if exact is not None else self.literal(TRUE)
 
-        def parts(element: E) -> tuple[Lowered[E], Lowered[E], E]:
-            scope = {**elements, node.element: element}
-            condition = self.lower(node.condition, scope)
-            value = self.lower(node.value, scope)
-            fault = self.lower(node.fault, scope)
-            exact = self._all(
-                condition.exact,
-                self.select(condition.expr, self._exact(value), self.literal(TRUE)),
-                fault.exact,
-                self.negate(fault.expr),
-            )
-            return condition, value, cast("E", exact)
+    def _any(self, *parts: E | None) -> E | None:
+        opposite = self.conjunction(*(self.negate(part) for part in parts if part is not None))
+        return None if opposite is None else self.negate(opposite)
 
-        try:
-            if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
-                chunks: list[E] = []
-                exacts: list[E] = []
-                for item in node.source.value:
-                    element = self.lower(Lit(item, node.element.type), elements)
-                    condition, value, exact = parts(element.expr)
-                    chunks.append(
-                        self.select(
-                            condition.expr,
-                            self.list_value([value.expr], node.type),
-                            self.literal(Lit((), node.type)),
-                        )
-                    )
-                    exacts.append(exact)
-                result = self.literal(Lit((), node.type))
-                concatenate = self.rules.get(OpKey("__add__", (Kind.LIST, Kind.LIST)))
-                if concatenate is None:
-                    raise Unsupported(f"{self.name} has no list concatenation")
-                for chunk in chunks:
-                    result = cast("E", concatenate(result, chunk))
-                return Lowered(result, self._all(source.exact, *exacts))
-            filtered = self.list_filter(source.expr, lambda element: parts(element)[0].expr)
-            value = self.list_transform(filtered, lambda element: parts(element)[1].expr)
-            flags = self.list_transform(source.expr, lambda element: parts(element)[2])
-            every = self.rules.get(OpKey("all", (Kind.LIST,)))
-            if every is None:
-                raise Unsupported(f"{self.name} has no list reduction")
-            return Lowered(value, self._all(source.exact, cast("E", every(flags))))
-        except Unsupported:
-            if node.requires_native:
-                raise
-            return Lowered(self.literal(Lit((), node.type)), self.literal(FALSE))
-
-    def _exact(self, lowered: Lowered[E]) -> E:
-        return lowered.exact if lowered.exact is not None else self.literal(TRUE)
-
-    def _all(self, *parts: E | None) -> E | None:
+    def conjunction(self, *parts: E | None) -> E | None:
         present = [part for part in parts if part is not None]
         if not present:
             return None

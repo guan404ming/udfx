@@ -21,6 +21,7 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.semantics import text
+from udfx.semantics.facts import result_type
 from udfx.semantics.text import (
     CASE_METHODS,
     SIGMA,
@@ -297,8 +298,16 @@ TEXT = SequencePrimitives(
 )
 
 
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT)
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, Kind.INT)
+@RULES("slice", Kind.STR, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
+@RULES(
+    "slice",
+    Kind.STR,
+    Kind.INT,
+    Kind.INT,
+    Kind.INT,
+    literals=(1, 2, 3),
+    facts={"result": result_type},
+)
 def str_slice(
     text: Expr,
     start: Expr | int | None,
@@ -310,8 +319,16 @@ def str_slice(
     return slice_sequence(TEXT, text, start, stop, step, result=result)
 
 
-@RULES("slice", Kind.LIST, Kind.INT, Kind.INT)
-@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, Kind.INT)
+@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
+@RULES(
+    "slice",
+    Kind.LIST,
+    Kind.INT,
+    Kind.INT,
+    Kind.INT,
+    literals=(1, 2, 3),
+    facts={"result": result_type},
+)
 def list_slice(
     container: Expr,
     start: Expr | int | None,

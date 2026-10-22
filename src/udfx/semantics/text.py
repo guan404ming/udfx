@@ -12,8 +12,6 @@ from functools import cache, reduce
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from udfx.ir import Call, Lit, Node
-from udfx.ops.registry import apply
 from udfx.types import INT64_MAX, Type
 
 SIGMA = "\u03a3"
@@ -243,40 +241,6 @@ def write_cache(key: str, value: dict[str, str | None]) -> None:
 
 def has_prefix_suffix_overlap(pattern: str) -> bool:
     return any(pattern[:size] == pattern[-size:] for size in range(1, len(pattern)))
-
-
-def simplify_text(node: Call) -> Call:
-    if node.op.name in {".lower", ".upper"}:
-        argument = node.arguments[0]
-        if (
-            isinstance(argument, Call)
-            and argument.op.name in {".strip", ".lstrip", ".rstrip"}
-            and len(argument.arguments) == 1
-        ):
-            return apply(argument.op.name, apply(node.op.name, argument.arguments[0]))
-    if node.op.name != "slice":
-        return node
-    text, start, stop, *steps = node.arguments
-    if steps and not (isinstance(steps[0], Lit) and steps[0].value in (None, 1)):
-        return node
-    if not isinstance(stop, Lit) or stop.value is not None:
-        return node
-    if not isinstance(start, Call) or start.op.name != "__add__":
-        return node
-    search, offset = start.arguments
-    if not isinstance(search, Call) or search.op.name != ".rfind":
-        return node
-    source, pattern = search.arguments
-    if (
-        source == text
-        and isinstance(pattern, Lit)
-        and isinstance(pattern.value, str)
-        and len(pattern.value) == 1
-        and isinstance(offset, Lit)
-        and offset.value == 1
-    ):
-        return apply("last_split", text, pattern)
-    return node
 
 
 @dataclass(frozen=True)
@@ -509,25 +473,3 @@ def count_occurrences(
 ) -> Any:
     empty = pattern == primitives.literal("")
     return primitives.when(empty, primitives.length(text) + primitives.literal(1), occurrences)
-
-
-def maximum_length(node: Node) -> int | None:
-    if isinstance(node, Lit) and isinstance(node.value, str):
-        return len(node.value)
-    if not isinstance(node, Call):
-        return None
-    if node.op.name in {".strip", ".lstrip", ".rstrip"}:
-        return maximum_length(node.arguments[0])
-    if node.op.name != "slice":
-        return None
-    text, start, stop, *steps = node.arguments
-    if steps and (not isinstance(steps[0], Lit) or steps[0].value not in (None, 1)):
-        return maximum_length(text)
-    bounds = [maximum_length(text)]
-    if isinstance(start, Lit) and isinstance(start.value, int) and start.value < 0:
-        bounds.append(-start.value)
-    if isinstance(stop, Lit) and isinstance(stop.value, int) and stop.value >= 0:
-        begin = start.value if isinstance(start, Lit) and isinstance(start.value, int) else 0
-        bounds.append(max(stop.value - max(begin, 0), 0))
-    known = [bound for bound in bounds if bound is not None]
-    return min(known) if known else None

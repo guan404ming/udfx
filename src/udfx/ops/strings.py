@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import operator
 
-from udfx.ir import Call, Lit, Node, lit
+from udfx.ir import Lit, Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
+from udfx.semantics.facts import minimum_length
 from udfx.semantics.text import CASE_METHODS, PADDING_METHODS, PREDICATES
 from udfx.semantics.translation import translate_text
 from udfx.types import BOOL, INT, STR, list_of
@@ -21,15 +22,11 @@ def none_item(_: Node, items: Node) -> tuple[Fault, ...]:
 
 
 def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
-    if isinstance(index, Lit) and index.value == 0:
-        if (
-            isinstance(container, Call)
-            and container.op.name == ".split"
-            and len(container.arguments) == 2
-            and container.arguments[1].type == STR
-        ):
+    if isinstance(index, Lit) and isinstance(index.value, int):
+        if -minimum_length(container) <= index.value < minimum_length(container):
             return ()
-        return (Fault(IndexError, apply("not", apply("bool", container))),)
+        if index.value == 0:
+            return (Fault(IndexError, apply("not", apply("bool", container))),)
     length = apply("len", container)
     too_high = apply("not", apply("__gt__", length, index))
     if isinstance(index, Lit) and isinstance(index.value, int) and index.value >= 0:

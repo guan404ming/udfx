@@ -84,7 +84,7 @@ def check_op(
     value = backend.lower(Call(op, arguments))
     faults = op.faults(*arguments)
     lowered = [backend.lower(fault.when) for fault in faults]
-    exact_parts = [value.exact, *(item.exact for item in lowered)]
+    exact_parts = [backend.exact(value), *(backend.exact(item) for item in lowered)]
     exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]
 
     _, *outputs = backend.evaluate(
