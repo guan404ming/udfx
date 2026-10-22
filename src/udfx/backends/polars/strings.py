@@ -161,7 +161,7 @@ RULES(".join", Kind.STR, Kind.LIST, facts={"column": join_source_is_column})(joi
 
 @RULES(".join", Kind.STR, Kind.STR)
 def join_characters(separator: pl.Expr, text: pl.Expr) -> pl.Expr:
-    return join(separator, text.str.split(""))
+    return join(separator, text.str.split(""), column=True)
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
