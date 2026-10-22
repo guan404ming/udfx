@@ -1,6 +1,7 @@
 import os
 from functools import cache
 from pathlib import Path
+from random import Random
 from typing import Any
 
 import pytest
@@ -17,6 +18,7 @@ os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [TESTS, os.environ.get("
 os.environ.setdefault(
     "PYSPARK_SUBMIT_ARGS",
     "--master local[1] --conf spark.ui.enabled=false --conf spark.sql.shuffle.partitions=1"
+    " --conf spark.default.parallelism=1"
     " pyspark-shell",
 )
 
@@ -25,6 +27,16 @@ settings.register_profile(
 )
 settings.register_profile("ci", max_examples=100, deadline=None)
 settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
+
+
+@pytest.fixture(autouse=True)
+def batch_seed(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    value = request.config.getoption("--hypothesis-seed")
+    if value is None and settings().derandomize:
+        value = request.node.nodeid
+    if value is not None:
+        random_seed = Random(value).getrandbits(64)
+        monkeypatch.setattr("udfx.testing.batching.getrandbits", lambda _: random_seed)
 
 
 @cache
@@ -51,11 +63,11 @@ def backends() -> list[tuple[str, Backend[Any]]]:
             found.append((f"{backend.name}-ansi-off", AnsiSparkBackend(ansi=False)))
         else:
             found.append((backend.name, backend))
-    return found
+    return sorted(found, key=lambda item: not isinstance(item[1], SparkBackend))
 
 
 def backend_params() -> list[ParameterSet]:
     return [
-        pytest.param(backend, id=label, marks=pytest.mark.xdist_group(backend.name))
+        pytest.param(backend, id=label, marks=pytest.mark.xdist_group(label))
         for label, backend in backends()
     ]
