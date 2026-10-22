@@ -9,6 +9,7 @@ from udfx.backends.polars import PolarsBackend
 from udfx.backends.registration import RuleSet
 from udfx.ir import Call, Col, lit
 from udfx.ops.registry import Op, apply, register, scoped
+from udfx.program import Program
 from udfx.semantics.facts import argument_length, result_type
 from udfx.types import INT, STR, Kind, Type, list_of
 
@@ -46,3 +47,15 @@ def test_rule_metadata_passes_literals_and_static_facts(monkeypatch: pytest.Monk
 def test_literal_translation_needs_no_fallback(backend: Backend[Any]) -> None:
     node = apply(".translate", Col("text", STR), lit("ab"), lit(("b", "a"), list_of(STR)))
     assert backend.exact(backend.lower(node)) is None
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_python_ops_run_the_whole_program_in_python(
+    backend: Backend[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(type(backend), "python_ops", frozenset({"python_only"}))
+    with scoped():
+        op = register(Op("python_only", (STR,), STR, str.upper))
+        program = Program(lambda text: text.upper(), {"text": STR}, Call(op, (Col("text", STR),)))
+        expr = backend.build(program)
+    assert backend.evaluate([expr], {"text": STR}, [("ab",), ("",)]) == [["AB", ""]]

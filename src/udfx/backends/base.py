@@ -22,6 +22,7 @@ from udfx.ir import (
     ListValue,
     Lit,
     Node,
+    op_names,
 )
 from udfx.program import Program
 from udfx.types import Kind, Type, fits
@@ -54,6 +55,7 @@ class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
     binds: ClassVar[bool] = False
+    python_ops: ClassVar[frozenset[str]] = frozenset()
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
@@ -203,10 +205,19 @@ class Backend[E](ABC):
 
     def build(self, program: Program) -> E:
         self.check_names(program.schema)
+        if not self.python_ops.isdisjoint(op_names(program.value) | op_names(program.fault)):
+            return self.python(program)
         value = lower_program(self, program)
-        return (
+        expr = (
             value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
         )
+        return self.python(program) if self.too_costly(expr) else expr
+
+    def python(self, program: Program) -> E:
+        return self.fallback(self.literal(Lit(None, program.result)), self.literal(FALSE), program)
+
+    def too_costly(self, expr: E) -> bool:
+        return False
 
     def exact(self, lowered: Lowered[E]) -> E | None:
         return self.conjunction(
