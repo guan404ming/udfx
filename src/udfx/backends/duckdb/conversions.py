@@ -11,6 +11,7 @@ from udfx.backends.duckdb.rules import (
     constant,
     function,
     length,
+    trim,
     when,
 )
 from udfx.backends.registration import Lowered, register_text_conversions
@@ -46,7 +47,7 @@ TEXT = TextPrimitives(
     coalesce=duckdb.CoalesceOperator,
     translate=lambda text, old, new: function("translate", text, constant(old), constant(new)),
     matches=matches,
-    strip=lambda text, chars: function("trim", text, constant(chars)),
+    strip=lambda text, chars: trim(text, chars, "strip"),
     replace=lambda text, old, new: function("replace", text, constant(old), constant(new)),
     char_length=length,
     not_null=Expression.isnotnull,

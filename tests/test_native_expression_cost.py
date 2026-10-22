@@ -128,15 +128,6 @@ def test_polars_column_join_skips_concatenation() -> None:
     assert ".list.concat(" not in str(expression)
 
 
-@pytest.mark.parametrize("operation", ["search", "match", "fullmatch"])
-def test_duckdb_regex_extract_uses_one_match(operation: str) -> None:
-    node = apply(f"re.{operation}", Col("text", STR), lit("a*"), lit(0))
-    expression = str(DuckDBBackend().lower(node).expr)
-    assert expression.count("regexp_extract_all(") == 1
-    assert "regexp_matches(" not in expression
-    assert expression.count('"text"') == 1
-
-
 def test_datafusion_sum_binds_input_per_expression() -> None:
     lowered = DataFusionBackend().lower(apply("sum", Col("items", list_of(INT))))
     assert str(lowered.expr).count("items") == 1

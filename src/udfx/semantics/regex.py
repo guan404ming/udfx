@@ -10,10 +10,6 @@ from udfx.semantics.regex_translation import Pattern, escaped, replacement, tran
 SEPARATOR = "\x00"
 
 
-def first_match_pattern(pattern: str) -> str:
-    return r"\A[\s\S]*?(" + pattern + ")"
-
-
 @dataclass(frozen=True)
 class RegexPrimitives:
     dialect: str
