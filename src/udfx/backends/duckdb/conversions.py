@@ -7,10 +7,10 @@ from udfx.backends.duckdb.numbers import cast_float64, is_nan, try_truncate_int6
 from udfx.backends.duckdb.rules import (
     NULL,
     RULES,
+    bind,
     constant,
     function,
     length,
-    trim,
     when,
 )
 from udfx.backends.registration import Lowered, register_text_conversions
@@ -29,7 +29,11 @@ def matches(text: Expression, pattern: str) -> Expression:
 
 
 def try_int(digits: Expression) -> Expression:
-    return function("from_json", function("to_json", digits), constant('"BIGINT"'))
+    return bind(
+        digits,
+        lambda value: duckdb.SQLExpression(f"TRY_CAST({value} AS BIGINT)"),
+        "udfx integer",
+    )
 
 
 def try_float(digits: Expression) -> Expression:
@@ -42,7 +46,7 @@ TEXT = TextPrimitives(
     coalesce=duckdb.CoalesceOperator,
     translate=lambda text, old, new: function("translate", text, constant(old), constant(new)),
     matches=matches,
-    strip=lambda text, chars: trim(text, chars, "strip"),
+    strip=lambda text, chars: function("trim", text, constant(chars)),
     replace=lambda text, old, new: function("replace", text, constant(old), constant(new)),
     char_length=length,
     not_null=Expression.isnotnull,

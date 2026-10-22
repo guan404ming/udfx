@@ -5,7 +5,7 @@ from pyspark.sql import Column, functions
 from udfx.backends.spark.rules import RULES, split_literal
 from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import INT32_MAX, array_join, join, length, lstrip
-from udfx.semantics.facts import split_partitioned
+from udfx.semantics.facts import separator_is_none, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
 from udfx.semantics.text import non_whitespace_pattern, word_prefix_pattern
 from udfx.types import STR, Kind, list_of
@@ -21,12 +21,14 @@ RULES(".split", Kind.STR)(split_words)
 RULES(".rsplit", Kind.STR)(split_words)
 
 
-def split(text: Column, separator: Column) -> Column:
+def split(text: Column, separator: Column, *, optional: bool | None = None) -> Column:
     pieces = split_literal(text, separator)
+    if optional is not None:
+        return split_words(text) if optional else pieces
     return functions.when(separator.isNull(), split_words(text)).otherwise(pieces)
 
 
-RULES(".split", Kind.STR, Kind.STR)(split)
+RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split)
 
 
 @RULES("last_split", Kind.STR, Kind.STR)

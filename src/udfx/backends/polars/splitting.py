@@ -6,7 +6,7 @@ from udfx.backends.polars.rules import RULES, when
 from udfx.backends.polars.slicing import SEQUENCE
 from udfx.backends.polars.strings import join, length, lstrip, single_code_point_clusters
 from udfx.backends.registration import Lowered
-from udfx.semantics.facts import split_partitioned
+from udfx.semantics.facts import separator_is_none, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
 from udfx.semantics.text import (
     non_whitespace_pattern,
@@ -25,11 +25,14 @@ RULES(".split", Kind.STR)(split_words)
 RULES(".rsplit", Kind.STR)(split_words)
 
 
-def split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
-    return when(separator.is_null(), split_words(text), text.str.split(separator))
+def split(text: pl.Expr, separator: pl.Expr, *, optional: bool | None = None) -> pl.Expr:
+    pieces = text.str.split(separator)
+    if optional is not None:
+        return split_words(text) if optional else pieces
+    return when(separator.is_null(), split_words(text), pieces)
 
 
-RULES(".split", Kind.STR, Kind.STR)(split)
+RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split)
 
 
 @RULES("last_split", Kind.STR, Kind.STR)

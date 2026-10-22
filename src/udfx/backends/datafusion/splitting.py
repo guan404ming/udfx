@@ -6,7 +6,7 @@ from datafusion import Expr, functions, lit
 from udfx.backends.datafusion.rules import RULES, array_transform, length
 from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import join, lstrip
-from udfx.semantics.facts import split_non_overlapping, split_partitioned
+from udfx.semantics.facts import separator_is_none, split_non_overlapping, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
 from udfx.semantics.text import (
     char_class,
@@ -27,15 +27,16 @@ RULES(".split", Kind.STR)(split_words)
 RULES(".rsplit", Kind.STR)(split_words)
 
 
-def split(text: Expr, separator: Expr) -> Expr:
-    return (
-        functions.when(separator.is_null(), split_words(text))
-        .when(text == lit(""), functions.make_array(lit("")))
-        .otherwise(functions.string_to_array(text, separator))
+def split(text: Expr, separator: Expr, *, optional: bool | None = None) -> Expr:
+    pieces = functions.when(text == lit(""), functions.make_array(lit(""))).otherwise(
+        functions.string_to_array(text, separator)
     )
+    if optional is not None:
+        return split_words(text) if optional else pieces
+    return functions.when(separator.is_null(), split_words(text)).otherwise(pieces)
 
 
-RULES(".split", Kind.STR, Kind.STR)(split)
+RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split)
 
 
 @RULES("last_split", Kind.STR, Kind.STR, facts={"non_overlapping": split_non_overlapping})

@@ -13,6 +13,11 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 
 
 def fold(node: Node) -> Node:
+    if isinstance(node, If):
+        condition = fold(node.condition)
+        if isinstance(condition, Lit):
+            return retype(fold(node.then if condition.value else node.orelse), node.type)
+        return If(condition, fold(node.then), fold(node.orelse), node.type)
     if not isinstance(node, Call):
         return node
     folded = simplify_sequence(Call(node.op, tuple(fold(argument) for argument in node.arguments)))
@@ -110,7 +115,7 @@ def choose(cases: Sequence[tuple[Node, Node]]) -> Node:
     *rest, (_, value) = cases
     node = retype(value, result)
     for condition, then in reversed(rest):
-        node = If(condition, retype(then, result), node, result)
+        node = fold(If(condition, retype(then, result), node, result))
     return node
 
 

@@ -5,7 +5,7 @@ import pytest
 from udfx.frontend import trace
 from udfx.frontend.core.expressions import invoke
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
-from udfx.ir import FALSE, TRUE, Col, Lit, lit
+from udfx.ir import FALSE, TRUE, Call, Col, If, Lit, lit
 from udfx.ops import apply
 from udfx.types import BOOL, INT, STR, list_of
 
@@ -47,6 +47,21 @@ def test_fold_evaluates_literal_calls() -> None:
 def test_fold_keeps_raising_calls() -> None:
     parse = apply("int", Lit("x", STR))
     assert fold(parse) == parse
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        apply("__eq__", apply(".replace", lit("-"), lit("-"), lit("")), lit("")),
+        apply("is_none", apply(".split", lit("a_b"), lit("_"))),
+    ],
+)
+def test_fold_removes_literal_conditions(condition: Call) -> None:
+    selected = fold(condition)
+    assert isinstance(selected, Lit)
+    node = If(condition, lit(1), lit(2), INT)
+    assert fold(node) == lit(1 if selected.value else 2)
+    assert fold(apply("__add__", node, lit(3))) == lit(4 if selected.value else 5)
 
 
 @pytest.mark.parametrize("method", [".lower", ".upper"])

@@ -14,13 +14,14 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.semantics import text
+from udfx.semantics.clusters import CLUSTER_JOINERS
+from udfx.semantics.facts import pattern_is_empty
 from udfx.semantics.sequences import (
     SearchPrimitives,
     reverse_find,
 )
 from udfx.semantics.text import (
     CASE_METHODS,
-    CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
     CasePrimitives,
@@ -137,8 +138,10 @@ def endswith(text: pl.Expr, suffix: pl.Expr) -> pl.Expr:
     return text.str.ends_with(suffix)
 
 
-@RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
-def replace(text: pl.Expr, old: pl.Expr, new: pl.Expr) -> pl.Expr:
+@RULES(".replace", Kind.STR, Kind.STR, Kind.STR, facts={"empty": pattern_is_empty})
+def replace(text: pl.Expr, old: pl.Expr, new: pl.Expr, *, empty: bool | None = None) -> pl.Expr:
+    if empty is not None:
+        return broadcast(text).str.replace_all(old, new.fill_null(""), literal=True)
     text = broadcast(text)
     padded = pl.concat_list([pl.lit(""), text.str.split(""), pl.lit("")])
     return (

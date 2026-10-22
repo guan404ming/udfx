@@ -9,6 +9,7 @@ from udfx.semantics.literals import TextPrimitives, float_parses, int_parses, pa
 from udfx.semantics.padding import PaddingPrimitives, pad_text
 from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.text import PADDING_METHODS, PREDICATES, string_predicate
+from udfx.semantics.text_predicates import AsciiPrimitives, ascii_predicate
 from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
 
@@ -33,10 +34,16 @@ def register_regex[E](rules: RuleSet[E], primitives: RegexPrimitives) -> None:
     )
 
 
-def register_string_predicates[E](rules: RuleSet[E], matches: Callable[[E, str], E]) -> None:
+def register_string_predicates[E](
+    rules: RuleSet[E], matches: Callable[[E, str], E], ascii: AsciiPrimitives | None = None
+) -> None:
     for method in PREDICATES:
         rules(f".{method}", Kind.STR)(
-            lambda value, method=method: string_predicate(matches, value, method)
+            lambda value, method=method: (
+                string_predicate(matches, value, method)
+                if ascii is None
+                else ascii_predicate(ascii, matches, value, method)
+            )
         )
 
 

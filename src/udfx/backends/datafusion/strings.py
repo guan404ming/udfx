@@ -25,11 +25,8 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.semantics import text
-from udfx.semantics.sequences import (
-    SearchPrimitives,
-    count_occurrences,
-    reverse_find,
-)
+from udfx.semantics.facts import pattern_is_empty
+from udfx.semantics.sequences import SearchPrimitives, count_occurrences, reverse_find
 from udfx.semantics.text import (
     CASE_METHODS,
     SIGMA,
@@ -136,9 +133,13 @@ def characters(text: Expr) -> Expr:
     return functions.string_to_array(text, typed_literal(None, STR.or_none()))
 
 
-@RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
-def replace(text: Expr, old: Expr, new: Expr) -> Expr:
+@RULES(".replace", Kind.STR, Kind.STR, Kind.STR, facts={"empty": pattern_is_empty})
+def replace(text: Expr, old: Expr, new: Expr, *, empty: bool | None = None) -> Expr:
+    if empty is False:
+        return functions.replace(text, old, new)
     padded = functions.concat(new, functions.array_to_string(characters(text), new), new)
+    if empty is True:
+        return when(text == lit(""), new, padded)
     return (
         functions.when((old == lit("")) & (text == lit("")), new)
         .when(old == lit(""), padded)

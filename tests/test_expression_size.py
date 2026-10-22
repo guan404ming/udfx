@@ -14,7 +14,7 @@ from udfx.backends.duckdb.rules import constant, function
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops.registry import apply
-from udfx.semantics.literals import normalize_integer
+from udfx.semantics.literals import parse_int
 from udfx.testing import check_function
 from udfx.types import BOOL, FLOAT, INT, STR, Type, list_of
 
@@ -176,10 +176,10 @@ def test_ascii_integer_lists_skip_unicode_translation() -> None:
     schema = {"items": list_of(STR)}
     expr = backend.list_transform(
         backend.column(Col("items", schema["items"])),
-        lambda element: normalize_integer(primitives, element),
+        lambda element: parse_int(primitives, element, 18)[0],
     )
     assert backend.evaluate([expr], schema, [(["1_000", " -2 ", "+3"],), ([],)]) == [
-        [["1000", " -2 ", "+3"], []]
+        [[1000, -2, 3], []]
     ]
 
 

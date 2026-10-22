@@ -66,7 +66,7 @@ def integer_pattern() -> str:
     )
     padding = char_class(spaces)
     middle = digits[:-1] + "_]"
-    return f"^{padding}*[+-]?{digits}({middle}*{digits})?{padding}*$"
+    return rf"\A{padding}*[+-]?{digits}({middle}*{digits})?{padding}*\z"
 
 
 def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
@@ -74,16 +74,7 @@ def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
 
 
 def integer_matches(primitives: TextPrimitives, text: Any) -> Any:
-    return literal_matches(primitives, text, integer_pattern())
-
-
-def normalize_integer(primitives: TextPrimitives, text: Any) -> Any:
-    original, replacement = integer_characters()
-    return primitives.when(
-        is_ascii(primitives, text),
-        primitives.replace(text, "_", ""),
-        primitives.translate(text, original + "_", replacement),
-    )
+    return primitives.matches(primitives.replace(text, "__", ":"), integer_pattern())
 
 
 def is_ascii(primitives: TextPrimitives, text: Any) -> Any:
@@ -110,8 +101,13 @@ def float_parses(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
 def parse_int(
     primitives: TextPrimitives, text: Any, maximum_length: int | None = None
 ) -> tuple[Any, Any]:
-    cleaned = primitives.strip(normalize_integer(primitives, text), ASCII_SPACE)
-    value = primitives.try_int(cleaned)
+    native = primitives.try_int(primitives.strip(text, ASCII_SPACE))
+    pending = primitives.when(primitives.not_null(native), primitives.literal(None), text)
+    original, replacement = integer_characters()
+    cleaned = primitives.strip(
+        primitives.translate(pending, original + "_", replacement), ASCII_SPACE
+    )
+    value = primitives.coalesce(native, primitives.try_int(cleaned))
     if maximum_length is not None and maximum_length <= 18:
         return value, None
     return value, primitives.not_null(value) | ~integer_matches(primitives, text)

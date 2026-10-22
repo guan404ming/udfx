@@ -4,17 +4,19 @@ import duckdb
 from duckdb import Expression
 
 from udfx.backends.duckdb.rules import (
+    ITEM,
     RULES,
+    bind,
     column,
     constant,
     function,
     length,
     when,
 )
-from udfx.backends.duckdb.slicing import SEQUENCE, bind
-from udfx.backends.duckdb.strings import ITEM, join, lstrip, single_code_point_clusters
+from udfx.backends.duckdb.slicing import SEQUENCE
+from udfx.backends.duckdb.strings import join, lstrip, single_code_point_clusters
 from udfx.backends.registration import Lowered
-from udfx.semantics.facts import split_partitioned
+from udfx.semantics.facts import separator_is_none, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
 from udfx.semantics.text import (
     non_whitespace_pattern,
@@ -33,11 +35,14 @@ RULES(".split", Kind.STR)(split_words)
 RULES(".rsplit", Kind.STR)(split_words)
 
 
-def split(text: Expression, separator: Expression) -> Expression:
-    return when(separator.isnull(), split_words(text), function("string_split", text, separator))
+def split(text: Expression, separator: Expression, *, optional: bool | None = None) -> Expression:
+    pieces = function("string_split", text, separator)
+    if optional is not None:
+        return split_words(text) if optional else pieces
+    return when(separator.isnull(), split_words(text), pieces)
 
 
-RULES(".split", Kind.STR, Kind.STR)(split)
+RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split)
 
 
 @RULES("last_split", Kind.STR, Kind.STR)

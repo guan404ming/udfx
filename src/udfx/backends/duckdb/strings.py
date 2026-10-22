@@ -9,6 +9,7 @@ from duckdb import Expression
 
 from udfx.backends.duckdb.conversions import TEXT as TRANSLATION
 from udfx.backends.duckdb.rules import (
+    ITEM,
     RULES,
     column,
     constant,
@@ -25,14 +26,11 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.semantics import text
-from udfx.semantics.sequences import (
-    SearchPrimitives,
-    count_occurrences,
-    reverse_find,
-)
+from udfx.semantics.clusters import CLUSTER_JOINERS
+from udfx.semantics.facts import pattern_is_empty
+from udfx.semantics.sequences import SearchPrimitives, count_occurrences, reverse_find
 from udfx.semantics.text import (
     CASE_METHODS,
-    CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
     CasePrimitives,
@@ -43,7 +41,6 @@ from udfx.semantics.text import (
 from udfx.types import Kind
 
 POINT = "udfx point"
-ITEM = "udfx item"
 INDEX = "udfx index"
 
 
@@ -130,10 +127,16 @@ def endswith(text: Expression, suffix: Expression) -> Expression:
     return function("ends_with", text, suffix)
 
 
-@RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
-def replace(text: Expression, old: Expression, new: Expression) -> Expression:
+@RULES(".replace", Kind.STR, Kind.STR, Kind.STR, facts={"empty": pattern_is_empty})
+def replace(
+    text: Expression, old: Expression, new: Expression, *, empty: bool | None = None
+) -> Expression:
+    if empty is False:
+        return function("replace", text, old, new)
     escaped = function("replace", new, constant("\\"), constant("\\\\"))
     between = function("regexp_replace", text, constant(""), escaped, constant("g"))
+    if empty is True:
+        return between
     return when(old == constant(""), between, function("replace", text, old, new))
 
 

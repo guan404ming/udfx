@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import duckdb
 from duckdb import Expression
 
 from udfx.backends.duckdb.rules import (
     RULES,
-    column,
+    bind,
     constant,
     function,
     length,
     when,
 )
-from udfx.backends.duckdb.strings import ITEM, join
+from udfx.backends.duckdb.strings import join, single_code_point_clusters
 from udfx.backends.registration import register_padding
 from udfx.semantics.facts import result_type
 from udfx.semantics.padding import PaddingPrimitives
@@ -31,20 +29,6 @@ SLICE = SlicePrimitives(
     coalesce=duckdb.CoalesceOperator,
     clip=lambda value, lower, upper: function("least", function("greatest", value, lower), upper),
 )
-
-
-def bind(
-    value: Expression, transform: Callable[[Expression], Expression], name: str = ITEM
-) -> Expression:
-    return function(
-        "list_extract",
-        function(
-            "list_transform",
-            function("list_value", value),
-            duckdb.LambdaExpression(name, transform(column(name))),
-        ),
-        constant(1),
-    )
 
 
 SEQUENCE = SequencePrimitives(
@@ -77,8 +61,13 @@ TEXT = SequencePrimitives(
     tail=lambda value, size: function("right", value, constant(size)),
     drop_head=lambda value, size: function("right", value, constant(-size)),
     drop_tail=lambda value, size: function("left", value, constant(-size)),
-    reverse=lambda value: join(
-        constant(""), SEQUENCE.reverse(function("string_split", value, constant("")))
+    reverse=lambda value: bind(
+        value,
+        lambda value: when(
+            single_code_point_clusters(value),
+            function("reverse", value),
+            join(constant(""), SEQUENCE.reverse(function("string_split", value, constant("")))),
+        ),
     ),
     stride=lambda value, step: join(
         constant(""), SEQUENCE.stride(function("string_split", value, constant("")), step)

@@ -18,6 +18,7 @@ from udfx.backends.spark.conversions import TEXT as TRANSLATION
 from udfx.backends.spark.rules import RULES, when
 from udfx.ir import Col
 from udfx.semantics import text
+from udfx.semantics.facts import pattern_is_empty
 from udfx.semantics.sequences import (
     SearchPrimitives,
     count_occurrences,
@@ -32,6 +33,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
+from udfx.semantics.text_predicates import AsciiPrimitives
 from udfx.types import STR, Kind
 
 INT32_MAX = 2**31 - 1
@@ -136,10 +138,14 @@ def endswith(text: Column, suffix: Column) -> Column:
     return functions.endswith(text, suffix)
 
 
-@RULES(".replace", Kind.STR, Kind.STR, Kind.STR)
-def replace(text: Column, old: Column, new: Column) -> Column:
-    empty = functions.array(functions.lit(""))
-    spread = array_join(functions.concat(empty, characters(text), empty), new)
+@RULES(".replace", Kind.STR, Kind.STR, Kind.STR, facts={"empty": pattern_is_empty})
+def replace(text: Column, old: Column, new: Column, *, empty: bool | None = None) -> Column:
+    if empty is False:
+        return functions.replace(text, old, new)
+    padding = functions.array(functions.lit(""))
+    spread = array_join(functions.concat(padding, characters(text), padding), new)
+    if empty is True:
+        return spread
     return functions.when(old == "", spread).otherwise(functions.replace(text, old, new))
 
 
@@ -195,7 +201,14 @@ def list_len(container: Column) -> Column:
     return functions.size(container).cast("bigint")
 
 
-register_string_predicates(RULES, lambda value, pattern: value.rlike(pattern))
+register_string_predicates(
+    RULES,
+    lambda value, pattern: value.rlike(pattern),
+    AsciiPrimitives(
+        is_ascii=lambda value: functions.octet_length(value) == functions.char_length(value),
+        when=when,
+    ),
+)
 
 
 for method in CASE_METHODS:

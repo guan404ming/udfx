@@ -29,7 +29,7 @@ TEXT = TextPrimitives(
     replace=lambda text, old, new: text.str.replace_all(old, new, literal=True),
     char_length=lambda text: text.str.len_chars(),
     not_null=pl.Expr.is_not_null,
-    try_int=lambda text: text.str.to_integer(strict=False),
+    try_int=lambda text: text.cast(pl.Int64, strict=False),
     try_float=lambda text: text.cast(pl.Float64, strict=False),
 )
 

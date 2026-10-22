@@ -23,6 +23,18 @@ def argument_length(node: Call) -> int | None:
     return maximum_length(node.arguments[0])
 
 
+def pattern_is_empty(node: Call) -> bool | None:
+    pattern = node.arguments[1]
+    return (
+        pattern.value == "" if isinstance(pattern, Lit) and isinstance(pattern.value, str) else None
+    )
+
+
+def separator_is_none(node: Call) -> bool | None:
+    separator = node.arguments[1]
+    return separator.value is None if isinstance(separator, Lit) else None
+
+
 def maximum_length(node: Node) -> int | None:
     if isinstance(node, Lit) and isinstance(node.value, str):
         return len(node.value)
