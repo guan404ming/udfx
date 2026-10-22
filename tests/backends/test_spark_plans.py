@@ -12,7 +12,8 @@ from udfx import compile
 from udfx.backends import spark
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
-from udfx.ir import Col
+from udfx.ir import Col, Guarded, lit
+from udfx.ops import apply
 from udfx.program import Program
 from udfx.types import BOOL, INT, STR, list_of
 
@@ -29,8 +30,12 @@ def test_constant_exact_guard_removes_python(backend: Backend[Any]) -> None:
     if not isinstance(backend, SparkBackend):
         pytest.skip("Spark plan")
     session = backend.session()
-    program = Program(lambda value: value, {"value": INT}, Col("value", INT))
-    expr = backend.fallback(functions.col("value"), functions.lit(1) == 1, program)
+    program = Program(
+        lambda value: value,
+        {"value": INT},
+        Guarded(Col("value", INT), apply("__eq__", lit(1), lit(1))),
+    )
+    expr = backend.build(program)
     frame = session.range(3).selectExpr("id AS value").select(expr)
     output = StringIO()
     with redirect_stdout(output):

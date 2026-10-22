@@ -47,9 +47,10 @@ def test_regex_native_execution(backend: Backend[Any]) -> None:
         ),
     ):
         lowered = backend.lower(node)
-        assert lowered.exact is not None
         _, flags = backend.evaluate(
-            [backend.column(text), lowered.exact], {"text": STR}, [("12٣\U0001d7dc",), ("",)]
+            [backend.column(text), backend.exact_expression(lowered)],
+            {"text": STR},
+            [("12٣\U0001d7dc",), ("",)],
         )
         assert flags == [True, True]
         assert str(lowered.expr).count("text") <= 3

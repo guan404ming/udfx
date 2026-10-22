@@ -7,7 +7,9 @@ from udfx.backends.spark.rules import RULES
 from udfx.semantics.regex import RegexPrimitives
 
 
-def literal(value: object) -> Column:
+def literal(value: object) -> Column | bool:
+    if isinstance(value, bool):
+        return value
     if isinstance(value, list):
         return functions.array().cast("array<string>")
     return functions.lit(value).cast("string") if value is None else functions.lit(value)

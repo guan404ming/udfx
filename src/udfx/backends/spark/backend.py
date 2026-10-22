@@ -114,17 +114,17 @@ class SparkBackend(Backend[Column]):
         return functions.raise_error(message).cast(dtype(program.result))
 
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
+        result = dtype(program.result)
         flag = functions.coalesce(exact, functions.lit(False))
         packed = functions.struct(
             flag.alias(EXACT),
-            functions.when(~flag, native).alias(NATIVE),
+            native.cast(result).alias(NATIVE),
             *(
                 functions.when(~flag, self.column(Col(name, type))).alias(name)
                 for name, type in program.schema.items()
             ),
         )
-        patched = functions.arrow_udf(fallback_patch(program), dtype(program.result))(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
-        return functions.when(flag, native.cast(dtype(program.result))).otherwise(patched)
+        return functions.arrow_udf(fallback_patch(program), result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
 
     def evaluate(
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]
