@@ -11,7 +11,7 @@ from udfx.backends.registration import (
     Lowered,
     register_extremum,
     register_float_variants,
-    register_numpy_math,
+    register_math,
 )
 from udfx.semantics.numbers import (
     RoundPrimitives,
@@ -81,7 +81,7 @@ def round_overflows(value: Expression, digits: Expression) -> Lowered[Expression
     return Lowered(constant(False), round_overflow_safe(ROUND, value, digits))
 
 
-register_numpy_math(
+register_math(
     RULES,
     replace(ROUND, round=half_even),
     root=root,

@@ -313,3 +313,24 @@ def test_string_helpers_match_python(rows: list[tuple[object, ...]]) -> None:
 def test_closures_match_python(rows: list[tuple[object, ...]]) -> None:
     for function in (above, late, make_above(5)):
         assert check_function(function, {"a": INT}, POLARS, rows) == []
+
+
+@pytest.mark.parametrize("default", [("a", "the"), ["a", "the"], {"a", "the"}, {"a": 1, "the": 2}])
+def test_nested_container_keyword_defaults(default: tuple | list | set | dict) -> None:
+    def function(text: str) -> bool:
+        def helper(value: str, *, stop: tuple | list | set | dict = default) -> bool:
+            return value in stop
+
+        return helper(text)
+
+    assert check_function(function, {"text": STR}, POLARS, [("a",), ("other",)]) == []
+
+
+def test_nested_list_default_keeps_list_indexing() -> None:
+    def function(text: str) -> str:
+        def helper(value: str, stop: list[str] = ["a", "the"]) -> str:  # noqa: B006
+            return stop[len(value) % 2]
+
+        return helper(text)
+
+    assert check_function(function, {"text": STR}, POLARS, [("a",), ("other",)]) == []

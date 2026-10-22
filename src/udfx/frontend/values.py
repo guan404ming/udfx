@@ -18,6 +18,11 @@ class Value:
 
 
 @dataclass(frozen=True)
+class Duration:
+    node: Node
+
+
+@dataclass(frozen=True)
 class Match:
     node: Node
 
@@ -98,6 +103,7 @@ NULL = Null()
 Item = (
     Value
     | Match
+    | Duration
     | Row
     | Method
     | Opaque
@@ -144,7 +150,7 @@ def describe(item: Item) -> str:
             return f"type of a {node.type} value"
         case Iterator():
             return "an iterator"
-        case Tuple() | Generator() | Set() | Slice():
+        case Tuple() | Generator() | Set() | Slice() | Duration():
             return f"a {type(item).__name__.lower()}"
         case Function(code=code):
             return f"helper {code.co_qualname}"

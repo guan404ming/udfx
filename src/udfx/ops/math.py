@@ -6,8 +6,9 @@ from collections.abc import Callable
 from functools import partial
 
 from udfx.ir import Node, lit
-from udfx.ops.numbers import not_finite, zero
+from udfx.ops.numbers import not_finite, not_positive, zero
 from udfx.ops.registry import Fault, Op, apply, register
+from udfx.semantics.math import EXPONENTIAL_LIMIT
 from udfx.semantics.scalars import numpy_scalar
 from udfx.types import BOOL, FLOAT, INT, STR, Kind
 
@@ -47,6 +48,21 @@ def below_zero(value: Node) -> tuple[Fault, ...]:
     return (Fault(ValueError, apply("__lt__", value, zero(value))),)
 
 
+def logarithm_faults(value: Node, base: Node) -> tuple[Fault, ...]:
+    return (
+        *not_positive(value),
+        *not_positive(base),
+        Fault(ZeroDivisionError, apply("__eq__", base, lit(1))),
+    )
+
+
+def exponential_faults(value: Node) -> tuple[Fault, ...]:
+    value = real(value)
+    overflow = apply("__gt__", value, lit(EXPONENTIAL_LIMIT))
+    finite = apply("not", apply("math.isinf", value))
+    return (Fault(OverflowError, apply("and", overflow, finite)),)
+
+
 register(Op("pow_overflows", (FLOAT, FLOAT), BOOL, overflows(operator.pow)))
 register(Op("round_overflows", (FLOAT, INT), BOOL, overflows(round)))
 
@@ -70,7 +86,14 @@ register(Op("math.floor", (INT,), INT, math.floor))
 for scalar in (INT, FLOAT, BOOL):
     register(Op("numpy.isnan", (scalar,), BOOL, partial(numpy_scalar, "isnan")))
 
-for name in ("log", "sqrt", "exp"):
+for scalar in (INT, FLOAT):
+    for name in ("log", "log2"):
+        register(Op(f"math.{name}", (scalar,), FLOAT, getattr(math, name), not_positive))
+    register(Op("math.exp", (scalar,), FLOAT, math.exp, exponential_faults))
+    for base in (INT, FLOAT):
+        register(Op("math.log", (scalar, base), FLOAT, math.log, logarithm_faults))
+
+for name in ("log", "log1p", "log2", "log10", "sqrt", "exp", "expm1"):
     for scalar in (INT, FLOAT):
         register(Op(f"numpy.{name}", (scalar,), FLOAT, partial(numpy_scalar, name)))
 

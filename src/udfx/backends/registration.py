@@ -8,10 +8,13 @@ from typing import Any
 from udfx.ops.registry import OpKey
 from udfx.semantics.datetimes import (
     ATTRIBUTES,
+    DatetimeArithmeticPrimitives,
     DatetimePrimitives,
     datetime_field,
     format_datetime,
     parse_datetime,
+    shift_datetime,
+    shift_overflows,
 )
 from udfx.semantics.literals import (
     TextPrimitives,
@@ -20,6 +23,7 @@ from udfx.semantics.literals import (
     parse_float,
     parse_int,
 )
+from udfx.semantics.math import transcendental
 from udfx.semantics.numbers import (
     COMPARISONS,
     Binary,
@@ -157,7 +161,7 @@ def register_missing[E](
         rules("pandas.notna", kind)(lambda value: ~is_null(value))
 
 
-def register_numpy_math[E](
+def register_math[E](
     rules: RuleSet[E],
     rounding: RoundPrimitives,
     *,
@@ -170,12 +174,29 @@ def register_numpy_math[E](
     def square_root(value: E) -> E:
         return numpy_root(rounding, root, value)
 
-    def fallback(value: E) -> Lowered[E]:
+    rules("numpy.sqrt", Kind.FLOAT)(square_root)
+    rules("numpy.sqrt", Kind.INT)(lambda value: square_root(rounding.to_float(value)))
+    for module, names in (
+        ("numpy", ("log", "log1p", "log2", "log10", "exp", "expm1")),
+        ("math", ("log", "log2", "exp")),
+    ):
+        for name in names:
+
+            def rule(value: E, name: str = name) -> Lowered[E]:
+                return Lowered(*transcendental(rounding, is_nan, name, value))
+
+            rules(f"{module}.{name}", Kind.FLOAT)(rule)
+            rules(f"{module}.{name}", Kind.INT)(
+                lambda value, rule=rule: rule(rounding.to_float(value))
+            )
+
+    def logarithm(value: E, base: E) -> Lowered[E]:
         return Lowered(value, rounding.literal(False))
 
-    for name, rule in (("sqrt", square_root), ("log", fallback), ("exp", fallback)):
-        rules(f"numpy.{name}", Kind.FLOAT)(rule)
-        rules(f"numpy.{name}", Kind.INT)(lambda value, rule=rule: rule(rounding.to_float(value)))
+    register_float_variants(rules, "math.log", logarithm, rounding.to_float)
+    rules("math.log", Kind.INT, Kind.INT)(
+        lambda value, base: logarithm(rounding.to_float(value), base)
+    )
     rules("numpy.isnan", Kind.FLOAT)(is_nan)
     for kind in (Kind.INT, Kind.BOOL):
         rules("numpy.isnan", kind)(lambda value: rounding.literal(False))
@@ -273,3 +294,17 @@ def register_datetimes[E](rules: RuleSet[E], primitives: DatetimePrimitives, equ
         return Lowered(~primitives.is_null(parsed), exact)
 
     rules("datetime_parses", Kind.STR, Kind.STR)(parses)
+
+
+def register_datetime_arithmetic[E](
+    rules: RuleSet[E], primitives: DatetimeArithmeticPrimitives
+) -> None:
+    rules("datetime_difference", Kind.DATETIME, Kind.DATETIME)(
+        lambda left, right: primitives.to_microseconds(left) - primitives.to_microseconds(right)
+    )
+    rules("datetime_shift", Kind.DATETIME, Kind.INT)(
+        lambda value, offset: shift_datetime(primitives, value, offset)
+    )
+    rules("datetime_shift_overflows", Kind.DATETIME, Kind.INT)(
+        lambda value, offset: shift_overflows(primitives, primitives.to_microseconds(value), offset)
+    )

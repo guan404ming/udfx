@@ -15,6 +15,7 @@ from udfx.frontend.constants import (
     type_comparison,
 )
 from udfx.frontend.context import Context
+from udfx.frontend.datetimes import datetime_binary
 from udfx.frontend.formatting import format_percent
 from udfx.frontend.logic import fold, negate
 from udfx.frontend.machine import emit, handles
@@ -81,6 +82,10 @@ def binary_op(context: Context, state: State, instruction: dis.Instruction) -> l
     name = BINARY_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"binary operator {instruction.argrepr}", context.where(state))
+    datetime_result = datetime_binary(symbol, left, right)
+    if datetime_result is not None:
+        item, faults = datetime_result
+        return emit(context, rest, item, faults)
     node, faults = invoke(name, [node_of(left), node_of(right)], TypeError)
     return emit(context, rest, Value(node), faults)
 

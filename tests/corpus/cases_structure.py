@@ -111,7 +111,26 @@ def dictionary_guard(value):
     return mapping[value] if value in mapping else value
 
 
+STOPWORDS = {"a", "the"}
+
+
+def remove_stopwords(text):
+    def clean(value, *, stop=STOPWORDS):
+        return " ".join(word for word in value.split() if word not in stop)
+
+    return clean(text)
+
+
+def default_mapping(text):
+    def clean(value, mapping={"a": "alpha", "b": "beta"}):  # noqa: B006
+        return mapping.get(value, value)
+
+    return clean(text)
+
+
 CASES = [
+    Case("container_default_stopwords", remove_stopwords, {"text": STR}, "native"),
+    Case("container_default_mapping", default_mapping, {"text": STR}, "native"),
     Case("type_identity", type_identity, {"value": STR.or_none()}, "native"),
     Case("type_equality", type_equality, {"value": STR.or_none()}, "native"),
     Case("instance_text", instance_text, {"value": STR.or_none()}, "native"),

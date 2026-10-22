@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.registration import register_datetimes
+from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
 from udfx.backends.spark.rules import RULES
-from udfx.semantics.datetimes import DatetimePrimitives
+from udfx.semantics.datetimes import DatetimeArithmeticPrimitives, DatetimePrimitives
 
 
 def part(value: Column, name: str) -> Column:
@@ -39,4 +39,19 @@ register_datetimes(
         is_null=Column.isNull,
     ),
     Column.eqNullSafe,
+)
+
+
+register_datetime_arithmetic(
+    RULES,
+    DatetimeArithmeticPrimitives(
+        literal=functions.lit,
+        to_microseconds=lambda value: functions.timestamp_diff(
+            "MICROSECOND", functions.lit("1970-01-01").cast("timestamp_ntz"), value
+        ),
+        from_microseconds=lambda value: functions.timestamp_add(
+            "MICROSECOND", value, functions.lit("1970-01-01").cast("timestamp_ntz")
+        ),
+        select=lambda condition, then, orelse: functions.when(condition, then).otherwise(orelse),
+    ),
 )

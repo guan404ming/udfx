@@ -9,7 +9,7 @@ from udfx.backends.registration import (
     Lowered,
     register_extremum,
     register_float_variants,
-    register_numpy_math,
+    register_math,
 )
 from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
@@ -66,7 +66,7 @@ def round_overflows(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(pl.lit(False), round_overflow_safe(ROUND, value, digits))
 
 
-register_numpy_math(
+register_math(
     RULES,
     ROUND,
     root=pl.Expr.sqrt,

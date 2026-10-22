@@ -86,8 +86,8 @@ def constant(value: object) -> Item:
 
 def constant_value(item: Item) -> object:
     match item:
-        case Value(node=Lit(value=value)):
-            return value
+        case Value(node=Lit(value=value), container=container):
+            return container(value) if container is not None else value
         case Opaque(value=value):
             return value
         case _:

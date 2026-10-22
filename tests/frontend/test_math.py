@@ -1,3 +1,4 @@
+# ruff: noqa: PLW0108
 import math
 from collections.abc import Callable
 
@@ -55,6 +56,10 @@ CASES: list[tuple[Callable[..., object], dict[str, Type], str]] = [
     (ceiling, {"x": FLOAT}, "math.ceil"),
     (flooring, {"x": INT}, "math.floor"),
     (root, {"x": FLOAT}, "math.sqrt"),
+    (lambda value: math.log(value), {"value": FLOAT}, "math.log"),
+    (lambda value: math.log(value, 2), {"value": INT}, "math.log"),
+    (lambda value: math.log2(value), {"value": INT}, "math.log2"),
+    (lambda value: math.exp(value), {"value": FLOAT}, "math.exp"),
 ]
 
 
@@ -70,3 +75,13 @@ def test_call_becomes_op(
 def test_complex_power_raises() -> None:
     rows = [(-8.0, 0.5), (2.0, 0.5)]
     assert check_function(power, {"a": FLOAT, "b": FLOAT}, POLARS, rows) == []
+
+
+@pytest.mark.parametrize("name", ["log1p", "log2", "log10", "expm1"])
+@pytest.mark.parametrize("scalar", [INT, FLOAT])
+def test_numpy_transcendental_calls(name: str, scalar: Type) -> None:
+    numpy = pytest.importorskip("numpy")
+    function = getattr(numpy, name)
+    program = trace(lambda value: function(value), {"value": scalar})
+    assert isinstance(program.value, Call)
+    assert program.value.op.name == f"numpy.{name}"

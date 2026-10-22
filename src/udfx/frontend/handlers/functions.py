@@ -21,6 +21,7 @@ from udfx.frontend.constants import (
     type_test,
 )
 from udfx.frontend.context import Context
+from udfx.frontend.datetimes import call_datetime, duration_attribute
 from udfx.frontend.frozen import closure
 from udfx.frontend.handlers.iteration import comprehension, source_of
 from udfx.frontend.machine import emit, explore, handles
@@ -30,6 +31,7 @@ from udfx.frontend.state import Return, State, Step
 from udfx.frontend.values import (
     NULL,
     Cell,
+    Duration,
     Function,
     Generator,
     Item,
@@ -96,7 +98,10 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
                 )
             result, faults = invoke(f".{name}", [node], AttributeError)
             return emit(context, rest, Value(result), faults)
-        case Value() | Match() if method:
+        case Duration(node=node) if name in {"days", "seconds"} and not method:
+            result, faults = duration_attribute(node, name)
+            return emit(context, rest, Value(result), faults)
+        case Value() | Match() | Duration() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():
             raise Unsupported(
@@ -172,8 +177,10 @@ def dispatch_call(
         raise Unsupported("passing a row to a call", context.where(rest))
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments, keywords)
-    special = call_path(callee, arguments, keywords) or call_regex(
-        callee, arguments, keywords, rest.path
+    special = (
+        call_datetime(callee, arguments, keywords)
+        or call_path(callee, arguments, keywords)
+        or call_regex(callee, arguments, keywords, rest.path)
     )
     if special is not None:
         item, faults = special

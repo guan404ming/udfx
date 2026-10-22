@@ -15,6 +15,7 @@ from udfx.frontend.formatting import format_template
 from udfx.frontend.logic import disjunction, fold, negate
 from udfx.frontend.values import (
     MAX_UNROLL,
+    Duration,
     Generator,
     Item,
     Match,
@@ -28,7 +29,7 @@ from udfx.frontend.values import (
 )
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Lit, Node, lit
 from udfx.ops import Fault, Op, apply, matching
-from udfx.semantics.datetimes import format_parts, parse_parts
+from udfx.semantics.datetimes import MICROSECONDS_PER_SECOND, format_parts, parse_parts
 from udfx.semantics.translation import translation_table
 from udfx.types import BOOL, INT, STR, Kind, list_of, type_of
 
@@ -59,6 +60,9 @@ CALLABLES: tuple[tuple[object, str], ...] = (
     (math.floor, "math.floor"),
     (math.isinf, "math.isinf"),
     (math.isnan, "math.isnan"),
+    (math.log, "math.log"),
+    (math.log2, "math.log2"),
+    (math.exp, "math.exp"),
     (math.log10, "math.log10"),
     (math.sqrt, "math.sqrt"),
     (re.compile, "re.compile"),
@@ -83,6 +87,10 @@ CALLABLE_IDENTITIES = {
     ("builtins", "pandas.core.dtypes.missing", "notna"): "pandas.notna",
     ("numpy", "ufunc", "isnan"): "numpy.isnan",
     ("numpy", "ufunc", "log"): "numpy.log",
+    ("numpy", "ufunc", "log1p"): "numpy.log1p",
+    ("numpy", "ufunc", "log2"): "numpy.log2",
+    ("numpy", "ufunc", "log10"): "numpy.log10",
+    ("numpy", "ufunc", "expm1"): "numpy.expm1",
     ("numpy", "ufunc", "sqrt"): "numpy.sqrt",
     ("numpy", "ufunc", "exp"): "numpy.exp",
     ("numpy", "ufunc", "absolute"): "numpy.abs",
@@ -334,6 +342,8 @@ def call(
 
 
 def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
+    if name == "total_seconds" and len(arguments) == 1 and isinstance(arguments[0], Duration):
+        return invoke("__truediv__", [arguments[0].node, lit(MICROSECONDS_PER_SECOND)], TypeError)
     if name == "translate" and len(arguments) == 2:
         table = arguments[1]
         if not isinstance(table, Opaque):

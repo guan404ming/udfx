@@ -65,7 +65,7 @@ def build_const_key_map(context: Context, state: State, instruction: dis.Instruc
     names = constant_value(keys)
     if not isinstance(names, tuple):
         raise Unsupported(f"dict keys {names!r}", context.where(state))
-    entries = scalar_map(zip(names, map(constant_value, values), strict=True))
+    entries = dict(zip(names, map(constant_value, values), strict=True))
     return [rest.push(Opaque(entries)).advance()]
 
 
@@ -73,7 +73,8 @@ def build_const_key_map(context: Context, state: State, instruction: dis.Instruc
 def build_map(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     items, rest = state.pop(2 * instruction.argval)
     constants = [constant_value(item) for item in items]
-    entries = scalar_map(zip(constants[::2], constants[1::2], strict=True))
+    scalar_map((key, None) for key in constants[::2])
+    entries = dict(zip(constants[::2], constants[1::2], strict=True))
     return [rest.push(Opaque(entries)).advance()]
 
 

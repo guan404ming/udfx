@@ -1,3 +1,6 @@
+# ruff: noqa: PLW0108
+import math
+
 import pytest
 
 from udfx.types import FLOAT, INT, STR
@@ -60,6 +63,29 @@ def numpy_ceil(value: object):
     return numpy.ceil(value)
 
 
+def guarded_math_log(value: float, base: float) -> float:
+    try:
+        return math.log(value, base)
+    except ValueError:
+        return -1.0
+    except ZeroDivisionError:
+        return -2.0
+
+
+def guarded_math_exp(value: float) -> float:
+    try:
+        return math.exp(value)
+    except OverflowError:
+        return -1.0
+
+
+def guarded_numpy_log(value: float) -> float:
+    try:
+        return numpy.log1p(value)
+    except ValueError:
+        return 5.0
+
+
 CASES = [
     Case("pandas_missing", pandas_missing, {"value": FLOAT.or_none()}, "native"),
     Case("pandas_null", pandas_null, {"value": STR.or_none()}, "native"),
@@ -77,4 +103,12 @@ CASES = [
     Case("numpy_round_digits", numpy_round_digits, {"value": FLOAT, "digits": INT}, "native"),
     Case("numpy_floor", numpy_floor, {"value": FLOAT.or_none()}, "native"),
     Case("numpy_ceil", numpy_ceil, {"value": FLOAT.or_none()}, "native"),
+    Case("math_log_base", guarded_math_log, {"value": FLOAT, "base": FLOAT}, "native"),
+    Case("math_log", lambda value: math.log(value), {"value": FLOAT}, "native"),
+    Case("math_log2", lambda value: math.log2(value), {"value": INT}, "native"),
+    Case("math_exp", guarded_math_exp, {"value": FLOAT}, "native"),
+    Case("numpy_log1p", guarded_numpy_log, {"value": FLOAT}, "native"),
+    Case("numpy_log2", lambda value: numpy.log2(value), {"value": FLOAT}, "native"),
+    Case("numpy_log10", lambda value: numpy.log10(value), {"value": INT}, "native"),
+    Case("numpy_expm1", lambda value: numpy.expm1(value), {"value": FLOAT}, "native"),
 ]

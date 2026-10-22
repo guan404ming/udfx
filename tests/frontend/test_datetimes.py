@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import datetime as datetime_module
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
+from itertools import product
 from typing import Any
 
 import pytest
@@ -14,7 +15,7 @@ from udfx.frontend import trace
 from udfx.ir import Call
 from udfx.testing import check_function
 from udfx.testing.strategies import DATETIME_TRAPS
-from udfx.types import DATETIME, FLOAT, STR, Type
+from udfx.types import DATETIME, FLOAT, INT, STR, Type
 
 PARSE = datetime.strptime
 BOUND = datetime(1970, 1, 1)
@@ -144,3 +145,48 @@ def test_unsupported_datetime_formats(format: str, parse: bool) -> None:
     )
     with pytest.raises(Unsupported, match="datetime directive"):
         trace(function, {"value": STR if parse else DATETIME})
+
+
+@pytest.mark.parametrize(
+    ("function", "result"),
+    [
+        (lambda left, right: (left - right).days, INT),
+        (lambda left, right: (left - right).seconds, INT),
+        (lambda left, right: (left - right).total_seconds(), FLOAT),
+    ],
+)
+def test_datetime_difference_forms(function: Callable[..., object], result: Type) -> None:
+    assert trace(function, {"left": DATETIME, "right": DATETIME}).result == result
+
+
+def elapsed_seconds(left: datetime, right: datetime) -> float:
+    difference = left - right
+    return difference.days * 86400 + difference.seconds + difference.total_seconds()
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_datetime_difference_attributes(backend: Backend[Any]) -> None:
+    rows = list(product((*DATETIME_TRAPS, None), repeat=2))
+    schema = {"left": DATETIME.or_none(), "right": DATETIME.or_none()}
+    assert check_function(elapsed_seconds, schema, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda value: value + timedelta(days=1, hours=2, minutes=3, seconds=4.000005),
+        lambda value: value - timedelta(days=-1, hours=2, minutes=3, seconds=4.000005),
+        lambda value: timedelta(microseconds=-1) + value,
+        lambda value: value + timedelta(days=999999999),
+        lambda value: value - timedelta(days=999999999),
+    ],
+)
+def test_literal_datetime_offsets(function: Callable[..., object], backend: Backend[Any]) -> None:
+    rows = [(value,) for value in (*DATETIME_TRAPS, None)]
+    assert check_function(function, {"value": DATETIME.or_none()}, backend, rows) == []
+
+
+def test_dynamic_timedelta_is_unsupported() -> None:
+    with pytest.raises(Unsupported, match="constant"):
+        trace(lambda value: BOUND + timedelta(days=value), {"value": INT})

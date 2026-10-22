@@ -6,7 +6,7 @@ from udfx.backends.registration import (
     Lowered,
     register_extremum,
     register_float_variants,
-    register_numpy_math,
+    register_math,
 )
 from udfx.backends.spark.conversions import float_int
 from udfx.backends.spark.numbers import ORDER, cast_float64, floor
@@ -64,7 +64,7 @@ def round_overflows(value: Column, digits: Column) -> Lowered[Column]:
     return Lowered(functions.lit(False), round_overflow_safe(ROUND, value, digits))
 
 
-register_numpy_math(
+register_math(
     RULES,
     ROUND,
     root=functions.sqrt,

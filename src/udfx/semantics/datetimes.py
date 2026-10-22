@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from udfx.errors import Unsupported
@@ -20,6 +20,12 @@ DIRECTIVES = {
     "y": ("year", 2),
 }
 EPOCH_ORDINAL = datetime(1970, 1, 1).toordinal()
+
+
+MICROSECONDS_PER_SECOND = 1000000
+SECONDS_PER_DAY = 86400
+MICROSECONDS_PER_DAY = SECONDS_PER_DAY * MICROSECONDS_PER_SECOND
+EPOCH = datetime(1970, 1, 1)
 
 
 def format_parts(format: str) -> list[tuple[str, bool]]:
@@ -160,3 +166,53 @@ def parse_datetime(primitives: DatetimePrimitives, text: Any, format: Any) -> tu
     parsed = primitives.select(valid, parsed, fallback[0])
     rendered, _ = format_datetime(primitives, parsed, format)
     return parsed, ~primitives.is_null(parsed) & (rendered == text)
+
+
+def duration_microseconds(value: timedelta) -> int:
+    return (
+        value.days * MICROSECONDS_PER_DAY
+        + value.seconds * MICROSECONDS_PER_SECOND
+        + value.microseconds
+    )
+
+
+MINIMUM_TIMESTAMP = duration_microseconds(datetime.min - EPOCH)
+MAXIMUM_TIMESTAMP = duration_microseconds(datetime.max - EPOCH)
+MAXIMUM_SHIFT = MAXIMUM_TIMESTAMP - MINIMUM_TIMESTAMP + 1
+
+
+def datetime_difference(left: datetime, right: datetime) -> int:
+    return duration_microseconds(left - right)
+
+
+def datetime_shift(value: datetime, microseconds: int) -> datetime:
+    return value + timedelta(microseconds=microseconds)
+
+
+def datetime_shift_overflows(value: datetime, microseconds: int) -> bool:
+    timestamp = duration_microseconds(value - EPOCH)
+    return (
+        microseconds < MINIMUM_TIMESTAMP - timestamp or microseconds > MAXIMUM_TIMESTAMP - timestamp
+    )
+
+
+@dataclass(frozen=True)
+class DatetimeArithmeticPrimitives:
+    literal: Callable[[Any], Any]
+    to_microseconds: Callable[[Any], Any]
+    from_microseconds: Callable[[Any], Any]
+    select: Callable[[Any, Any, Any], Any]
+
+
+def shift_overflows(primitives: DatetimeArithmeticPrimitives, timestamp: Any, offset: Any) -> Any:
+    minimum = primitives.literal(MINIMUM_TIMESTAMP) - timestamp
+    maximum = primitives.literal(MAXIMUM_TIMESTAMP) - timestamp
+    return (offset < minimum) | (offset > maximum)
+
+
+def shift_datetime(primitives: DatetimeArithmeticPrimitives, value: Any, offset: Any) -> Any:
+    timestamp = primitives.to_microseconds(value)
+    safe = primitives.select(
+        shift_overflows(primitives, timestamp, offset), primitives.literal(0), offset
+    )
+    return primitives.from_microseconds(timestamp + safe)

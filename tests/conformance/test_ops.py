@@ -13,6 +13,8 @@ from udfx.testing.strategies import (
     DATETIME_FORMATS,
     DATETIME_TEXT_TRAPS,
     DATETIME_TRAPS,
+    FLOAT_TRAPS,
+    INT_TRAPS,
     PREDICATE_TRAPS,
     REGEX_PATTERNS,
     SLICE_TRAPS,
@@ -43,6 +45,15 @@ def test_op_matches_python(backend: Backend[Any], op: Op, data: st.DataObject) -
     rows = data.draw(batches(schema))
     if op.name in {f".{method}" for method in PREDICATES}:
         rows.extend((value,) for value in PREDICATE_TRAPS)
+    if op.name.startswith(("math.log", "math.exp", "numpy.log", "numpy.exp")):
+        for index, parameter in enumerate(op.parameters):
+            rows.extend(
+                tuple(
+                    value if position == index else 1.0 if other.kind is Kind.FLOAT else 1
+                    for position, other in enumerate(op.parameters)
+                )
+                for value in (FLOAT_TRAPS if parameter.kind is Kind.FLOAT else INT_TRAPS)
+            )
     constant = data.draw(st.sampled_from([None, *range(len(op.parameters))]))
     constants = {} if constant is None else {constant: data.draw(values(op.parameters[constant]))}
     if op.name.startswith("re."):
