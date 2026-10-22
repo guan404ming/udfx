@@ -10,6 +10,10 @@ from udfx.types import BOOL, FLOAT, INT, STR, list_of
 from . import Case
 
 
+def constant_result(text):
+    return "k"
+
+
 def is_none(x):
     return x is None
 
@@ -131,6 +135,7 @@ def default_mapping(text):
 CASES = [
     Case("container_default_stopwords", remove_stopwords, {"text": STR}, "native"),
     Case("container_default_mapping", default_mapping, {"text": STR}, "native"),
+    Case("constant_result", constant_result, {"text": STR.or_none()}, "native"),
     Case("type_identity", type_identity, {"value": STR.or_none()}, "native"),
     Case("type_equality", type_equality, {"value": STR.or_none()}, "native"),
     Case("instance_text", instance_text, {"value": STR.or_none()}, "native"),

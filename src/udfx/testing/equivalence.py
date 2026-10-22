@@ -47,6 +47,9 @@ def check_translation(
         (row, out) for row, out in zip(rows, expected, strict=True) if isinstance(out, Returned)
     ]
     (actual,) = backend.evaluate([expr], schema, [row for row, _ in returned])
+    assert len(actual) == len(returned), (
+        f"{backend.name} returned {len(actual)} rows for {len(returned)} input rows"
+    )
     mismatches = [
         Mismatch(row, out, repr(value))
         for (row, out), value in zip(returned, actual, strict=True)
@@ -84,7 +87,11 @@ def check_op(
     exact_parts = [value.exact, *(item.exact for item in lowered)]
     exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]
 
-    outputs = backend.evaluate([value.expr, *exact, *(item.expr for item in lowered)], schema, rows)
+    _, *outputs = backend.evaluate(
+        [backend.column(columns[0]), value.expr, *exact, *(item.expr for item in lowered)],
+        schema,
+        rows,
+    )
     values, exacts, hits = outputs[0], outputs[1 : 1 + len(exact)], outputs[1 + len(exact) :]
     mismatches: list[Mismatch] = []
     for index, row in enumerate(rows):

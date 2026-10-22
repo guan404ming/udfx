@@ -20,6 +20,10 @@ class PolarsBackend(Backend[pl.Expr]):
     name: ClassVar[str] = "polars"
     rules: ClassVar[RuleSet[pl.Expr]] = RULES
 
+    def build(self, program: Program) -> pl.Expr:
+        expr = super().build(program)
+        return expr if expr.meta.root_names() else broadcast(expr)
+
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
             return program.run(rows)
@@ -95,5 +99,5 @@ class PolarsBackend(Backend[pl.Expr]):
         )
         names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
-        outputs = self.execute(lambda: frame.with_columns(*aliased))
+        outputs = self.execute(lambda: frame.select(*aliased))
         return [outputs.get_column(name).to_list() for name in names]
