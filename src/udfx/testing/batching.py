@@ -4,6 +4,8 @@ from random import getrandbits
 from hypothesis import given, seed
 from hypothesis import strategies as st
 
+EXAMPLES_PER_QUERY = 5
+
 
 def check_batched[Example](
     draw: Callable[[st.DataObject], Example], check: Callable[[Sequence[Example]], None]
@@ -22,7 +24,8 @@ def check_batched[Example](
 
     generate()
     try:
-        check(examples)
+        for start in range(0, len(examples), EXAMPLES_PER_QUERY):
+            check(examples[start : start + EXAMPLES_PER_QUERY])
     except Exception:
         replay = True
         generate()

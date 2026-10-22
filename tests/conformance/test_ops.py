@@ -11,7 +11,7 @@ from udfx.backends.base import Backend, Row
 from udfx.ops import Op, all_ops, resolve
 from udfx.semantics.scalars import numpy_scalar
 from udfx.testing import batches, values
-from udfx.testing.batching import check_batched
+from udfx.testing.batching import EXAMPLES_PER_QUERY, check_batched
 from udfx.testing.equivalence import check_op_batches
 from udfx.testing.strategies import (
     constant_values,
@@ -78,7 +78,8 @@ def test_batching_keeps_examples(monkeypatch: pytest.MonkeyPatch) -> None:
 
     unbatched()
     check_batched(draw, checked.append)
-    assert checked == [drawn]
+    assert [example for chunk in checked for example in chunk] == drawn
+    assert all(len(chunk) <= EXAMPLES_PER_QUERY for chunk in checked)
     assert len(drawn) == settings().max_examples
 
 
