@@ -26,6 +26,7 @@ def session() -> SparkSession:
         SparkSession.builder.master("local[*]")
         .config("spark.driver.memory", "8g")
         .config("spark.sql.session.timeZone", "UTC")
+        .config("spark.sql.timestampType", "TIMESTAMP_NTZ")
         .config("spark.ui.enabled", "false")
         .config("spark.ui.showConsoleProgress", "false")
         .getOrCreate()

@@ -6,7 +6,6 @@ from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from bench.speed import data
 from bench.speed.timing import Baseline
 from tests.corpus.cases import Case
 
@@ -27,7 +26,8 @@ class Baselines:
             json.loads(path.read_text()) if path.exists() else {}
         )
         libraries = " ".join(f"{name} {installed(name)}" for name in LIBRARIES)
-        self.context = f"{sys.version} {libraries} {rows} {repeats} {inspect.getsource(data)}"
+        harness = "".join(path.read_text() for path in sorted(Path(__file__).parent.glob("*.py")))
+        self.context = f"{sys.version} {libraries} {rows} {repeats} {harness}"
 
     def for_case(self, case: Case) -> Baseline:
         source = f"{self.context} {inspect.getsource(case.function)} {case.schema}"

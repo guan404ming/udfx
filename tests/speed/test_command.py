@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from conftest import engine_names
 
-from bench.speed import polars
+from bench.speed import polars, spark
 from bench.speed.command import main
 
 
@@ -107,3 +107,9 @@ def test_baselines_are_reused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     main([*arguments, "--baselines", str(tmp_path / "baselines.json")])
     assert first == 4
     assert len(calls) - first == 2
+
+
+@pytest.mark.xdist_group("spark")
+def test_spark_datetime_baseline_matches_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(spark, "timed", lambda action, repeats: 1.0)
+    main(["--rows", "200", "--repeats", "1", "--engines", "spark", "--cases", "datetime_format"])
