@@ -18,7 +18,7 @@ from udfx import __version__
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.duckdb.dtypes import dtype
-from udfx.backends.duckdb.rules import RULES, column, constant, function, when
+from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
@@ -61,6 +61,7 @@ def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> st
 class DuckDBBackend(Backend[Expression]):
     name: ClassVar[str] = "duckdb"
     rules: ClassVar[RuleSet[Expression]] = RULES
+    binds: ClassVar[bool] = True
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self._connection = connection
@@ -81,6 +82,9 @@ class DuckDBBackend(Backend[Expression]):
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:
         return when(condition, then, orelse)
 
+    def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
+        return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")
+
     def list_value(self, items: Sequence[Expression], type: Type) -> Expression:
         return function("list_value", *items).cast(dtype(type))
 
@@ -99,12 +103,6 @@ class DuckDBBackend(Backend[Expression]):
         return function(
             "list_filter", source, duckdb.LambdaExpression(name, predicate(column(name)))
         )
-
-    def record(self, fields: Mapping[str, Expression]) -> Expression:
-        return function("struct_pack", *(value.alias(name) for name, value in fields.items()))
-
-    def field(self, record: Expression, name: str) -> Expression:
-        return function("struct_extract", record, constant(name))
 
     @property
     def native_faults(self) -> NativeFaults:

@@ -53,6 +53,7 @@ class FallbackError(RuntimeError):
 class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
+    binds: ClassVar[bool] = False
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
@@ -113,6 +114,9 @@ class Backend[E](ABC):
     @abstractmethod
     def select(self, condition: E, then: E, orelse: E) -> E: ...
 
+    def bind(self, value: E, body: Callable[[E], E]) -> E:
+        raise Unsupported(f"{self.name} cannot bind expressions")
+
     def both(self, left: E, right: E) -> E:
         return cast("Any", left) & right
 
@@ -128,12 +132,6 @@ class Backend[E](ABC):
     def list_filter(self, source: E, predicate: Callable[[E], E]) -> E:
         raise Unsupported(f"{self.name} has no list filter")
 
-    def record(self, fields: Mapping[str, E]) -> E:
-        raise Unsupported(f"{self.name} has no record constructor")
-
-    def field(self, record: E, name: str) -> E:
-        raise Unsupported(f"{self.name} has no record fields")
-
     @abstractmethod
     def fallback(self, native: E, exact: E, program: Program) -> E: ...
 
@@ -142,8 +140,10 @@ class Backend[E](ABC):
         self, exprs: Sequence[E], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]: ...
 
-    def lower(self, node: Node, elements: Mapping[Element, E] | None = None) -> Lowered[E]:
+    def lower(self, node: Node, elements: Mapping[Node, E] | None = None) -> Lowered[E]:
         elements = elements or {}
+        if node in elements:
+            return Lowered(elements[node])
         match node:
             case Guarded():
                 value = self.lower(node.value, elements)

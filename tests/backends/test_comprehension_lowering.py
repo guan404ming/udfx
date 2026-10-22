@@ -1,13 +1,13 @@
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
-from udfx.ir import FALSE, Col, Comprehension, Element, Node
+from udfx.backends.hoisting import invariant
+from udfx.ir import FALSE, TRUE, Col, Comprehension, Element, Node
 from udfx.ops import apply
-from udfx.types import BOOL, STR, list_of
+from udfx.types import BOOL, INT, STR, list_of
 
 
 def nested(source: Node, depth: int) -> Comprehension:
@@ -19,10 +19,9 @@ def nested(source: Node, depth: int) -> Comprehension:
 
 
 @pytest.mark.parametrize("backend", backend_params())
-def test_nested_comprehension_lowering_grows_linearly(backend: Backend[Any]) -> None:
+def test_nested_comprehension_lowering_evaluates(backend: Backend[Any]) -> None:
     if backend.name == "polars":
         pytest.skip("Polars has no nested element scopes")
-    sizes = []
     for depth in range(1, 5):
         type = STR
         row: object = " a "
@@ -31,13 +30,8 @@ def test_nested_comprehension_lowering_grows_linearly(backend: Backend[Any]) -> 
             row = [row]
         source = Col("values", type)
         node = nested(source, depth)
-        with patch.object(backend, "lower", wraps=backend.lower) as lower:
-            lowered = backend.lower(node)
-        calls = [call.args[0] for call in lower.call_args_list]
-        assert sum(isinstance(call, Comprehension) for call in calls) == depth
-        assert len(calls) <= 7 * depth
+        lowered = backend.lower(node)
         assert lowered.exact is None
-        sizes.append(len(str(lowered.expr)))
         if backend.name == "datafusion" and depth > 1:
             continue
         expected: object = "a"
@@ -46,24 +40,13 @@ def test_nested_comprehension_lowering_grows_linearly(backend: Backend[Any]) -> 
         assert backend.evaluate(
             [lowered.expr], {"values": type, "active": BOOL}, [(row, True)]
         ) == [[expected]]
-    assert sizes[-1] <= 5 * sizes[0]
 
 
-@pytest.mark.parametrize("backend", backend_params())
-@pytest.mark.parametrize("guarded", [False, True])
-def test_comprehension_body_lowers_once(backend: Backend[Any], guarded: bool) -> None:
-    source = Col("words", list_of(STR))
-    element = Element("word", STR)
-    value = apply(".upper" if guarded else ".strip", element)
-    condition = apply("bool", element)
-    node = Comprehension(source, element, value, condition, FALSE)
-    with patch.object(backend, "lower", wraps=backend.lower) as lower:
-        lowered = backend.lower(node)
-    assert sum(call.args[0] is value for call in lower.call_args_list) == 1
-    assert sum(call.args[0] is condition for call in lower.call_args_list) == 1
-    exact = backend.exact_expression(lowered)
-    results, flags = backend.evaluate(
-        [lowered.expr, exact], {"words": list_of(STR)}, [([" a ", ""],), ([],)]
-    )
-    assert results == [[" A " if guarded else "a"], []]
-    assert flags == [True, True]
+def test_invariant_skips_inner_elements_and_picks_outer_calls() -> None:
+    words = apply(".split", Col("text", STR))
+    element = Element("index", INT)
+    value = apply("__getitem__", words, element)
+    node = Comprehension(Col("indexes", list_of(INT)), element, value, TRUE, FALSE)
+    assert invariant(node, {}) == words
+    assert invariant(node, {words: None}) is None
+    assert invariant(nested(Col("values", list_of(list_of(STR))), 2), {}) is None

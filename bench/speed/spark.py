@@ -1,7 +1,7 @@
 from collections.abc import Callable, Sequence
 
 import pyarrow
-from pyspark.sql import Column, DataFrame, functions
+from pyspark.sql import Column, DataFrame, SparkSession, functions
 
 from bench.speed.data import batched, caller
 from bench.speed.fingerprint import fingerprint
@@ -21,6 +21,17 @@ from udfx.backends.spark.dtypes import dtype
 from udfx.program import Program
 
 
+def session() -> SparkSession:
+    return (
+        SparkSession.builder.master("local[*]")
+        .config("spark.driver.memory", "8g")
+        .config("spark.sql.session.timeZone", "UTC")
+        .config("spark.ui.enabled", "false")
+        .config("spark.ui.showConsoleProgress", "false")
+        .getOrCreate()
+    )
+
+
 def consume(frame: DataFrame, expr: Column) -> Callable[[], object]:
     return lambda: frame.select(functions.sum(functions.hash(expr))).collect()
 
@@ -34,7 +45,7 @@ def measure(
     *,
     baselines: Baseline = measured,
 ) -> list[Measurement]:
-    backend = SparkBackend()
+    backend = SparkBackend(session())
     position = f"{RESERVED}position"
     table = table.append_column(position, pyarrow.array(range(table.num_rows), pyarrow.int64()))
     frame = backend.session().createDataFrame(table).cache()

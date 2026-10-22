@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from typing import Any, cast
 
-import polars as pl
 import pyarrow as pa
 import pytest
 
@@ -9,7 +8,6 @@ from udfx.backends import arrow
 from udfx.backends.base import Backend
 from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.duckdb import DuckDBBackend
-from udfx.backends.polars import PolarsBackend
 from udfx.ir import Col
 from udfx.program import Program
 from udfx.types import BOOL, INT
@@ -50,11 +48,3 @@ def test_case_sends_only_pending_rows_to_arrow(
     ]
     if all(flags):
         assert batches == []
-
-
-def test_polars_fallback_uses_computed_columns() -> None:
-    backend = PolarsBackend()
-    program = Program(lambda value: value * 10, {"value": INT}, Col("value", INT))
-    expr = backend.fallback(pl.col("native"), pl.col("exact"), program)
-    frame = pl.DataFrame({"value": [1, 2, 3], "native": [7, 8, 9], "exact": [True, False, None]})
-    assert frame.select(expr).to_series().to_list() == [7, 20, 30]

@@ -15,7 +15,7 @@ from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
 from udfx.errors import Unsupported
-from udfx.ir import Col, Comprehension, Element, Lit, Node
+from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
 
@@ -41,9 +41,7 @@ class SparkBackend(Backend[Column]):
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
 
-    def lower(
-        self, node: Node, elements: Mapping[Element, Column] | None = None
-    ) -> Lowered[Column]:
+    def lower(self, node: Node, elements: Mapping[Node, Column] | None = None) -> Lowered[Column]:
         lowered = super().lower(node, elements)
         if isinstance(node, Comprehension) and elements and lowered.exact is not None:
             raise Unsupported("Spark cannot pass guarded nested lambdas to a Python UDF")
@@ -86,12 +84,6 @@ class SparkBackend(Backend[Column]):
 
     def list_filter(self, source: Column, predicate: Callable[[Column], Column]) -> Column:
         return functions.filter(source, predicate)
-
-    def record(self, fields: Mapping[str, Column]) -> Column:
-        return functions.struct(*(value.alias(name) for name, value in fields.items()))
-
-    def field(self, record: Column, name: str) -> Column:
-        return record.getField(name)
 
     @property
     def native_faults(self) -> NativeFaults:

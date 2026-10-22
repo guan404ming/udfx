@@ -18,7 +18,7 @@ from udfx.backends.datafusion.rules import (
     typed_literal,
 )
 from udfx.backends.registration import Lowered, RuleSet
-from udfx.ir import Col, Comprehension, Element, Lit, Node
+from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
 from udfx.types import BOOL, Type
 
@@ -44,7 +44,7 @@ class DataFusionBackend(Backend[Expr]):
     def column(self, node: Col) -> Expr:
         return column(node.name)
 
-    def lower(self, node: Node, elements: Mapping[Element, Expr] | None = None) -> Lowered[Expr]:
+    def lower(self, node: Node, elements: Mapping[Node, Expr] | None = None) -> Lowered[Expr]:
         lowered = super().lower(node, elements)
         return (
             Lowered(lowered.expr.cast(dtype(node.type)), lowered.exact, lowered.overflow)
@@ -68,12 +68,6 @@ class DataFusionBackend(Backend[Expr]):
 
     def list_filter(self, source: Expr, predicate: Callable[[Expr], Expr]) -> Expr:
         return array_filter(source, predicate)
-
-    def record(self, fields: Mapping[str, Expr]) -> Expr:
-        return functions.named_struct(list(fields.items()))
-
-    def field(self, record: Expr, name: str) -> Expr:
-        return record[name]
 
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)
