@@ -142,7 +142,7 @@ class Backend[E](ABC):
 
     def lower(self, node: Node, elements: Mapping[Node, E] | None = None) -> Lowered[E]:
         elements = elements or {}
-        if node in elements:
+        if elements and node in elements:
             return Lowered(elements[node])
         match node:
             case Guarded():
