@@ -30,7 +30,8 @@ def dtype(type: Type) -> pa.DataType:
 
 def make_gather(columns: Sequence[pa.Array]) -> Gather:
     def gather(pending: list[int]) -> Sequence[Sequence[object]]:
-        selected = [column.take(pending) for column in columns]
+        everything = bool(columns) and len(pending) == len(columns[0])
+        selected = columns if everything else [column.take(pending) for column in columns]
         return [
             (
                 column.cast(pa.timestamp("us", tz=column.type.tz))
@@ -57,6 +58,8 @@ def fallback(
         return native
     values = backend.evaluate_pending_rows(program, pending, make_gather(columns))
     replacements = pa.array(values, type=native.type)
+    if len(pending) == len(native):
+        return replacements
     if pa.types.is_list(native.type):
         indices = list(range(len(native)))
         for offset, index in enumerate(pending, len(native)):

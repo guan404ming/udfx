@@ -5,7 +5,9 @@ from dataclasses import dataclass
 
 from udfx.ir import FALSE, Node
 from udfx.semantics.scalars import python_scalar
-from udfx.types import Type, fits
+from udfx.types import INT64_MAX, INT64_MIN, Kind, Type, fits
+
+PLAIN = {Kind.STR: str, Kind.FLOAT: float, Kind.BOOL: bool, Kind.INT: int}
 
 
 class Row:
@@ -46,9 +48,14 @@ class Program:
         function = self.function
         if self.row_mode:
             rows = (self.arguments(row) for row in rows)
+        plain = PLAIN.get(result.kind)
         for row in rows:
-            value = python_scalar(function(*row))
-            if not fits(value, result):
-                raise OverflowError(f"udfx result {value!r} does not fit {result}")
+            value = function(*row)
+            if type(value) is not plain or (
+                isinstance(value, int) and not INT64_MIN <= value <= INT64_MAX
+            ):
+                value = python_scalar(value)
+                if not fits(value, result):
+                    raise OverflowError(f"udfx result {value!r} does not fit {result}")
             values.append(value)
         return values
