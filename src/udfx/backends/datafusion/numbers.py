@@ -12,6 +12,7 @@ from udfx.backends.registration import (
     register_comparison,
     register_equality,
     register_float_variants,
+    register_int_truediv,
 )
 from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
@@ -97,12 +98,7 @@ register_float_variants(RULES, "__mod__", float_mod, cast_float64)
 register_equality(RULES, null_safe_equal, cast_float64, ORDER)
 
 
-@RULES("__truediv__", Kind.INT, Kind.INT)
-def int_truediv(left: Expr, right: Expr) -> Lowered[Expr]:
-    return Lowered(
-        cast_float64(left) / cast_float64(right),
-        within_exact_float_range(left) & within_exact_float_range(right),
-    )
+register_int_truediv(RULES, lambda left, right: cast_float64(left) / cast_float64(right), ORDER)
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})

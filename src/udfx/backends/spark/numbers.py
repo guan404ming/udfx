@@ -11,6 +11,7 @@ from udfx.backends.registration import (
     register_comparison,
     register_equality,
     register_float_variants,
+    register_int_truediv,
 )
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.facts import bounded_divisor
@@ -113,12 +114,7 @@ RULES("math.isnan", Kind.FLOAT)(functions.isnan)
 RULES("math.isinf", Kind.FLOAT)(float_isinf)
 
 
-@RULES("__truediv__", Kind.INT, Kind.INT)
-def int_truediv(left: Column, right: Column) -> Lowered[Column]:
-    return Lowered(
-        functions.try_divide(left, right),
-        within_exact_float_range(left) & within_exact_float_range(right),
-    )
+register_int_truediv(RULES, functions.try_divide, ORDER)
 
 
 @RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from udfx.ir import Call, Col, If, ListValue, Lit, Node
+from udfx.semantics.numbers import FLOAT_INT_MAX
 from udfx.semantics.text import has_prefix_suffix_overlap
 from udfx.types import STR, Kind, Type, fits
 
@@ -12,6 +13,20 @@ def bounded_divisor(node: Call) -> bool:
         and isinstance(divisor.value, int)
         and divisor.value not in (0, -1)
         and fits(divisor.value, divisor.type)
+    )
+
+
+def float_exact_operands(node: Call) -> tuple[bool, ...]:
+    return tuple(
+        (
+            isinstance(argument, Lit)
+            and isinstance(argument.value, int)
+            and -FLOAT_INT_MAX <= argument.value <= FLOAT_INT_MAX
+        )
+        or (
+            isinstance(argument, Call) and argument.op.name in {"len", "set_size", "set_size_float"}
+        )
+        for argument in node.arguments
     )
 
 

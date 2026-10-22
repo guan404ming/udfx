@@ -120,9 +120,7 @@ def test_set_algebra_native_rows(backend: Backend[Any]) -> None:
         (["", "\x00", "😀"], ["😀", ""]),
     ]
     assert check_function(score, schema, backend, [*rows, ([], []), (None, []), ([], None)]) == []
-    lowered = backend.lower(trace(score, schema).value)
-    exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
-    assert backend.evaluate([exact], schema, rows)[0] == [True] * len(rows)
+    assert backend.lower(trace(score, schema).value).exact is None
 
 
 @pytest.mark.parametrize("backend", backend_params())

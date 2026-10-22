@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable
+from functools import reduce
 from typing import Any
 
 from udfx.backends.registration_datetimes import register_datetime_arithmetic, register_datetimes
@@ -12,6 +14,7 @@ from udfx.backends.registration_text import (
     register_translation,
 )
 from udfx.backends.rules import BinaryRule, Lowered, Rule, RuleOptions, RuleResult, RuleSet
+from udfx.semantics.facts import float_exact_operands
 from udfx.semantics.lists import (
     SET_OPERATIONS,
     SET_PREDICATES,
@@ -142,6 +145,18 @@ def register_widened_variants[E](
     rules(name, Kind.FLOAT, Kind.INT, guards={1: exact})(
         lambda left, right: rule(left, to_float(right))
     )
+
+
+def register_int_truediv[E](rules: RuleSet[E], divide: Binary, order: OrderPrimitives) -> None:
+    def rule(left: E, right: E, known: tuple[bool, ...] = (False, False)) -> Lowered[E]:
+        guards = [
+            order.within_exact_float_range(value)
+            for value, exact in zip((left, right), known, strict=True)
+            if not exact
+        ]
+        return Lowered(divide(left, right), reduce(operator.and_, guards) if guards else None)
+
+    rules("__truediv__", Kind.INT, Kind.INT, facts={"known": float_exact_operands})(rule)
 
 
 def register_comparison[E](
