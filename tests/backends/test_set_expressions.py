@@ -1,5 +1,6 @@
 import pytest
 
+from udfx import compile
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.ir import Col
 from udfx.ops import apply
@@ -20,3 +21,20 @@ def test_duckdb_set_size_uses_unique_count() -> None:
     expression = str(DuckDBBackend().lower(apply("set_size", characters)).expr)
     assert expression.count("list_unique(") == 1
     assert "list_distinct(" not in expression
+
+
+def test_duckdb_runs_set_operations_in_python() -> None:
+    def overlap(left: str, right: str) -> int:
+        return len(set(left.split()) & set(right.split()))
+
+    backend = DuckDBBackend()
+    schema = {"left": STR, "right": STR}
+    expression = compile(overlap, schema, backend).expr
+    assert expression is not None
+    assert "list_intersect(" not in str(expression)
+    assert backend.evaluate([expression], schema, [("a b", "b c"), ("", "a")]) == [[1, 0]]
+
+
+def test_duckdb_keeps_simple_set_sizes_native() -> None:
+    expression = compile(lambda text: len(set(text)), {"text": STR}, DuckDBBackend()).expr
+    assert "udfx fallback" not in str(expression)

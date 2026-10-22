@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from udfx.ir import Call, Col, If, ListValue, Lit, Node
+from udfx.ir import Call, Col, If, ListValue, Lit, Node, children
+from udfx.semantics.lists import SET_OPERATIONS, SET_PREDICATES
 from udfx.semantics.numbers import FLOAT_INT_MAX
 from udfx.semantics.text import has_prefix_suffix_overlap
 from udfx.types import STR, Kind, Type, fits
@@ -28,6 +29,13 @@ def float_exact_operands(node: Call) -> tuple[bool, ...]:
         )
         for argument in node.arguments
     )
+
+
+def has_set_operation(node: Node) -> bool:
+    return (
+        isinstance(node, Call)
+        and node.op.name in {f"set_{name}" for name in (*SET_OPERATIONS, *SET_PREDICATES)}
+    ) or any(has_set_operation(child) for child in children(node))
 
 
 def result_type(node: Call) -> Type:

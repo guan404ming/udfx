@@ -93,6 +93,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
 - `list_value` builds lists. `list_transform` and `list_filter` enable native comprehensions. `base.py` uses Python fallback when a comprehension needs an unsupported list operation.
 - `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower a repeated invariant list call once outside the comprehension lambdas. Only DuckDB binds. Spark cannot pass bound lambdas to a Python UDF.
+- DuckDB `build` runs the whole program in Python when it uses a set operation or its expression has `SLOW_LAMBDAS` or more lambdas. Native DuckDB is slower than Python on those shapes.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and calls `run_fallback_rows(program, rows)`.
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.

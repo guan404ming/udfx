@@ -86,3 +86,19 @@ def lit(value: object, type: Type | None = None) -> Lit:
     if resolved is None:
         raise TypeError(f"no IR type for literal {value!r}")
     return Lit(value, resolved)
+
+
+def children(node: Node) -> tuple[Node, ...]:
+    match node:
+        case Call():
+            return node.arguments
+        case If():
+            return node.condition, node.then, node.orelse
+        case Guarded():
+            return node.value, node.exact
+        case ListValue():
+            return node.items
+        case Comprehension():
+            return node.source, node.value, node.condition, node.fault
+        case _:
+            return ()

@@ -21,13 +21,15 @@ from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.registration import RuleSet
-from udfx.ir import Col, Lit
+from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
+from udfx.semantics.facts import has_set_operation
 from udfx.types import Type
 
 EXACT = f"{RESERVED}exact"
 NATIVE = f"{RESERVED}native"
 ROW = f"{RESERVED}row"
+SLOW_LAMBDAS = 8
 FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 CONNECTIONS = weakref.WeakKeyDictionary[duckdb.DuckDBPyConnection, int]()
@@ -81,6 +83,14 @@ class DuckDBBackend(Backend[Expression]):
 
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:
         return when(condition, then, orelse)
+
+    def build(self, program: Program) -> Expression:
+        expr = super().build(program)
+        if has_set_operation(program.value) or str(expr).count(" -> ") >= SLOW_LAMBDAS:
+            return self.fallback(
+                self.literal(Lit(None, program.result)), self.literal(FALSE), program
+            )
+        return expr
 
     def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
         return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")

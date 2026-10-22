@@ -4,24 +4,8 @@ from collections import Counter
 from collections.abc import Mapping
 from functools import cache
 
-from udfx.ir import Call, Col, Comprehension, Element, Guarded, If, ListValue, Node
+from udfx.ir import Call, Col, Comprehension, Element, Node, children
 from udfx.types import Kind
-
-
-def children(node: Node) -> tuple[Node, ...]:
-    match node:
-        case Call():
-            return node.arguments
-        case If():
-            return node.condition, node.then, node.orelse
-        case Guarded():
-            return node.value, node.exact
-        case ListValue():
-            return node.items
-        case Comprehension():
-            return node.source, node.value, node.condition, node.fault
-        case _:
-            return ()
 
 
 @cache
