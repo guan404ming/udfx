@@ -18,7 +18,8 @@ FULL = os.environ.get("UDFX_TESTS") == "full"
 os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [TESTS, os.environ.get("PYTHONPATH")]))
 os.environ.setdefault(
     "PYSPARK_SUBMIT_ARGS",
-    "--master local[1] --conf spark.ui.enabled=false --conf spark.sql.shuffle.partitions=1"
+    "--master local[1] --driver-memory 2g --conf spark.ui.enabled=false"
+    " --conf spark.sql.shuffle.partitions=1"
     " --conf spark.default.parallelism=1"
     " pyspark-shell",
 )
