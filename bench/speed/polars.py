@@ -1,12 +1,21 @@
 from collections.abc import Sequence
 from functools import partial
+from typing import Any
 
 import polars
 import pyarrow
 
 from bench.speed.data import caller, row_function, row_type
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
+from bench.speed.timing import (
+    Baseline,
+    Measurement,
+    fallback_in_plan,
+    measured,
+    pending_share,
+    timed,
+    verify,
+)
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.polars.dtypes import dtype
 from udfx.program import Program
@@ -14,7 +23,13 @@ from udfx.types import Kind
 
 
 def measure(
-    name: str, program: Program, table: pyarrow.Table, expected: Sequence[object], repeats: int
+    name: str,
+    program: Program,
+    table: pyarrow.Table,
+    expected: Sequence[object],
+    repeats: int,
+    *,
+    baselines: Baseline = measured,
 ) -> list[Measurement]:
     frame = polars.from_arrow(table)
     assert isinstance(frame, polars.DataFrame)
@@ -50,10 +65,14 @@ def measure(
     ):
         run_python = partial(execute, python) if isinstance(python, polars.Expr) else python
         verify(engine, name, execute(native)["out"].to_list(), expected)
-        verify(engine, name, run_python().to_series().to_list(), expected)
-        baseline = timed(run_python, repeats)
+
+        def python_time(engine: str = engine, run_python: Any = run_python) -> tuple[float, str]:
+            verify(engine, name, run_python().to_series().to_list(), expected)
+            return timed(run_python, repeats), form
+
+        baseline, used = baselines(engine, python_time)
         native_time = timed(partial(execute, native), repeats)
         measurements.append(
-            Measurement(name, engine, baseline, native_time, form, fallback, expression, pending)
+            Measurement(name, engine, baseline, native_time, used, fallback, expression, pending)
         )
     return measurements

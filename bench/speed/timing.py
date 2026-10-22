@@ -27,6 +27,13 @@ class Measurement:
         return self.python / self.native
 
 
+Baseline = Callable[[str, Callable[[], tuple[float, str]]], tuple[float, str]]
+
+
+def measured(engine: str, measure: Callable[[], tuple[float, str]]) -> tuple[float, str]:
+    return measure()
+
+
 def timed(action: Callable[[], object], repeats: int) -> float:
     best = math.inf
     for _ in range(repeats):

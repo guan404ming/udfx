@@ -1,4 +1,5 @@
 import importlib
+from pathlib import Path
 
 import pytest
 from conftest import engine_names
@@ -95,3 +96,14 @@ def test_mismatch_stops_before_timing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(polars, "timed", lambda *arguments: pytest.fail("timed incorrect output"))
     with pytest.raises(AssertionError, match="lower_strip on polars eager row 0"):
         main(["--rows", "200", "--engines", "polars", "--cases", "lower_strip", "--repeats", "1"])
+
+
+def test_baselines_are_reused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(polars, "timed", lambda action, repeats: calls.append(action) or 1.0)
+    arguments = ["--rows", "200", "--repeats", "1", "--engines", "polars", "--cases", "lower_strip"]
+    main([*arguments, "--baselines", str(tmp_path / "baselines.json")])
+    first = len(calls)
+    main([*arguments, "--baselines", str(tmp_path / "baselines.json")])
+    assert first == 4
+    assert len(calls) - first == 2

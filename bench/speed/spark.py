@@ -5,7 +5,15 @@ from pyspark.sql import Column, DataFrame, functions
 
 from bench.speed.data import batched, caller
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
+from bench.speed.timing import (
+    Baseline,
+    Measurement,
+    fallback_in_plan,
+    measured,
+    pending_share,
+    timed,
+    verify,
+)
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED
 from udfx.backends.spark import SparkBackend
@@ -18,7 +26,13 @@ def consume(frame: DataFrame, expr: Column) -> Callable[[], object]:
 
 
 def measure(
-    name: str, program: Program, table: pyarrow.Table, expected: Sequence[object], repeats: int
+    name: str,
+    program: Program,
+    table: pyarrow.Table,
+    expected: Sequence[object],
+    repeats: int,
+    *,
+    baselines: Baseline = measured,
 ) -> list[Measurement]:
     backend = SparkBackend()
     position = f"{RESERVED}position"
@@ -38,15 +52,23 @@ def measure(
                 functions.ArrowUDFType.SCALAR,
             ),
         }
-        for expr in (native, *(implementation(*arguments) for implementation in forms.values())):
+
+        def check(expr: Column) -> None:
             output = frame.select(functions.col(position), expr).collect()
             verify(
                 "spark", name, [row[1] for row in sorted(output, key=lambda row: row[0])], expected
             )
-        baseline, form = min(
-            (timed(consume(frame, implementation(*arguments)), repeats), form)
-            for form, implementation in forms.items()
-        )
+
+        def python_time() -> tuple[float, str]:
+            for implementation in forms.values():
+                check(implementation(*arguments))
+            return min(
+                (timed(consume(frame, implementation(*arguments)), repeats), form)
+                for form, implementation in forms.items()
+            )
+
+        check(native)
+        baseline, form = baselines("spark", python_time)
         native_time = timed(consume(frame, native), repeats)
         return [
             Measurement(

@@ -5,7 +5,15 @@ import pyarrow
 
 from bench.speed.data import batched, caller
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
+from bench.speed.timing import (
+    Baseline,
+    Measurement,
+    fallback_in_plan,
+    measured,
+    pending_share,
+    timed,
+    verify,
+)
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED
 from udfx.backends.datafusion import DataFusionBackend
@@ -13,7 +21,13 @@ from udfx.program import Program
 
 
 def measure(
-    name: str, program: Program, table: pyarrow.Table, expected: Sequence[object], repeats: int
+    name: str,
+    program: Program,
+    table: pyarrow.Table,
+    expected: Sequence[object],
+    repeats: int,
+    *,
+    baselines: Baseline = measured,
 ) -> list[Measurement]:
     context = datafusion.SessionContext()
     frame = context.from_arrow(table)
@@ -32,13 +46,20 @@ def measure(
     checked = context.from_arrow(
         table.append_column(position, pyarrow.array(range(table.num_rows), pyarrow.int64()))
     )
-    for expr in (native, python(*arguments)):
+
+    def check(expr: datafusion.Expr) -> None:
         output = checked.select(datafusion.col(position), expr).to_arrow_table()
         ordered = sorted(
             zip(output.column(0).to_pylist(), output.column(1).to_pylist(), strict=True)
         )
         verify("datafusion", name, [value for _, value in ordered], expected)
-    baseline = timed(lambda: frame.select(python(*arguments)).to_arrow_table(), repeats)
+
+    def python_time() -> tuple[float, str]:
+        check(python(*arguments))
+        return timed(lambda: frame.select(python(*arguments)).to_arrow_table(), repeats), "arrow"
+
+    check(native)
+    baseline, form = baselines("datafusion", python_time)
     native_time = timed(lambda: frame.select(native).to_arrow_table(), repeats)
     return [
         Measurement(
@@ -46,7 +67,7 @@ def measure(
             "datafusion",
             baseline,
             native_time,
-            "arrow",
+            form,
             fallback_in_plan(native, backend.name),
             expression,
             pending_share(

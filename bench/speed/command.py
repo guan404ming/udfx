@@ -2,10 +2,12 @@ import argparse
 import importlib
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
+from bench.speed.baselines import Baselines
 from bench.speed.data import dataset
 from bench.speed.report import report
-from bench.speed.timing import Measurement
+from bench.speed.timing import Measurement, measured
 from tests.corpus.cases import CASES
 from udfx.frontend import trace
 
@@ -26,7 +28,11 @@ def main(arguments: Sequence[str] | None = None) -> None:
     parser.add_argument("--repeats", type=positive_integer, default=3)
     parser.add_argument("--engines", nargs="+", choices=ENGINES, default=list(ENGINES))
     parser.add_argument("--cases", nargs="+", choices=cases, default=list(cases))
+    parser.add_argument("--baselines", type=Path)
     options = parser.parse_args(arguments)
+    cache = (
+        Baselines(options.baselines, options.rows, options.repeats) if options.baselines else None
+    )
     measurements: list[Measurement] = []
     skipped: dict[str, str] = {}
     engines = {}
@@ -39,9 +45,14 @@ def main(arguments: Sequence[str] | None = None) -> None:
         case = cases[name]
         program = trace(case.function, case.schema)
         table, expected = dataset(case, program, options.rows)
+        baselines = cache.for_case(case) if cache else measured
         for engine, module in engines.items():
             try:
-                measurements.extend(module.measure(name, program, table, expected, options.repeats))
+                measurements.extend(
+                    module.measure(
+                        name, program, table, expected, options.repeats, baselines=baselines
+                    )
+                )
             except AssertionError:
                 raise
             except Exception as error:
