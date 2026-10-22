@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import operator
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from functools import reduce
 from typing import Any, ClassVar, cast
 
 from udfx.backends.faults import FALLBACK_MARKER, NativeFaults, decode_fallback_error
@@ -208,15 +210,16 @@ class Backend[E](ABC):
         if not self.python_ops.isdisjoint(op_names(program.value) | op_names(program.fault)):
             return self.python(program)
         value = lower_program(self, program)
-        expr = (
+        if self.too_costly(value):
+            return self.python(program)
+        return (
             value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
         )
-        return self.python(program) if self.too_costly(expr) else expr
 
     def python(self, program: Program) -> E:
         return self.fallback(self.literal(Lit(None, program.result)), self.literal(FALSE), program)
 
-    def too_costly(self, expr: E) -> bool:
+    def too_costly(self, lowered: Lowered[E]) -> bool:
         return False
 
     def exact(self, lowered: Lowered[E]) -> E | None:
@@ -231,12 +234,7 @@ class Backend[E](ABC):
 
     def disjunction(self, *parts: E | None) -> E | None:
         present = [part for part in parts if part is not None]
-        if not present:
-            return None
-        combined = present[0]
-        for part in present[1:]:
-            combined = cast("Any", combined) | part
-        return combined
+        return reduce(operator.or_, present) if present else None
 
     def conjunction(self, *parts: E | bool | None) -> E | None:
         if any(part is False for part in parts):

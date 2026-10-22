@@ -66,3 +66,9 @@ def fallback(
             indices[index] = offset
         return pa.concat_arrays([native, replacements]).take(indices)
     return compute.replace_with_mask(native, missing, replacements)
+
+
+def python_rows(backend: Backend[Any], program: Program, columns: Sequence[pa.Array]) -> pa.Array:
+    pending = list(range(len(columns[0])))
+    values = backend.evaluate_pending_rows(program, pending, make_gather(columns))
+    return pa.array(values, type=dtype(program.result))
