@@ -49,6 +49,7 @@ print(df.select(year=translation.expr)["year"].to_list())
 
 A single parameter represents a row when the schema keys differ from its name:
 `udfx.compile(lambda row: row["price"] * row.quantity, {"price": FLOAT, "quantity": INT})`.
+Positional row access (`row[0]`, `row[-1]`) follows pandas 2.x Series behavior; pandas 3.0 raises KeyError instead.
 
 ## How it works
 

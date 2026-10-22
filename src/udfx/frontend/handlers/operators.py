@@ -20,6 +20,7 @@ from udfx.frontend.datetimes import datetime_binary
 from udfx.frontend.formatting import format_percent
 from udfx.frontend.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.machine import emit, handles
+from udfx.frontend.sets import set_operator
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Row, Set, Slice, Tuple, Value
 from udfx.ir import FALSE, TRUE, Lit, Node, lit
@@ -53,12 +54,15 @@ COMPARE_OPS: dict[str, str] = {
 def binary_op(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     symbol = instruction.argrepr.removesuffix("=")
     (left, right), rest = state.pop(2)
-    if (
-        instruction.argrepr.endswith("=")
-        and isinstance(left, Value)
-        and left.node.type.kind is Kind.LIST
+    if instruction.argrepr.endswith("=") and (
+        isinstance(left, Set) or (isinstance(left, Value) and left.node.type.kind is Kind.LIST)
     ):
-        raise Unsupported("in-place list mutation", context.where(state))
+        container = "set" if isinstance(left, Set) else "list"
+        raise Unsupported(f"in-place {container} mutation", context.where(state))
+    special = set_operator(symbol, left, right) or datetime_binary(symbol, left, right)
+    if special is not None:
+        item, faults = special
+        return emit(context, rest, item, faults)
     if symbol == "|" and any(
         isinstance(item, Opaque) and isinstance(item.value, re.RegexFlag) for item in (left, right)
     ):
@@ -84,10 +88,6 @@ def binary_op(context: Context, state: State, instruction: dis.Instruction) -> l
     name = BINARY_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"binary operator {instruction.argrepr}", context.where(state))
-    datetime_result = datetime_binary(symbol, left, right)
-    if datetime_result is not None:
-        item, faults = datetime_result
-        return emit(context, rest, item, faults)
     node, faults = invoke(name, [node_of(left), node_of(right)], TypeError)
     return emit(context, rest, Value(node), faults)
 
@@ -166,10 +166,16 @@ def binary_subscr(context: Context, state: State, instruction: dis.Instruction) 
         if not (
             isinstance(index, Value)
             and isinstance(index.node, Lit)
-            and isinstance(index.node.value, str)
+            and isinstance(index.node.value, str | int)
         ):
-            raise Unsupported("row access requires a constant string key", context.where(state))
-        return [rest.push(container.column(index.node.value)).advance()]
+            raise Unsupported(
+                "row access requires a constant string or integer key", context.where(state)
+            )
+        try:
+            item = container.column(index.node.value)
+        except IndexError:
+            return [context.raised(rest, IndexError)]
+        return [rest.push(item).advance()]
     if isinstance(container, Opaque) and any(container.value is generic for generic in GENERICS):
         return [rest.push(annotation(operator.getitem, container, index)).advance()]
     if isinstance(index, Opaque) and isinstance(index.value, slice):

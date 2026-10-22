@@ -138,6 +138,24 @@ def unique_characters(text: str) -> int:
     return len(set(text))
 
 
+def jaccard(left: str, right: str) -> float:
+    first = set(left.split())
+    second = set(right.split())
+    return len(first & second) / len(first | second)
+
+
+def set_membership(left: str, right: str) -> bool:
+    return "a" in (set(left.split()) ^ set(right.split()))
+
+
+def set_chained(left: str, right: str) -> list[str]:
+    return sorted((set(left) | set(right)) - (set(left) & set(right)))
+
+
+def set_iterable_methods(left: str, right: str) -> int:
+    return len(set(left).intersection().union(right, left.split()).difference(right.split()))
+
+
 def repeated_words(text: str) -> list[str]:
     return text.split() * 3
 
@@ -202,4 +220,14 @@ CASES.extend(
         Case("unpack_pair", unpack_pair, {"pair": list_of(STR).or_none()}, "native"),
         Case("unpack_numbers", unpack_numbers, {"numbers": list_of(INT).or_none()}, "native"),
     ]
+)
+
+CASES.extend(
+    Case(function.__name__, function, {"left": STR.or_none(), "right": STR.or_none()}, "native")
+    for function in (
+        jaccard,
+        set_membership,
+        set_chained,
+        set_iterable_methods,
+    )
 )

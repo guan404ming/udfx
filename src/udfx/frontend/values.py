@@ -31,7 +31,9 @@ class Match:
 class Row:
     columns: Mapping[str, Value]
 
-    def column(self, name: str) -> Value:
+    def column(self, name: str | int) -> Value:
+        if isinstance(name, int):
+            return tuple(self.columns.values())[name]
         if name not in self.columns:
             raise Unsupported(f"unknown row column {name!r}")
         return self.columns[name]

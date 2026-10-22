@@ -52,9 +52,28 @@ def test_row_columns_use_mixed_hints_and_reach_compiler() -> None:
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("lambda row: row[0] + ':' + str(row[1] / 2)", {"c0": "str?", "c1": "float?"}),
+        ("lambda row: row[2].year", {"c0": "str?", "c1": "str?", "c2": "datetime?"}),
+        ("lambda row: row[-2].lower() + str(row[-1] / 2)", {"c0": "str?", "c1": "float?"}),
+    ],
+)
+def test_row_positions_infer_schema(source: str, expected: dict[str, str]) -> None:
+    node = ast.parse(source, mode="eval").body
+    assert isinstance(node, ast.Lambda)
+    candidate = Candidate("notebook", 1, node, kind="row")
+    attempts = list(schemas(candidate))
+    assert {name: str(value) for name, value in attempts[0].items()} == expected
+    result = measure(candidate)
+    assert result.ok
+    assert result.schema == expected
+
+
+@pytest.mark.parametrize(
     ("source", "category"),
     [
-        ("lambda row: row[0]", "row columns could not be inferred"),
+        ("lambda row: row[index]", "row columns could not be inferred"),
         ("lambda row, other: row['value']", "row candidate requires one parameter"),
         ("lambda row: row.row", "row column names match parameter names"),
     ],

@@ -76,5 +76,8 @@ register_lists(
         distinct=lambda value: value.list.unique(),
         sort=lambda value: value.list.sort(),
         contains=lambda value, item: value.list.contains(item),
+        intersection=lambda left, right: left.list.set_intersection(right),
+        union=lambda left, right: left.list.set_union(right),
+        difference=lambda left, right: left.list.set_difference(right),
     ),
 )

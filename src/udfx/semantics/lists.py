@@ -7,6 +7,8 @@ from typing import Any
 
 SET_ORDER_MAX_SIZE = 1
 NATIVE_LIST_LIMIT = 10_000
+SET_OPERATIONS = ("intersection", "union", "difference", "symmetric_difference")
+SET_PREDICATES = ("issubset", "issuperset", "isdisjoint")
 
 
 def matches_itself(value: object) -> bool:
@@ -23,6 +25,11 @@ def set_list(values: list[Any]) -> list[Any]:
 
 def sorted_set(values: list[Any]) -> list[Any]:
     return sorted(set(values))
+
+
+def set_operation(left: list[str], right: list[str], operation: str) -> list[str] | bool:
+    result = getattr(set(left), operation)(set(right))
+    return sorted(result) if isinstance(result, set) else result
 
 
 def range_list(*arguments: int) -> list[int]:
@@ -75,6 +82,28 @@ class SetPrimitives:
     distinct: Callable[[Any], Any]
     sort: Callable[[Any], Any]
     contains: Callable[[Any, Any], Any]
+    intersection: Callable[[Any, Any], Any]
+    union: Callable[[Any, Any], Any]
+    difference: Callable[[Any, Any], Any]
+
+
+def native_set_operation(primitives: SetPrimitives, left: Any, right: Any, operation: str) -> Any:
+    match operation:
+        case "intersection" | "isdisjoint":
+            result = primitives.intersection(left, right)
+        case "union":
+            result = primitives.union(left, right)
+        case "difference" | "issubset":
+            result = primitives.difference(left, right)
+        case "issuperset":
+            result = primitives.difference(right, left)
+        case _:
+            result = primitives.union(
+                primitives.difference(left, right), primitives.difference(right, left)
+            )
+    if operation in SET_PREDICATES:
+        return primitives.length(result) == primitives.literal(0)
+    return primitives.sort(result)
 
 
 def native_set(

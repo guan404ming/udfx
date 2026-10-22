@@ -38,6 +38,7 @@ from udfx.frontend.values import (
     Null,
     Opaque,
     Row,
+    Set,
     Tuple,
     Value,
     describe,
@@ -91,7 +92,7 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
         case Duration(node=node) if name in {"days", "seconds"} and not method:
             result, faults = duration_attribute(node, name)
             return emit(context, rest, Value(result), faults)
-        case Value() | Match() | Duration() if method:
+        case Value() | Match() | Duration() | Set() if method:
             return [rest.push(Method(name), owner).advance()]
         case Value():
             raise Unsupported(

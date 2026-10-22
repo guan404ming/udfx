@@ -7,6 +7,7 @@ from typing import cast
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, iterable_node, node_of
 from udfx.frontend.constants import constant, constant_value, dictionary_method, scalar_map
+from udfx.frontend.sets import set_method
 from udfx.frontend.values import (
     MAX_UNROLL,
     Generator,
@@ -212,6 +213,8 @@ def call_iterable(
     callee: Item, arguments: Sequence[Item], keywords: Mapping[str, Item]
 ) -> tuple[Item, list[Fault]] | None:
     if isinstance(callee, Method):
+        if arguments and isinstance(arguments[0], Set):
+            return set_method(callee.name, arguments, keywords)
         return dictionary_method(callee.name, arguments, keywords)
     if not isinstance(callee, Opaque):
         return None

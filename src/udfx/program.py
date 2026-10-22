@@ -14,8 +14,9 @@ class Row:
     def __init__(self, values: Mapping[str, object]) -> None:
         self._values = values
 
-    def __getitem__(self, name: str) -> object:
-        return object.__getattribute__(self, "_values")[name]
+    def __getitem__(self, name: str | int) -> object:
+        values = object.__getattribute__(self, "_values")
+        return tuple(values.values())[name] if isinstance(name, int) else values[name]
 
     def __getattribute__(self, name: str) -> object:
         try:

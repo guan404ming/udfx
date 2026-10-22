@@ -91,5 +91,8 @@ register_lists(
         distinct=functions.array_distinct,
         sort=functions.sort_array,
         contains=functions.array_contains,
+        intersection=functions.array_intersect,
+        union=functions.array_union,
+        difference=functions.array_except,
     ),
 )

@@ -4,7 +4,7 @@ import duckdb
 from duckdb import Expression
 
 from udfx.backends.duckdb.numbers import checked_int64
-from udfx.backends.duckdb.rules import RULES, constant, function, length, when
+from udfx.backends.duckdb.rules import RULES, column, constant, function, length, when
 from udfx.backends.duckdb.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
@@ -75,6 +75,19 @@ def characters(value: Expression) -> Expression:
     )
 
 
+def difference(left: Expression, right: Expression) -> Expression:
+    return function(
+        "list_distinct",
+        function(
+            "list_filter",
+            left,
+            duckdb.LambdaExpression(
+                "udfx set item", ~function("list_contains", right, column("udfx set item"))
+            ),
+        ),
+    )
+
+
 register_lists(
     RULES,
     PRIMITIVES,
@@ -84,5 +97,8 @@ register_lists(
         distinct=lambda value: function("list_distinct", value),
         sort=lambda value: function("list_sort", value, constant("ASC"), constant("NULLS LAST")),
         contains=list_contains,
+        intersection=lambda left, right: function("list_intersect", left, right),
+        union=lambda left, right: function("list_distinct", function("list_concat", left, right)),
+        difference=difference,
     ),
 )

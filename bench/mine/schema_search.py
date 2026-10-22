@@ -9,7 +9,7 @@ from udfx.semantics.datetimes import ATTRIBUTES
 from udfx.types import BOOL, DATETIME, FLOAT, INT, STR, Type
 
 
-def column_name(node: ast.AST, row_parameter: str | None) -> str | None:
+def column_name(node: ast.AST, row_parameter: str | None) -> str | int | None:
     if row_parameter is None:
         return node.id if isinstance(node, ast.Name) else None
     if isinstance(node, ast.Attribute | ast.Subscript) and isinstance(node.value, ast.Name):
@@ -17,8 +17,15 @@ def column_name(node: ast.AST, row_parameter: str | None) -> str | None:
             return None
         if isinstance(node, ast.Attribute):
             return node.attr
-        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+        if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str | int):
             return node.slice.value
+        if (
+            isinstance(node.slice, ast.UnaryOp)
+            and isinstance(node.slice.op, ast.USub)
+            and isinstance(node.slice.operand, ast.Constant)
+            and isinstance(node.slice.operand.value, int)
+        ):
+            return -node.slice.operand.value
     return None
 
 
@@ -32,11 +39,21 @@ def schema_columns(candidate: Candidate) -> tuple[list[str], str | None]:
     if len(names) != 1:
         raise ValueError("row candidate requires one parameter")
     row_parameter = names[0]
-    columns = list(
+    references = list(
         dict.fromkeys(
             name
             for node in ast.walk(candidate.node)
             if (name := column_name(node, row_parameter)) is not None
+        )
+    )
+    positions = [name for name in references if isinstance(name, int)]
+    count = max((index + 1 if index >= 0 else -index for index in positions), default=0)
+    columns = list(
+        dict.fromkeys(
+            [
+                *(f"c{index}" for index in range(count)),
+                *(name for name in references if isinstance(name, str)),
+            ]
         )
     )
     if not columns:
@@ -83,6 +100,7 @@ def schema_types(
         if hint is not None:
             for value in ast.walk(expression):
                 name = column_name(value, row_parameter)
+                name = names[name] if isinstance(name, int) else name
                 if name in hints:
                     hints[name].add(hint)
     orders = {

@@ -5,7 +5,7 @@ import pytest
 
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.ir import FALSE, Col
+from udfx.ir import FALSE, Col, lit
 from udfx.ops import apply
 from udfx.types import FLOAT, INT, STR, Type
 
@@ -74,6 +74,10 @@ def test_row_reads_become_columns() -> None:
     ("function", "schema", "values", "name"),
     [
         (lambda row: row["image"], {"image": STR}, ("photo",), "image"),
+        (lambda row: row[0], {"image": STR, "count": INT}, ("photo", 2), "image"),
+        (lambda row: row[1], {"count": INT, "image": STR}, (2, "photo"), "image"),
+        (lambda row: row[-1], {"count": INT, "image": STR}, (2, "photo"), "image"),
+        (lambda row: row[-2], {"image": STR, "count": INT}, ("photo", 2), "image"),
         (lambda row: row.image, {"image": STR}, ("photo",), "image"),
         (lambda row: row["row"], {"row": STR, "unused": INT}, ("photo", 1), "row"),
         (lambda row: row["first name"], {"first name": STR}, ("photo",), "first name"),
@@ -120,6 +124,29 @@ def test_unknown_row_column_names_the_key(function: Callable[..., object]) -> No
         trace(function, {"image": STR})
 
 
+@pytest.mark.parametrize("index", [1, -2])
+def test_row_position_out_of_range(index: int) -> None:
+    def caught(row: Any) -> str:
+        try:
+            return row[index]
+        except IndexError:
+            return "missing"
+
+    program = trace(caught, {"image": STR})
+    assert program.value == lit("missing")
+    assert program.fault == FALSE
+    assert program.run([("photo",)]) == ["missing"]
+
+    def uncaught(row: Any) -> str:
+        return row[index]
+
+    with pytest.raises(IndexError):
+        uncaught(*program.arguments(("photo",)))
+
+    with pytest.raises(Unsupported, match="function never returns"):
+        trace(uncaught, {"image": STR})
+
+
 @pytest.mark.parametrize(
     ("function", "reason"),
     [
@@ -134,8 +161,7 @@ def test_unknown_row_column_names_the_key(function: Callable[..., object]) -> No
         (lambda row: "image" in row, "expected a value, got a row"),
         (lambda row: row + "image", "expected a value, got a row"),
         (lambda row: not row, "truth of a row"),
-        (lambda row: row[row.image], "constant string key"),
-        (lambda row: row[0], "constant string key"),
+        (lambda row: row[row.image], "constant string or integer key"),
         (lambda row: row[:1], "expected a value, got a row"),
         (lambda row: row.get("image"), "unknown row column 'get'"),
         (assign_key, "STORE_SUBSCR"),

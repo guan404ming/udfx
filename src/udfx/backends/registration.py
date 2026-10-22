@@ -13,10 +13,13 @@ from udfx.backends.registration_text import (
 )
 from udfx.backends.rules import BinaryRule, Lowered, Rule, RuleOptions, RuleResult, RuleSet
 from udfx.semantics.lists import (
+    SET_OPERATIONS,
+    SET_PREDICATES,
     ListPrimitives,
     SetPrimitives,
     native_range,
     native_set,
+    native_set_operation,
     repeat_list,
 )
 from udfx.semantics.math import transcendental
@@ -169,6 +172,12 @@ def register_extremum[E](
 
 
 def register_lists[E](rules: RuleSet[E], primitives: ListPrimitives, sets: SetPrimitives) -> None:
+    for operation in (*SET_OPERATIONS, *SET_PREDICATES):
+        rules(f"set_{operation}", Kind.LIST, Kind.LIST)(
+            lambda left, right, operation=operation: native_set_operation(
+                sets, left, right, operation
+            )
+        )
     rules("__mul__", Kind.LIST, Kind.INT)(
         lambda value, count: Lowered(*repeat_list(primitives, value, count))
     )

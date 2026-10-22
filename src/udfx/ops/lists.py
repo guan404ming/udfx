@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import operator
+from functools import partial
 
 from udfx.ir import Node, lit
 from udfx.ops.core import is_none
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.ops.strings import out_of_range, slice_of
-from udfx.semantics.lists import range_list, set_list, set_size, sorted_set
+from udfx.semantics.lists import (
+    SET_OPERATIONS,
+    SET_PREDICATES,
+    range_list,
+    set_list,
+    set_operation,
+    set_size,
+    sorted_set,
+)
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
 
 for item in (STR, INT, FLOAT, BOOL):
@@ -36,6 +45,16 @@ for item in (STR, INT, FLOAT, BOOL):
     register(Op(f"set_size{suffix}", (list_of(item),), INT, set_size))
     register(Op(f"set_list{suffix}", (list_of(item),), list_of(item), set_list))
     register(Op(f"sorted_set{suffix}", (list_of(item),), list_of(item), sorted_set))
+
+for operation in (*SET_OPERATIONS, *SET_PREDICATES):
+    register(
+        Op(
+            f"set_{operation}",
+            (list_of(STR), list_of(STR)),
+            BOOL if operation in SET_PREDICATES else list_of(STR),
+            partial(set_operation, operation=operation),
+        )
+    )
 
 
 def range_faults(start: Node, stop: Node, step: Node) -> tuple[Fault, ...]:

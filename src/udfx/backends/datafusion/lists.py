@@ -81,5 +81,8 @@ register_lists(
                 (candidate == item) | (functions.isnan(candidate) & functions.isnan(item))
             ),
         ),
+        intersection=functions.array_intersect,
+        union=functions.array_union,
+        difference=functions.array_except,
     ),
 )

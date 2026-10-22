@@ -110,6 +110,25 @@ def test_numeric_sets_match_python(backend: Backend[Any]) -> None:
 
 
 @pytest.mark.parametrize("backend", backend_params())
+def test_set_algebra_native_rows(backend: Backend[Any]) -> None:
+    def score(left: list[str], right: list[str]) -> float:
+        first = set(left)
+        second = set(right)
+        return len(first & second) / len(first | second)
+
+    schema = {"left": list_of(STR).or_none(), "right": list_of(STR).or_none()}
+    rows = [
+        (["a", "a", "b"], ["b", "c", "c"]),
+        ([], ["a", "a"]),
+        (["", "\x00", "😀"], ["😀", ""]),
+    ]
+    assert check_function(score, schema, backend, [*rows, ([], []), (None, []), ([], None)]) == []
+    lowered = backend.lower(trace(score, schema).value)
+    exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
+    assert backend.evaluate([exact], schema, rows)[0] == [True] * len(rows)
+
+
+@pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("enumerated", [False, True], ids=["direct", "enumerated"])
 def test_dynamic_range_native_rows(backend: Backend[Any], enumerated: bool) -> None:
     def increments(stop: int) -> list[int]:
