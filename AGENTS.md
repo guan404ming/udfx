@@ -4,7 +4,7 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 
 ## Commands
 
-- Test: `uv run pytest`
+- Test: `uv run pytest` (fast tier). Full tier, as CI runs it: `UDFX_TESTS=full uv run pytest`.
 - Lint: `uv run ruff check . && uv run ruff format --check .`
 - Types: `uv run pyright`
 - All three must pass before you commit.

@@ -14,6 +14,7 @@ from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
 
 TESTS = str(Path(__file__).resolve().parent)
+FULL = os.environ.get("UDFX_TESTS") == "full"
 os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [TESTS, os.environ.get("PYTHONPATH")]))
 os.environ.setdefault(
     "PYSPARK_SUBMIT_ARGS",
@@ -60,7 +61,8 @@ def backends() -> list[tuple[str, Backend[Any]]]:
     for backend in installed():
         if isinstance(backend, SparkBackend):
             found.append((backend.name, AnsiSparkBackend(ansi=True)))
-            found.append((f"{backend.name}-ansi-off", AnsiSparkBackend(ansi=False)))
+            if FULL:
+                found.append((f"{backend.name}-ansi-off", AnsiSparkBackend(ansi=False)))
         else:
             found.append((backend.name, backend))
     return sorted(found, key=lambda item: not isinstance(item[1], SparkBackend))
@@ -68,3 +70,11 @@ def backends() -> list[tuple[str, Backend[Any]]]:
 
 def backend_params() -> list[ParameterSet]:
     return [pytest.param(backend, id=label) for label, backend in backends()]
+
+
+def frontend_backend_params() -> list[ParameterSet]:
+    return [param for param in backend_params() if FULL or param.id == "polars"]
+
+
+def engine_names() -> list[str]:
+    return [backend.name for backend in installed() if FULL or backend.name == "polars"]

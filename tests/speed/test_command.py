@@ -1,16 +1,13 @@
 import pytest
+from conftest import engine_names
 
 from bench.speed import polars
 from bench.speed.command import main
-from udfx.backends import installed
 
 
 @pytest.mark.parametrize(
     "engine",
-    [
-        pytest.param(backend.name, id=backend.name, marks=pytest.mark.xdist_group(backend.name))
-        for backend in installed()
-    ],
+    [pytest.param(name, id=name, marks=pytest.mark.xdist_group(name)) for name in engine_names()],
 )
 def test_engine_report(engine: str, capsys: pytest.CaptureFixture[str]) -> None:
     main(

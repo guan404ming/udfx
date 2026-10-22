@@ -7,7 +7,7 @@ from itertools import product
 from typing import Any
 
 import pytest
-from conftest import backend_params
+from conftest import frontend_backend_params
 
 from udfx.backends.base import Backend
 from udfx.errors import Unsupported
@@ -58,7 +58,7 @@ def test_strptime_forms(function: Callable[..., object]) -> None:
     assert program.result == DATETIME
 
 
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 @pytest.mark.parametrize(
     "function",
     [
@@ -164,14 +164,14 @@ def elapsed_seconds(left: datetime, right: datetime) -> float:
     return difference.days * 86400 + difference.seconds + difference.total_seconds()
 
 
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 def test_datetime_difference_attributes(backend: Backend[Any]) -> None:
     rows = list(product((*DATETIME_TRAPS, None), repeat=2))
     schema = {"left": DATETIME.or_none(), "right": DATETIME.or_none()}
     assert check_function(elapsed_seconds, schema, backend, rows) == []
 
 
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 @pytest.mark.parametrize(
     "function",
     [

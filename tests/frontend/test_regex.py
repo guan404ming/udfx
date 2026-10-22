@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import backend_params
+from conftest import frontend_backend_params
 
 from udfx.backends.base import Backend
 from udfx.errors import Unsupported
@@ -32,7 +32,7 @@ COMPILED = re.compile(r"\d+")
         (lambda text: re.sub(COMPILED, "#", text), "sub"),
     ],
 )
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 def test_regex_call_forms(
     function: Callable[..., object], name: str, backend: Backend[Any]
 ) -> None:
@@ -46,7 +46,7 @@ def test_regex_call_forms(
 
 @pytest.mark.parametrize("name", ["search", "match", "fullmatch"])
 @pytest.mark.parametrize("compiled", [False, True])
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 def test_regex_match_tests(name: str, compiled: bool, backend: Backend[Any]) -> None:
     function = getattr(COMPILED if compiled else re, name)
 
@@ -71,7 +71,7 @@ def test_regex_match_tests(name: str, compiled: bool, backend: Backend[Any]) -> 
         lambda text: re.compile("x*").search(text) is not None,
     ],
 )
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 def test_regex_match_truth(function: Callable[..., object], backend: Backend[Any]) -> None:
     trace(function, {"text": STR})
     assert (
@@ -90,7 +90,7 @@ def test_regex_none_guard() -> None:
 
 
 @pytest.mark.parametrize("flag", [re.I, re.M, re.S, re.I | re.M | re.S])
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 def test_regex_flags(flag: int, backend: Backend[Any]) -> None:
     def substitute(text: str) -> str:
         return re.sub("a.*$", "", text, flags=flag)
@@ -101,7 +101,7 @@ def test_regex_flags(flag: int, backend: Backend[Any]) -> None:
     )
 
 
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 @pytest.mark.parametrize("pattern", ["x*", ".*?", r"\b\w+\b", r"[\u0130]"])
 def test_regex_fallback(backend: Backend[Any], pattern: str) -> None:
     def substitute(text: str) -> str:
@@ -112,7 +112,7 @@ def test_regex_fallback(backend: Backend[Any], pattern: str) -> None:
     )
 
 
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 def test_regex_dynamic_replacement(backend: Backend[Any]) -> None:
     def substitute(text: str, replacement: str) -> str:
         return re.sub(r"\d+", replacement, text)

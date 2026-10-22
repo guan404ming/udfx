@@ -21,6 +21,10 @@ uv run pytest -m corpus
 All must pass before a pull request. CI runs them on Python 3.12, 3.13, and 3.14 with
 `HYPOTHESIS_PROFILE=ci` (100 examples per test instead of 25).
 
+The default run is the fast tier: Spark runs with ANSI on only, and frontend and benchmark tests
+use Polars only. Set `UDFX_TESTS=full` to run every engine configuration, as CI does; run the full
+tier before you open a pull request.
+
 `uv run pytest` runs the tests in parallel with `-n auto` and prints the five slowest with
 `--durations=5`. Pass `-n 0` to run in one process.
 

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import backend_params
+from conftest import frontend_backend_params
 
 from udfx.backends.base import Backend
 from udfx.backends.polars import PolarsBackend
@@ -40,7 +40,7 @@ PATHS = (
 )
 
 
-@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("backend", frontend_backend_params())
 @pytest.mark.parametrize(
     "function",
     [

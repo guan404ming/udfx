@@ -4,9 +4,9 @@ from typing import Any
 
 import pyarrow
 import pytest
+from conftest import engine_names
 
 from bench.speed.data import AttributeRow, MixedRow, caller, row_function, row_type
-from udfx.backends import installed
 from udfx.ir import Col
 from udfx.program import Program
 from udfx.types import STR
@@ -141,10 +141,7 @@ def test_column_accesses_keep_dictionary_rows(function: Callable[..., object]) -
 
 @pytest.mark.parametrize(
     "engine",
-    [
-        pytest.param(backend.name, id=backend.name, marks=pytest.mark.xdist_group(backend.name))
-        for backend in installed()
-    ],
+    [pytest.param(name, id=name, marks=pytest.mark.xdist_group(name)) for name in engine_names()],
 )
 @pytest.mark.parametrize(
     "function",
