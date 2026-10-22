@@ -14,8 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.12", "3.13", "3.14"]
+        shard:
+          - name: engines
+            filter: not spark
+          - name: spark
+            filter: spark and not ansi-off
+          - name: spark-ansi-off
+            filter: ansi-off
+    name: check (${{ matrix.python }}, ${{ matrix.shard.name }})
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.1
@@ -25,14 +34,17 @@ jobs:
           java-version: "21"
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --locked --python ${{ matrix.python }}
-      - run: uv run --python ${{ matrix.python }} ruff check .
-      - run: uv run --python ${{ matrix.python }} ruff format --check .
-      - run: uv run --python ${{ matrix.python }} pyright
-      - run: uv run --python ${{ matrix.python }} pytest
+      - if: matrix.shard.name == 'engines'
+        run: uv run --python ${{ matrix.python }} ruff check .
+      - if: matrix.shard.name == 'engines'
+        run: uv run --python ${{ matrix.python }} ruff format --check .
+      - if: matrix.shard.name == 'engines'
+        run: uv run --python ${{ matrix.python }} pyright
+      - run: uv run --python ${{ matrix.python }} pytest -k "${{ matrix.shard.filter }}"
         env:
           HYPOTHESIS_PROFILE: ci
           UDFX_TESTS: full
-      - run: uv run --python ${{ matrix.python }} pytest -m corpus
+      - run: uv run --python ${{ matrix.python }} pytest -m corpus -k "${{ matrix.shard.filter }}"
         env:
           HYPOTHESIS_PROFILE: ci
           UDFX_TESTS: full
