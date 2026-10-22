@@ -4,7 +4,7 @@ from pyspark.sql import Column, functions
 
 from udfx.backends.registration import Lowered, register_lists
 from udfx.backends.spark.rules import RULES, when
-from udfx.backends.spark.strings import list_contains
+from udfx.backends.spark.strings import characters, list_contains
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
@@ -75,11 +75,7 @@ PRIMITIVES = ListPrimitives(
 )
 
 
-@RULES("list", Kind.STR)
-def characters(value: Column) -> Column:
-    return functions.when(value == "", functions.array().cast("array<string>")).otherwise(
-        functions.split(value, "", -1)
-    )
+RULES("list", Kind.STR)(characters)
 
 
 register_lists(

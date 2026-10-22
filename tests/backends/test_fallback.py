@@ -4,10 +4,13 @@ from typing import Any
 import polars as pl
 import pytest
 from conftest import backend_params
+from pyspark.sql import functions
+from pyspark.sql.types import LongType
 
 from udfx import compile
 from udfx.backends.base import Backend, FallbackError
 from udfx.backends.polars import PolarsBackend
+from udfx.backends.spark import SparkBackend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function, check_translation
@@ -143,6 +146,18 @@ def test_fallback_surfaces_exceptions_it_cannot_rebuild(
 def test_fallback_patches_inexact_rows(backend: Backend[Any]) -> None:
     rows = [("2024-01",), (" 123",), ("\uff11\uff12\uff13\uff14",), ("9223372036854775807",)]
     assert check_function(year, {"text": STR}, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_spark_fallback_preserves_result_type(backend: Backend[Any]) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark fallback")
+    frame = backend.session().createDataFrame([(True,), (False,), (None,)], ["exact"])
+    program = Program(lambda exact: 2, {"exact": BOOL.or_none()}, Lit(1, INT))
+    expr = backend.fallback(functions.lit(1.0), functions.col("exact"), program)
+    selected = frame.select(expr.alias("result"))
+    assert selected.schema["result"].dataType == LongType()
+    assert [row[0] for row in backend.execute(selected.collect)] == [1, 2, 2]
 
 
 @pytest.mark.parametrize("backend", backend_params())

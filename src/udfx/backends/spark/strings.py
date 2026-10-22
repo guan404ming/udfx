@@ -61,15 +61,8 @@ def length(text: Column) -> Column:
     return functions.char_length(text).cast("bigint")
 
 
-def bounded_native_index(index: Column) -> Column:
-    bounded = functions.least(
-        functions.greatest(index, functions.lit(-INT32_MAX)), functions.lit(INT32_MAX - 1)
-    )
-    return functions.when(bounded >= 0, bounded + 1).otherwise(bounded).cast("int")
-
-
 def characters(text: Column) -> Column:
-    return functions.regexp_extract_all(text, functions.lit("(?s)."), functions.lit(0))
+    return functions.array_remove(functions.split(text, "", -1), "")
 
 
 def array_join(words: Column, separator: Column) -> Column:
@@ -200,16 +193,6 @@ def str_len(text: Column) -> Column:
 @RULES("len", Kind.LIST)
 def list_len(container: Column) -> Column:
     return functions.size(container).cast("bigint")
-
-
-@RULES("__getitem__", Kind.STR, Kind.INT)
-def str_getitem(text: Column, index: Column) -> Column:
-    return functions.substring(text, bounded_native_index(index), functions.lit(1))
-
-
-@RULES("__getitem__", Kind.LIST, Kind.INT)
-def list_getitem(container: Column, index: Column) -> Column:
-    return functions.try_element_at(container, bounded_native_index(index))
 
 
 register_string_predicates(RULES, lambda value, pattern: value.rlike(pattern))

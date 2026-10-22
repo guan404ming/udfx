@@ -8,6 +8,7 @@ import weakref
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import duckdb
 import pytest
@@ -156,13 +157,22 @@ def test_spark_column_without_java_needs_a_session() -> None:
 
 
 @pytest.mark.xdist_group("spark")
-def test_spark_rejects_a_stopped_session() -> None:
-    script = (
-        "from pyspark.sql import SparkSession; from udfx.backends.spark import SparkBackend; "
-        "session = SparkSession.builder.getOrCreate(); session.stop(); "
-        "SparkBackend(session).session()"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True, check=False
-    )
-    assert "RuntimeError: the SparkSession given to SparkBackend was stopped" in result.stderr
+def test_spark_session_does_not_create_a_frame() -> None:
+    session = spark_session(ansi=True)
+    with patch.object(session, "range", side_effect=AssertionError("unexpected frame")):
+        assert SparkBackend(session).session() is session
+
+
+@pytest.mark.xdist_group("spark")
+def test_spark_fault_survives_a_second_frame() -> None:
+    session = spark_session(ansi=True)
+    frame = session.createDataFrame([(0,)], ["x"])
+    backend = SparkBackend()
+    translation = compile(inverse, {"x": INT}, backend)
+    assert translation.ok
+    expr = translation.expr
+    assert expr is not None
+    other_session = session.newSession()
+    other_session.createDataFrame([(1,)], ["x"])
+    with pytest.raises(ZeroDivisionError, match="division by zero"):
+        backend.execute(lambda: frame.select(expr).collect())

@@ -7,8 +7,31 @@ from udfx.backends.spark.rules import RULES, when
 from udfx.backends.spark.strings import INT32_MAX, characters, join, length, list_len
 from udfx.semantics.facts import result_type
 from udfx.semantics.padding import PaddingPrimitives
-from udfx.semantics.sequences import SequencePrimitives, SlicePrimitives, slice_sequence
+from udfx.semantics.sequences import (
+    SequencePrimitives,
+    SlicePrimitives,
+    slice_sequence,
+    stride_pattern,
+)
 from udfx.types import Kind, Type
+
+
+def bounded_native_index(index: Column) -> Column:
+    bounded = functions.least(
+        functions.greatest(index, functions.lit(-INT32_MAX)), functions.lit(INT32_MAX - 1)
+    )
+    return functions.when(bounded >= 0, bounded + 1).otherwise(bounded).cast("int")
+
+
+@RULES("__getitem__", Kind.STR, Kind.INT)
+def str_getitem(text: Column, index: Column) -> Column:
+    return functions.substring(text, bounded_native_index(index), functions.lit(1))
+
+
+@RULES("__getitem__", Kind.LIST, Kind.INT)
+def list_getitem(container: Column, index: Column) -> Column:
+    return functions.try_element_at(container, bounded_native_index(index))
+
 
 SLICE = SlicePrimitives(
     maximum=INT32_MAX,
@@ -37,6 +60,13 @@ SEQUENCE = SequencePrimitives(
 )
 
 
+def stride_text(value: Column, step: int) -> Column:
+    pattern = stride_pattern(step)
+    if pattern is not None:
+        return functions.regexp_replace(value, pattern, "$1")
+    return join(functions.lit(""), SEQUENCE.stride(characters(value), step))
+
+
 TEXT = SequencePrimitives(
     bounds=SLICE,
     length=length,
@@ -50,8 +80,9 @@ TEXT = SequencePrimitives(
         functions.substring(functions.reverse(value), min(1 + size, INT32_MAX), INT32_MAX)
     ),
     reverse=functions.reverse,
-    stride=lambda value, step: join(functions.lit(""), SEQUENCE.stride(characters(value), step)),
+    stride=stride_text,
     bind=SEQUENCE.bind,
+    extract=functions.regexp_extract,
 )
 
 

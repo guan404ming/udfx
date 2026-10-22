@@ -42,8 +42,6 @@ class SparkBackend(Backend[Column]):
 
     def session(self) -> SparkSession:
         if self._session is not None:
-            if self._session.sparkContext._jsc is None:  # pyright: ignore[reportPrivateUsage]
-                raise RuntimeError("the SparkSession given to SparkBackend was stopped")
             return self._session
         try:
             return SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
@@ -101,17 +99,17 @@ class SparkBackend(Backend[Column]):
         return functions.raise_error(message).cast(dtype(program.result))
 
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
-        result = dtype(program.result)
         flag = functions.coalesce(exact, functions.lit(False))
         packed = functions.struct(
             flag.alias(EXACT),
-            native.alias(NATIVE),
+            functions.when(~flag, native).alias(NATIVE),
             *(
                 functions.when(~flag, self.column(Col(name, type))).alias(name)
                 for name, type in program.schema.items()
             ),
         )
-        return functions.arrow_udf(fallback_patch(program), result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        patched = functions.arrow_udf(fallback_patch(program), dtype(program.result))(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        return functions.when(flag, native.cast(dtype(program.result))).otherwise(patched)
 
     def evaluate(
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]

@@ -2,18 +2,13 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.spark.rules import RULES
+from udfx.backends.spark.rules import RULES, split_literal
 from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import INT32_MAX, array_join, join, length, lstrip
 from udfx.semantics.facts import split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
 from udfx.semantics.text import non_whitespace_pattern, word_prefix_pattern
 from udfx.types import STR, Kind, list_of
-
-
-def quote_java_regex(pattern: Column) -> Column:
-    escaped = functions.replace(pattern, functions.lit("\\E"), functions.lit("\\E\\\\E\\Q"))
-    return functions.concat(functions.lit("\\Q"), escaped, functions.lit("\\E"))
 
 
 def split_words(text: Column) -> Column:
@@ -27,7 +22,7 @@ RULES(".rsplit", Kind.STR)(split_words)
 
 
 def split(text: Column, separator: Column) -> Column:
-    pieces = functions.split(text, quote_java_regex(separator), -1)
+    pieces = split_literal(text, separator)
     return functions.when(separator.isNull(), split_words(text)).otherwise(pieces)
 
 

@@ -2,6 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from udfx.semantics.text_slicing import mixed_slice_pattern
 from udfx.types import INT64_MAX, Type
 
 
@@ -65,6 +66,7 @@ class SequencePrimitives:
     reverse: Callable[[Any], Any]
     stride: Callable[[Any, int], Any]
     bind: Callable[[Any, Callable[[Any], Any], Type], Any]
+    extract: Callable[[Any, str, int], Any] | None = None
 
 
 def slice_forward(
@@ -103,6 +105,10 @@ def slice_forward(
                 return tail(head(container, stop), -start)
             return head(tail(container, -start), stop)
         if start < 0:
+            if primitives.extract is not None:
+                pattern = mixed_slice_pattern(start, stop)
+                if pattern is not None:
+                    return primitives.extract(container, pattern, 2)
             return primitives.bind(container, bounded, result)
     return bounded(container)
 
