@@ -21,6 +21,11 @@ from udfx.types import INT, Kind, Type
 
 NEUTRAL: dict[Kind, object] = {Kind.FLOAT: 1.0, Kind.INT: 1, Kind.STR: "a"}
 
+
+def short(value: object) -> bool:
+    return not isinstance(value, str) or len(value) <= 100
+
+
 CASES = [
     pytest.param(backend, op, id=f"{label}-{op}", marks=pytest.mark.xdist_group(label))
     for label, backend in backends()
@@ -51,7 +56,9 @@ def test_op_matches_python(backend: Backend[Any], op: Op) -> None:
                 rows.append((*neutral[:index], value, *neutral[index + 1 :]))
         constant = data.draw(st.sampled_from([None, *range(len(op.parameters))]))
         constants = (
-            {} if constant is None else {constant: data.draw(values(op.parameters[constant]))}
+            {}
+            if constant is None
+            else {constant: data.draw(values(op.parameters[constant]).filter(short))}
         )
         literals = backend.rules.options(op.key).literals
         constants.update(

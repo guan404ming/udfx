@@ -120,11 +120,12 @@ def check_op_batches(
         for index, (rows, constants) in enumerate(grouped.values())
     ]
     schema = {name: type for _, columns, _, _, _ in prepared for name, type in columns.items()}
+    padding = [min(inputs, key=_footprint) for inputs, _, _, _, _ in prepared]
     rows = [
         tuple(
             value
-            for inputs, _, _, _, _ in prepared
-            for value in (inputs[index] if index < len(inputs) else inputs[0])
+            for (inputs, _, _, _, _), pad in zip(prepared, padding, strict=True)
+            for value in (inputs[index] if index < len(inputs) else pad)
         )
         for index in range(max(len(inputs) for inputs, _, _, _, _ in prepared))
     ]
@@ -136,6 +137,17 @@ def check_op_batches(
         results = [next(outputs) for _ in exprs]
         mismatches.extend(_op_mismatches(op, inputs, faults, exact_count, results))
     return mismatches
+
+
+def _footprint(row: Row) -> int:
+    return sum(
+        abs(value)
+        if isinstance(value, int)
+        else len(value)
+        if isinstance(value, str | list | tuple)
+        else 0
+        for value in row
+    )
 
 
 def _prepare_op(
