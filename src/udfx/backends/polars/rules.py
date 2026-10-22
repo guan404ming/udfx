@@ -13,6 +13,11 @@ def when(condition: pl.Expr, then: pl.Expr, orelse: pl.Expr) -> pl.Expr:
 
 
 def broadcast(value: pl.Expr) -> pl.Expr:
+    try:
+        if value.meta.is_length_preserving():
+            return value
+    except pl.exceptions.ColumnNotFoundError:
+        pass
     return when(pl.int_range(pl.len()) % 2 == 0, value, value)
 
 

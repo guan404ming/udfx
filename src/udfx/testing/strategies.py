@@ -22,6 +22,19 @@ FLOAT_LIST_TRAPS = (
 )
 
 PREDICATE_TRAPS = ("Aa " * 10000,)
+INTEGER_TEXT_TRAPS = ("\u0660_" * 4300 + "\u0660",)
+CLUSTER_TRAPS = (
+    *(
+        text
+        for point in "\u0d4e\u0e33\u0eb3\uff9e\uff9f\U000111c2\U000113d1\U0001193f\U00011941"
+        "\U00011a3a\U00011a84\U00011d46\U00011f02\u1acf\U00011b61"
+        "\U00016d63\U00016d67\U00016d68\U00016d69\U00016d6a"
+        for text in (f"0 {point}", f"{point} 0")
+    ),
+    "\U00016d63\U00016d67",
+    "\uac00\u1161",
+    "\uac01\u11a8",
+)
 
 INT_TRAPS = (0, 1, -1, 2, -2, 3, 5, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
 SLICE_TRAPS = (-10, -1, 1, 2**31 - 1, 2**31, 2**32 - 1, 2**32)
@@ -130,7 +143,7 @@ def constant_values(type: Type) -> st.SearchStrategy[object]:
 
 def extra_traps(type: Type) -> Sequence[object]:
     if type.kind is Kind.STR:
-        return (*PREDICATE_TRAPS, *DATETIME_TEXT_TRAPS)
+        return (*PREDICATE_TRAPS, *INTEGER_TEXT_TRAPS, *CLUSTER_TRAPS, *DATETIME_TEXT_TRAPS)
     if type.kind is Kind.DATETIME:
         return DATETIME_TRAPS
     if type.kind is Kind.FLOAT:

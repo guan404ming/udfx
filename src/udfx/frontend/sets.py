@@ -3,7 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, iterable_node
+from udfx.frontend.invocation import invoke
+from udfx.frontend.sequence_calls import iterable_node
 from udfx.frontend.values import Item, Set, Value
 from udfx.ops import Fault
 from udfx.semantics.lists import SET_OPERATIONS, SET_PREDICATES

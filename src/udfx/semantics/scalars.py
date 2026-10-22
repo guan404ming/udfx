@@ -27,6 +27,10 @@ def not_missing(value: object) -> bool:
     return not is_missing(value)
 
 
+def coalesce(value: object, default: object) -> object:
+    return default if value is None else value
+
+
 def missing_expression(
     is_null: Callable[[Any], Any], is_nan: Callable[[Any], Any], value: Any
 ) -> Any:

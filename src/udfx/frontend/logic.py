@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
+from udfx.frontend.sequences import simplify_sequence
 from udfx.frontend.text import simplify_text
-from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, If, ListValue, Lit, Node
+from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, ListValue, Lit, Node
 from udfx.ops import apply
 from udfx.types import Kind, Type, fits, unify
 
@@ -14,7 +15,11 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 def fold(node: Node) -> Node:
     if not isinstance(node, Call):
         return node
-    folded = simplify_text(Call(node.op, tuple(fold(argument) for argument in node.arguments)))
+    folded = simplify_sequence(Call(node.op, tuple(fold(argument) for argument in node.arguments)))
+    if isinstance(folded, Call):
+        folded = simplify_text(folded)
+    if not isinstance(folded, Call):
+        return folded
     values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]
     if len(values) < len(folded.arguments):
         return folded
@@ -121,6 +126,8 @@ def depends_on(node: Node, element: Element) -> bool:
             return node == element
         case Call():
             children = node.arguments
+        case Guarded():
+            children = (node.value, node.exact)
         case If():
             children = (node.condition, node.then, node.orelse)
         case ListValue():

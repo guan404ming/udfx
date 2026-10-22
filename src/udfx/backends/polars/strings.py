@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace as replace_record
 from functools import cache, partial
 
 import polars as pl
@@ -11,35 +10,26 @@ from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
-    register_padding,
     register_string_predicates,
     register_translation,
 )
 from udfx.semantics import text
-from udfx.semantics.facts import result_type
+from udfx.semantics.sequences import (
+    SearchPrimitives,
+    reverse_find,
+)
 from udfx.semantics.text import (
     CASE_METHODS,
     CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
     CasePrimitives,
-    PaddingPrimitives,
-    SearchPrimitives,
-    SequencePrimitives,
-    SlicePrimitives,
-    SplitPrimitives,
     case_expression,
     case_guard,
     has_prefix_suffix_overlap,
-    non_whitespace_pattern,
-    reverse_find,
-    slice_sequence,
-    split_limited,
-    split_right,
     whitespace,
-    word_prefix_pattern,
 )
-from udfx.types import STR, Kind, Type, list_of
+from udfx.types import Kind
 
 
 def native_recase(method: str, samples: Sequence[str]) -> list[str]:
@@ -94,26 +84,6 @@ def rstrip(text: pl.Expr, characters: pl.Expr | None = None) -> pl.Expr:
         else pl.lit(whitespace())
     )
     return text.str.strip_chars_end(characters)
-
-
-def split_words(text: pl.Expr) -> pl.Expr:
-    return text.str.extract_all(non_whitespace_pattern())
-
-
-RULES(".split", Kind.STR)(split_words)
-RULES(".rsplit", Kind.STR)(split_words)
-
-
-def split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
-    return when(separator.is_null(), split_words(text), text.str.split(separator))
-
-
-RULES(".split", Kind.STR, Kind.STR)(split)
-
-
-@RULES("last_split", Kind.STR, Kind.STR)
-def last_split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
-    return text.str.split(separator).list.last()
 
 
 def length(text: pl.Expr) -> pl.Expr:
@@ -193,6 +163,9 @@ def str_add(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left + right
 
 
+RULES("coalesce", Kind.STR, Kind.STR)(pl.Expr.fill_null)
+
+
 @RULES("__eq__", Kind.STR, Kind.STR)
 def str_eq(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left.eq_missing(right)
@@ -235,125 +208,6 @@ def list_getitem(container: pl.Expr, index: pl.Expr) -> pl.Expr:
     return container.list.get(index.clip(-(2**62), None), null_on_oob=True)
 
 
-SLICE = SlicePrimitives(
-    maximum=2**63 - 1,
-    literal=pl.lit,
-    when=when,
-    coalesce=pl.Expr.fill_null,
-    clip=lambda value, lower, upper: pl.min_horizontal(pl.max_horizontal(value, lower), upper),
-)
-
-
-SEQUENCE = SequencePrimitives(
-    bounds=replace_record(SLICE, maximum=2**32 - 1),
-    length=list_len,
-    slice=lambda value, start, length: value.list.slice(start.fill_null(0), length.fill_null(0)),
-    head=lambda value, size: (
-        value.list.head(size)
-        if size >= 0
-        else value.list.reverse().list.slice(-size).list.reverse()
-    ),
-    tail=lambda value, size: value.list.slice(-size),
-    reverse=lambda value: value.list.reverse(),
-    stride=lambda value, step: value.list.gather_every(step),
-    bind=lambda value, transform, result: (
-        pl.concat_list(pl.struct(value.alias("udfx value")))
-        .list.eval(transform(pl.element().struct.field("udfx value")))
-        .list.first()
-    ),
-)
-
-
-TEXT = SequencePrimitives(
-    bounds=SLICE,
-    length=length,
-    slice=lambda value, start, size: value.str.slice(start, size),
-    head=lambda value, size: value.str.head(size),
-    tail=lambda value, size: value.str.tail(size),
-    reverse=lambda value: value.str.split("").list.reverse().list.join(""),
-    stride=lambda value, step: SEQUENCE.stride(value.str.split(""), min(step, 2**32 - 1)).list.join(
-        ""
-    ),
-    bind=SEQUENCE.bind,
-)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.STR,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def str_slice(
-    text: pl.Expr,
-    start: pl.Expr | int | None,
-    stop: pl.Expr | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> pl.Expr:
-    return slice_sequence(TEXT, text, start, stop, step, result=result)
-
-
-@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.LIST,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def list_slice(
-    container: pl.Expr,
-    start: pl.Expr | int | None,
-    stop: pl.Expr | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> pl.Expr:
-    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
-
-
-SPLIT = SplitPrimitives(
-    sequence=SEQUENCE,
-    bind=lambda values, transform: SEQUENCE.bind(
-        pl.struct(value.alias(str(index)) for index, value in enumerate(values)),
-        lambda value: transform(*(value.struct.field(str(index)) for index in range(len(values)))),
-        list_of(STR),
-    ),
-    split=split,
-    join=join,
-    append=lambda values, value: values.list.concat(value),
-    length=length,
-    suffix=lambda value, start: value.str.slice(start),
-    word_prefix=lambda value, count: (
-        value.str.extract_all(word_prefix_pattern()).list.slice(0, count).list.join("")
-    ),
-    lstrip=lstrip,
-    is_null=pl.Expr.is_null,
-    reverse=lambda value: value.str.reverse(),
-    restore=lambda values: values.list.reverse().list.eval(pl.element().str.reverse()),
-)
-
-
-@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
-def split_limit(text: pl.Expr, separator: pl.Expr, maximum: pl.Expr) -> pl.Expr:
-    return split_limited(SPLIT, text, separator, maximum)
-
-
-@RULES(".rsplit", Kind.STR, Kind.STR)
-@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
-def rsplit(text: pl.Expr, separator: pl.Expr, maximum: pl.Expr | None = None) -> Lowered[pl.Expr]:
-    exact = single_code_point_clusters(text) & single_code_point_clusters(separator).fill_null(True)
-    return Lowered(split_right(SPLIT, text, separator, maximum), exact)
-
-
 register_string_predicates(RULES, lambda value, pattern: value.str.contains(pattern))
 
 
@@ -372,18 +226,6 @@ CASE = CasePrimitives(
     matches=lambda value, pattern: value.str.contains(pattern),
     characters=lambda value, transform: (
         value.str.split("").list.eval(transform(pl.element())).list.join("")
-    ),
-)
-
-
-register_padding(
-    RULES,
-    PaddingPrimitives(
-        sequence=TEXT,
-        literal=pl.lit,
-        concat=lambda *values: pl.concat_str(values),
-        repeat=lambda value, count: value.repeat_by(count).list.join(""),
-        half=lambda value: value // 2,
     ),
 )
 

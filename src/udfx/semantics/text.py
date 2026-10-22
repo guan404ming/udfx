@@ -4,15 +4,14 @@ import hashlib
 import json
 import operator
 import os
+import re
 import sys
 import unicodedata
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass
 from functools import cache, reduce
 from pathlib import Path
-from typing import Any, NamedTuple
-
-from udfx.types import INT64_MAX, Type
+from typing import Any
 
 SIGMA = "\u03a3"
 SIGMA_CONTEXTS = (f"A{SIGMA}{{}}b", f"A{{}}{SIGMA}", f"{{}}{SIGMA}", f"A{SIGMA}{{}}")
@@ -21,9 +20,15 @@ Recase = Callable[[Sequence[str]], Sequence[str]]
 ANY_CHAR = "[\\s\\S]"
 CLUSTER_JOINERS = (
     "[\\p{M}\\p{Cf}\\x{1F1E6}-\\x{1F1FF}\\x{1F3FB}-\\x{1F3FF}"
-    "\\x{1100}-\\x{11FF}\\x{A960}-\\x{A97F}\\x{D7B0}-\\x{D7FF}]|\\r\\n"
+    "\\x{D4E}\\x{E33}\\x{EB3}\\x{FF9E}-\\x{FF9F}\\x{111C2}-\\x{111C3}\\x{113D1}"
+    "\\x{1193F}\\x{11941}\\x{11A3A}\\x{11A84}-\\x{11A89}\\x{11D46}\\x{11F02}"
+    "\\x{1100}-\\x{11FF}\\x{A960}-\\x{A97C}\\x{D7B0}-\\x{D7C6}\\x{D7CB}-\\x{D7FB}"
+    "\\x{16D63}\\x{16D67}-\\x{16D6A}\\x{1ACF}-\\x{1ADD}\\x{1AE0}-\\x{1AEB}"
+    "\\x{10EFA}-\\x{10EFB}\\x{11B60}-\\x{11B67}\\x{1E6E3}\\x{1E6E6}"
+    "\\x{1E6EE}-\\x{1E6EF}\\x{1E6F5}]|\\r\\n"
 )
 PREDICATES = (
+    "isascii",
     "isdigit",
     "isalpha",
     "isalnum",
@@ -79,6 +84,8 @@ def cased_characters() -> str:
 
 @cache
 def predicate_patterns(method: str) -> tuple[str, str | None]:
+    if method == "isascii":
+        return r"\A[\x00-\x7f]*\z", None
     if method not in {"islower", "isupper", "istitle"}:
         return rf"\A{character_class(method)}+\z", None
     uncased = char_class(cased_characters(), negate=True)
@@ -101,8 +108,13 @@ def string_predicate(matches: Callable[[Any, str], Any], value: Any, method: str
 
 
 @cache
+def whitespace_pattern(negate: bool = False) -> str:
+    return f"[{'^' if negate else ''}{re.escape(whitespace())}]+"
+
+
+@cache
 def non_whitespace_pattern() -> str:
-    return char_class(whitespace(), negate=True) + "+"
+    return whitespace_pattern(negate=True)
 
 
 @cache
@@ -241,235 +253,3 @@ def write_cache(key: str, value: dict[str, str | None]) -> None:
 
 def has_prefix_suffix_overlap(pattern: str) -> bool:
     return any(pattern[:size] == pattern[-size:] for size in range(1, len(pattern)))
-
-
-@dataclass(frozen=True)
-class SlicePrimitives:
-    literal: Callable[[int], Any]
-    when: Callable[[Any, Any, Any], Any]
-    coalesce: Callable[[Any, Any], Any]
-    clip: Callable[[Any, Any, Any], Any]
-    maximum: int
-
-
-class SliceBounds(NamedTuple):
-    start: Any
-    length: Any
-
-
-def slice_bounds(
-    primitives: SlicePrimitives, text_length: Any, start: Any, stop: Any
-) -> SliceBounds:
-    zero = primitives.literal(0)
-    maximum = primitives.literal(primitives.maximum)
-
-    if isinstance(start, int) and start >= primitives.maximum:
-        return SliceBounds(zero, zero)
-    if (start is None or isinstance(start, int)) and (stop is None or isinstance(stop, int)):
-        begin = 0 if start is None else start
-        end = primitives.maximum if stop is None else stop
-        if begin >= 0 and end >= 0:
-            return SliceBounds(
-                primitives.literal(min(begin, primitives.maximum - 1)),
-                primitives.literal(min(max(end - begin, 0), primitives.maximum)),
-            )
-
-    def clamp(bound: Any, default: Any) -> Any:
-        if bound is None:
-            return default
-        if isinstance(bound, int):
-            if bound >= 0:
-                return primitives.literal(min(bound, primitives.maximum))
-            return primitives.clip(
-                text_length + primitives.literal(max(bound, -INT64_MAX)), zero, text_length
-            )
-        shifted = bound + primitives.when(bound < zero, text_length, zero)
-        return primitives.clip(primitives.coalesce(shifted, default), zero, text_length)
-
-    begin = clamp(start, zero)
-    end = clamp(stop, maximum)
-    return SliceBounds(begin, primitives.clip(end - begin, zero, maximum))
-
-
-@dataclass(frozen=True)
-class SequencePrimitives:
-    bounds: SlicePrimitives
-    length: Callable[[Any], Any]
-    slice: Callable[[Any, Any, Any], Any]
-    head: Callable[[Any, int], Any]
-    tail: Callable[[Any, int], Any]
-    reverse: Callable[[Any], Any]
-    stride: Callable[[Any, int], Any]
-    bind: Callable[[Any, Callable[[Any], Any], Type], Any]
-
-
-@dataclass(frozen=True)
-class PaddingPrimitives:
-    sequence: SequencePrimitives
-    literal: Callable[[object], Any]
-    concat: Callable[..., Any]
-    repeat: Callable[[Any, Any], Any]
-    half: Callable[[Any], Any]
-
-
-def pad_text(
-    primitives: PaddingPrimitives, value: Any, width: Any, fill: Any, method: str
-) -> tuple[Any, Any]:
-    sequence = primitives.sequence
-    literal = primitives.literal
-    when = sequence.bounds.when
-    zero = literal(0)
-    limit = literal(NATIVE_PADDING_LIMIT)
-    exact = width <= limit
-    width = when((width > zero) & exact, width, zero)
-    padding = sequence.bounds.clip(width - sequence.length(value), zero, limit)
-    if method == "zfill":
-        zeros = primitives.repeat(literal("0"), padding)
-        head = sequence.head(value, 1)
-        signed = (head == literal("+")) | (head == literal("-"))
-        return when(
-            signed,
-            primitives.concat(head, zeros, sequence.tail(value, -1)),
-            primitives.concat(zeros, value),
-        ), exact
-    fill = sequence.head(fill, 1)
-    if method == "center":
-        left = primitives.half(padding) + padding % literal(2) * (width % literal(2))
-        right = padding - left
-    else:
-        left, right = (padding, zero) if method == "rjust" else (zero, padding)
-    return primitives.concat(
-        primitives.repeat(fill, left), value, primitives.repeat(fill, right)
-    ), exact
-
-
-def slice_forward(
-    primitives: SequencePrimitives, container: Any, start: Any, stop: Any, result: Type
-) -> Any:
-    bounds = primitives.bounds
-
-    def bounded(value: Any) -> Any:
-        begin, length = slice_bounds(bounds, primitives.length(value), start, stop)
-        return primitives.slice(value, begin, length)
-
-    if (start is None or isinstance(start, int)) and (stop is None or isinstance(stop, int)):
-        start = max(min(start or 0, bounds.maximum), -bounds.maximum)
-        if start == bounds.maximum or (stop is not None and stop <= -bounds.maximum):
-            return primitives.head(container, 0)
-        if stop is None:
-            return primitives.tail(container, -start) if start else container
-        stop = max(min(stop, bounds.maximum), -bounds.maximum)
-        if start == 0 or stop == 0:
-            return primitives.head(container, stop)
-        if stop < 0:
-            if start > 0:
-                return primitives.tail(primitives.head(container, stop), -start)
-            return primitives.head(primitives.tail(container, -start), stop)
-        if start < 0:
-            return primitives.bind(container, bounded, result)
-    return bounded(container)
-
-
-def slice_sequence(
-    primitives: SequencePrimitives,
-    container: Any,
-    start: Any,
-    stop: Any,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Any:
-    step = step or 1
-    if step < 0:
-        container = primitives.reverse(container)
-        start = reverse_bound(primitives.bounds, start)
-        stop = reverse_bound(primitives.bounds, stop)
-    sliced = slice_forward(primitives, container, start, stop, result)
-    if abs(step) == 1:
-        return sliced
-    return primitives.stride(sliced, min(abs(step), primitives.bounds.maximum))
-
-
-def reverse_bound(primitives: SlicePrimitives, bound: Any) -> Any:
-    if bound is None:
-        return None
-    if isinstance(bound, int):
-        return -1 - bound
-    return primitives.literal(-1) - bound
-
-
-@dataclass(frozen=True)
-class SplitPrimitives:
-    sequence: SequencePrimitives
-    bind: Callable[[Sequence[Any], Callable[..., Any]], Any]
-    split: Callable[[Any, Any], Any]
-    join: Callable[[Any, Any], Any]
-    append: Callable[[Any, Any], Any]
-    length: Callable[[Any], Any]
-    suffix: Callable[[Any, Any], Any]
-    word_prefix: Callable[[Any, Any], Any]
-    lstrip: Callable[[Any], Any]
-    is_null: Callable[[Any], Any]
-    reverse: Callable[[Any], Any]
-    restore: Callable[[Any], Any]
-
-
-def split_limited(primitives: SplitPrimitives, text: Any, separator: Any, maximum: Any) -> Any:
-    sequence = primitives.sequence
-    bounds = sequence.bounds
-    zero = bounds.literal(0)
-
-    def limited(text: Any, separator: Any, maximum: Any, pieces: Any) -> Any:
-        size = sequence.length(pieces)
-        count = bounds.clip(maximum, zero, size)
-        prefix = sequence.slice(pieces, zero, count)
-        offset = primitives.length(primitives.join(separator, prefix)) + primitives.length(
-            separator
-        )
-        tail = primitives.suffix(text, bounds.when(count == zero, zero, offset))
-        word_offset = primitives.length(primitives.word_prefix(text, count))
-        word_tail = primitives.lstrip(primitives.suffix(text, word_offset))
-        remainder = bounds.when(primitives.is_null(separator), word_tail, tail)
-        return bounds.when(
-            (maximum < zero) | (maximum >= size), pieces, primitives.append(prefix, remainder)
-        )
-
-    return primitives.bind(
-        (text, separator, maximum),
-        lambda text, separator, maximum: primitives.bind(
-            (text, separator, maximum, primitives.split(text, separator)), limited
-        ),
-    )
-
-
-def split_right(primitives: SplitPrimitives, text: Any, separator: Any, maximum: Any = None) -> Any:
-    reversed_text = primitives.reverse(text)
-    reversed_separator = primitives.reverse(separator)
-    pieces = (
-        primitives.split(reversed_text, reversed_separator)
-        if maximum is None
-        else split_limited(primitives, reversed_text, reversed_separator, maximum)
-    )
-    return primitives.restore(pieces)
-
-
-@dataclass(frozen=True)
-class SearchPrimitives:
-    literal: Callable[[object], Any]
-    when: Callable[[Any, Any, Any], Any]
-    length: Callable[[Any], Any]
-    reverse: Callable[[Any], Any]
-    find: Callable[[Any, Any], Any]
-
-
-def reverse_find(primitives: SearchPrimitives, text: Any, pattern: Any) -> Any:
-    position = primitives.find(primitives.reverse(text), primitives.reverse(pattern))
-    offset = primitives.length(text) - primitives.length(pattern) - position
-    return primitives.when(position < primitives.literal(0), primitives.literal(-1), offset)
-
-
-def count_occurrences(
-    primitives: SearchPrimitives, text: Any, pattern: Any, occurrences: Any
-) -> Any:
-    empty = pattern == primitives.literal("")
-    return primitives.when(empty, primitives.length(text) + primitives.literal(1), occurrences)

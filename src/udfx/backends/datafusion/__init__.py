@@ -8,6 +8,8 @@ from udfx.backends.datafusion import (  # noqa: F401
     math,
     numbers,
     regex,
+    slicing,
+    splitting,
     strings,
 )
 from udfx.backends.datafusion.backend import DataFusionBackend

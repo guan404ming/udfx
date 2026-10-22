@@ -5,6 +5,7 @@ import operator
 from udfx.ir import Lit, Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.semantics.facts import minimum_length
+from udfx.semantics.scalars import coalesce
 from udfx.semantics.text import CASE_METHODS, PADDING_METHODS, PREDICATES
 from udfx.semantics.translation import translate_text
 from udfx.types import BOOL, INT, STR, list_of
@@ -83,6 +84,7 @@ register(Op(".join", (STR, STRINGS), STR, str.join))
 register(Op(".join", (STR, OPTIONAL_STRINGS), STR, str.join, none_item))
 register(Op(".join", (STR, STR), STR, str.join))
 register(Op("__add__", (STR, STR), STR, operator.add))
+register(Op("coalesce", (STR.or_none(), STR), STR, coalesce))
 register(Op("__eq__", (STR.or_none(), STR.or_none()), BOOL, operator.eq))
 register(Op("__ne__", (STR.or_none(), STR.or_none()), BOOL, operator.ne))
 register(Op("__contains__", (STR, STR), BOOL, operator.contains))

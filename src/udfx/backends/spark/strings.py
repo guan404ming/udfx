@@ -10,7 +10,6 @@ from pyspark.sql import Column, functions
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
-    register_padding,
     register_string_predicates,
     register_translation,
 )
@@ -19,29 +18,21 @@ from udfx.backends.spark.conversions import TEXT as TRANSLATION
 from udfx.backends.spark.rules import RULES, when
 from udfx.ir import Col
 from udfx.semantics import text
-from udfx.semantics.facts import result_type
+from udfx.semantics.sequences import (
+    SearchPrimitives,
+    count_occurrences,
+    reverse_find,
+)
 from udfx.semantics.text import (
     CASE_METHODS,
     SIGMA,
     CaseDrift,
     CasePrimitives,
-    PaddingPrimitives,
-    SearchPrimitives,
-    SequencePrimitives,
-    SlicePrimitives,
-    SplitPrimitives,
     case_expression,
     case_guard,
-    count_occurrences,
-    non_whitespace_pattern,
-    reverse_find,
-    slice_sequence,
-    split_limited,
-    split_right,
     whitespace,
-    word_prefix_pattern,
 )
-from udfx.types import STR, Kind, Type, list_of
+from udfx.types import STR, Kind
 
 INT32_MAX = 2**31 - 1
 POINT = "point"
@@ -81,11 +72,6 @@ def characters(text: Column) -> Column:
     return functions.regexp_extract_all(text, functions.lit("(?s)."), functions.lit(0))
 
 
-def quote_java_regex(pattern: Column) -> Column:
-    escaped = functions.replace(pattern, functions.lit("\\E"), functions.lit("\\E\\\\E\\Q"))
-    return functions.concat(functions.lit("\\Q"), escaped, functions.lit("\\E"))
-
-
 def array_join(words: Column, separator: Column) -> Column:
     return functions.call_function("array_join", words, separator)
 
@@ -121,29 +107,6 @@ def rstrip(text: Column, characters: Column | None = None) -> Column:
         else functions.lit(whitespace())
     )
     return functions.rtrim(text, characters)
-
-
-def split_words(text: Column) -> Column:
-    return functions.regexp_extract_all(
-        text, functions.lit(non_whitespace_pattern()), functions.lit(0)
-    )
-
-
-RULES(".split", Kind.STR)(split_words)
-RULES(".rsplit", Kind.STR)(split_words)
-
-
-def split(text: Column, separator: Column) -> Column:
-    pieces = functions.split(text, quote_java_regex(separator), -1)
-    return functions.when(separator.isNull(), split_words(text)).otherwise(pieces)
-
-
-RULES(".split", Kind.STR, Kind.STR)(split)
-
-
-@RULES("last_split", Kind.STR, Kind.STR)
-def last_split(text: Column, separator: Column) -> Column:
-    return functions.split_part(text, separator, functions.lit(-1))
 
 
 def find(text: Column, pattern: Column) -> Column:
@@ -199,6 +162,9 @@ def join_characters(separator: Column, text: Column) -> Column:
     return join(separator, characters(text))
 
 
+RULES("coalesce", Kind.STR, Kind.STR)(functions.coalesce)
+
+
 @RULES("__add__", Kind.STR, Kind.STR)
 def str_add(left: Column, right: Column) -> Column:
     return functions.concat(left, right)
@@ -246,143 +212,6 @@ def list_getitem(container: Column, index: Column) -> Column:
     return functions.try_element_at(container, bounded_native_index(index))
 
 
-SLICE = SlicePrimitives(
-    maximum=INT32_MAX,
-    literal=functions.lit,
-    when=when,
-    coalesce=functions.coalesce,
-    clip=lambda value, lower, upper: functions.least(functions.greatest(value, lower), upper),
-)
-
-
-SEQUENCE = SequencePrimitives(
-    bounds=SLICE,
-    length=list_len,
-    slice=lambda value, start, size: functions.slice(
-        value, (start + 1).cast("int"), size.cast("int")
-    ),
-    head=lambda value, size: (
-        functions.slice(value, 1, size)
-        if size >= 0
-        else functions.reverse(
-            functions.slice(functions.reverse(value), 1 - size, INT32_MAX + size)
-        )
-    ),
-    tail=lambda value, size: (
-        functions.reverse(functions.slice(functions.reverse(value), 1, size))
-        if size > 0
-        else functions.slice(value, 1 - size, INT32_MAX + size)
-    ),
-    reverse=functions.reverse,
-    stride=lambda value, step: functions.filter(value, lambda item, index: index % step == 0),
-    bind=lambda value, transform, result: functions.transform(functions.array(value), transform)[0],
-)
-
-
-TEXT = SequencePrimitives(
-    bounds=SLICE,
-    length=length,
-    slice=lambda value, start, size: functions.substring(
-        value, (start + 1).cast("int"), size.cast("int")
-    ),
-    head=lambda value, size: (
-        functions.substring(value, 1, size)
-        if size >= 0
-        else functions.reverse(
-            functions.substring(functions.reverse(value), min(1 - size, INT32_MAX), INT32_MAX)
-        )
-    ),
-    tail=lambda value, size: functions.substring(
-        value, -size if size > 0 else min(1 - size, INT32_MAX), INT32_MAX
-    ),
-    reverse=functions.reverse,
-    stride=lambda value, step: join(functions.lit(""), SEQUENCE.stride(characters(value), step)),
-    bind=SEQUENCE.bind,
-)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.STR,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def str_slice(
-    text: Column,
-    start: Column | int | None,
-    stop: Column | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Column:
-    return slice_sequence(TEXT, text, start, stop, step, result=result)
-
-
-@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.LIST,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def list_slice(
-    container: Column,
-    start: Column | int | None,
-    stop: Column | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Column:
-    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
-
-
-SPLIT = SplitPrimitives(
-    sequence=SEQUENCE,
-    bind=lambda values, transform: SEQUENCE.bind(
-        functions.struct(*(value.alias(str(index)) for index, value in enumerate(values))),
-        lambda value: transform(*(value.getField(str(index)) for index in range(len(values)))),
-        list_of(STR),
-    ),
-    split=split,
-    join=join,
-    append=functions.array_append,
-    length=length,
-    suffix=lambda value, start: functions.substring(value, (start + 1).cast("int"), INT32_MAX),
-    word_prefix=lambda value, count: array_join(
-        functions.slice(
-            functions.regexp_extract_all(
-                value, functions.lit(word_prefix_pattern()), functions.lit(0)
-            ),
-            functions.lit(1),
-            count.cast("int"),
-        ),
-        functions.lit(""),
-    ),
-    lstrip=lstrip,
-    is_null=Column.isNull,
-    reverse=functions.reverse,
-    restore=lambda values: functions.transform(functions.reverse(values), functions.reverse),
-)
-
-
-@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
-def split_limit(text: Column, separator: Column, maximum: Column) -> Column:
-    return split_limited(SPLIT, text, separator, maximum)
-
-
-@RULES(".rsplit", Kind.STR, Kind.STR)
-@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
-def rsplit(text: Column, separator: Column, maximum: Column | None = None) -> Column:
-    return split_right(SPLIT, text, separator, maximum)
-
-
 register_string_predicates(RULES, lambda value, pattern: value.rlike(pattern))
 
 
@@ -401,18 +230,6 @@ CASE = CasePrimitives(
     matches=lambda value, pattern: value.rlike(pattern),
     characters=lambda value, transform: array_join(
         functions.transform(characters(value), transform), functions.lit("")
-    ),
-)
-
-
-register_padding(
-    RULES,
-    PaddingPrimitives(
-        sequence=TEXT,
-        literal=functions.lit,
-        concat=functions.concat,
-        repeat=lambda value, count: functions.repeat(value, count.cast("int")),
-        half=lambda value: functions.call_function("div", value, functions.lit(2)),
     ),
 )
 

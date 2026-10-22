@@ -4,8 +4,8 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import timedelta
 from typing import cast
 
-from udfx.frontend.calls import invoke
 from udfx.frontend.constants import constant_value
+from udfx.frontend.invocation import invoke
 from udfx.frontend.values import Duration, Item, Opaque, Value
 from udfx.ir import TRUE, Node, lit
 from udfx.ops import Fault

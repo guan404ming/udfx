@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import duckdb
 
-from udfx.backends.duckdb.rules import RULES, constant, function
+from udfx.backends.duckdb.rules import RULES, constant, function, when
 from udfx.backends.registration import register_regex
 from udfx.semantics.regex import RegexPrimitives
 
@@ -14,8 +14,10 @@ register_regex(
             constant(value).cast("VARCHAR[]") if isinstance(value, list) else constant(value)
         ),
         contains=lambda text, pattern: function("regexp_matches", text, constant(pattern)),
-        extract=lambda text, pattern: function(
-            "nullif", function("regexp_extract", text, constant(pattern), constant(0)), constant("")
+        extract=lambda text, pattern: when(
+            function("regexp_matches", text, constant(pattern + r"[\s\S]*")),
+            function("regexp_extract", text, constant(pattern), constant(0)),
+            constant(None).cast("VARCHAR"),
         ),
         replace=lambda text, pattern, replacement, count: function(
             "regexp_replace",

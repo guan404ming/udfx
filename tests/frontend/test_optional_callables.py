@@ -7,7 +7,7 @@ import pytest
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.calls import op_name
+from udfx.frontend.callables import op_name
 from udfx.ir import Call
 from udfx.testing import check_function
 from udfx.testing.strategies import FLOAT_TRAPS, INT_TRAPS

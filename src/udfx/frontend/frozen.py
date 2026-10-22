@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import CellType, FunctionType, ModuleType
 
-from udfx.frontend.calls import known_op
+from udfx.frontend.callables import known_op
 from udfx.frontend.constants import constant
 from udfx.frontend.values import Item
 from udfx.semantics.functions import code_names

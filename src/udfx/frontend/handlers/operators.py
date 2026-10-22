@@ -5,7 +5,6 @@ import operator
 import re
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, node_of, none_test, truth
 from udfx.frontend.constants import (
     GENERICS,
     annotation,
@@ -18,8 +17,10 @@ from udfx.frontend.constants import (
 from udfx.frontend.context import Context
 from udfx.frontend.datetimes import datetime_binary
 from udfx.frontend.formatting import format_percent
+from udfx.frontend.invocation import invoke, node_of
 from udfx.frontend.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.machine import emit, handles
+from udfx.frontend.sequence_calls import none_test, truth
 from udfx.frontend.sets import set_operator
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Row, Set, Slice, Tuple, Value

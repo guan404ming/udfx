@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from udfx.ir import Call, If, ListValue, Lit, Node
+from udfx.ir import Call, Col, If, ListValue, Lit, Node
+from udfx.semantics.text import has_prefix_suffix_overlap
 from udfx.types import STR, Kind, Type, fits
 
 
@@ -57,3 +58,17 @@ def minimum_length(node: Node) -> int:
         if node.op.name == "__add__" and node.type.kind in {Kind.STR, Kind.LIST}:
             return sum(map(minimum_length, node.arguments))
     return 0
+
+
+def split_non_overlapping(node: Call) -> bool:
+    separator = node.arguments[1]
+    return (
+        isinstance(separator, Lit)
+        and isinstance(separator.value, str)
+        and bool(separator.value)
+        and not has_prefix_suffix_overlap(separator.value)
+    )
+
+
+def split_partitioned(node: Call) -> bool:
+    return isinstance(node.arguments[0], Col | Lit) and split_non_overlapping(node)

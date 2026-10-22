@@ -3,11 +3,12 @@ from __future__ import annotations
 import dis
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import node_of, none_test, truth
 from udfx.frontend.constants import constant
 from udfx.frontend.context import Context
+from udfx.frontend.invocation import node_of
 from udfx.frontend.logic import conjunction, negate
 from udfx.frontend.machine import handles, unsupported
+from udfx.frontend.sequence_calls import none_test, truth
 from udfx.frontend.state import Return, State, Step
 from udfx.frontend.values import Iterator, Opaque, Tuple, Value
 from udfx.ir import FALSE

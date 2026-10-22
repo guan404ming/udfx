@@ -63,23 +63,30 @@ def lower_comprehension[E](
 ) -> Lowered[E]:
     source = backend.lower(node.source, elements)
 
-    def parts(element: E) -> tuple[Lowered[E], Lowered[E], E]:
+    guarded = False
+
+    def parts(element: E) -> tuple[Lowered[E], Lowered[E], E | None]:
+        nonlocal guarded
         scope = {**elements, node.element: element}
         condition = backend.lower(node.condition, scope)
         value = backend.lower(node.value, scope)
         fault = backend.lower(node.fault, scope)
+        value_exact = backend.exact(value)
+        if node.condition != TRUE and value_exact is not None:
+            value_exact = backend.select(condition.expr, value_exact, backend.literal(TRUE))
         exact = backend.conjunction(
             backend.exact(condition),
-            backend.select(condition.expr, backend.exact_expression(value), backend.literal(TRUE)),
+            value_exact,
             backend.exact(fault),
-            backend.negate(fault.expr),
+            backend.negate(fault.expr) if node.fault != FALSE else None,
         )
-        return condition, value, cast("E", exact)
+        guarded = guarded or exact is not None
+        return condition, value, exact
 
     try:
         if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
             chunks: list[E] = []
-            exacts: list[E] = []
+            exacts: list[E | None] = []
             for item in node.source.value:
                 element = backend.lower(Lit(item, node.element.type), elements)
                 condition, value, exact = parts(element.expr)
@@ -98,9 +105,15 @@ def lower_comprehension[E](
             for chunk in chunks:
                 result = cast("E", concatenate(result, chunk))
             return Lowered(result, backend.conjunction(backend.exact(source), *exacts))
-        filtered = backend.list_filter(source.expr, lambda element: parts(element)[0].expr)
-        value = backend.list_transform(filtered, lambda element: parts(element)[1].expr)
-        flags = backend.list_transform(source.expr, lambda element: parts(element)[2])
+        filtered = source.expr
+        if node.condition != TRUE:
+            filtered = backend.list_filter(filtered, lambda element: parts(element)[0].expr)
+        value = filtered
+        if node.value != node.element:
+            value = backend.list_transform(filtered, lambda element: parts(element)[1].expr)
+        if not guarded and node.fault == FALSE:
+            return Lowered(value, backend.exact(source))
+        flags = backend.list_transform(source.expr, lambda element: cast("E", parts(element)[2]))
         every = backend.rules.get(OpKey("all", (Kind.LIST,)))
         if every is None:
             raise Unsupported(f"{backend.name} has no list reduction")

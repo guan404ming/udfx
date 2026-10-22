@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 
 from udfx.frontend import trace
-from udfx.frontend.calls import invoke
+from udfx.frontend.invocation import invoke
 from udfx.frontend.logic import conjunction, disjunction, fold, negate
 from udfx.ir import FALSE, TRUE, Col, Lit, lit
 from udfx.ops import apply

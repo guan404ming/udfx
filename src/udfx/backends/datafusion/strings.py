@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import replace as replace_record
+from collections.abc import Sequence
 from functools import cache, partial
 from typing import cast
 
@@ -9,41 +8,31 @@ import datafusion
 import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
-from udfx.backends.arrow import dtype
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.conversions import TEXT as TRANSLATION
 from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
-    register_padding,
     register_string_predicates,
     register_translation,
 )
 from udfx.semantics import text
-from udfx.semantics.facts import result_type
+from udfx.semantics.sequences import (
+    SearchPrimitives,
+    count_occurrences,
+    reverse_find,
+)
 from udfx.semantics.text import (
     CASE_METHODS,
     SIGMA,
     CaseDrift,
     CasePrimitives,
-    PaddingPrimitives,
-    SearchPrimitives,
-    SequencePrimitives,
-    SlicePrimitives,
-    SplitPrimitives,
     case_expression,
     case_guard,
-    char_class,
-    count_occurrences,
-    non_whitespace_pattern,
-    reverse_find,
-    slice_sequence,
-    split_limited,
-    split_right,
     whitespace,
 )
-from udfx.types import STR, Kind, Type, list_of
+from udfx.types import STR, Kind
 
 POINT = "point"
 
@@ -104,31 +93,6 @@ def rstrip(text: Expr, characters: Expr | None = None) -> Expr:
     return functions.rtrim(text, characters)
 
 
-def split_words(text: Expr) -> Expr:
-    spaced = functions.regexp_replace(text, lit(char_class(whitespace()) + "+"), lit(" "), lit("g"))
-    return functions.string_to_array(functions.btrim(spaced, lit(" ")), lit(" "))
-
-
-RULES(".split", Kind.STR)(split_words)
-RULES(".rsplit", Kind.STR)(split_words)
-
-
-def split(text: Expr, separator: Expr) -> Expr:
-    return (
-        functions.when(separator.is_null(), split_words(text))
-        .when(text == lit(""), functions.make_array(lit("")))
-        .otherwise(functions.string_to_array(text, separator))
-    )
-
-
-RULES(".split", Kind.STR, Kind.STR)(split)
-
-
-@RULES("last_split", Kind.STR, Kind.STR)
-def last_split(text: Expr, separator: Expr) -> Expr:
-    return functions.split_part(text, separator, lit(-1))
-
-
 def find(text: Expr, pattern: Expr) -> Expr:
     return functions.strpos(text, pattern).cast(pa.int64()) - lit(1)
 
@@ -185,6 +149,9 @@ RULES(".join", Kind.STR, Kind.LIST)(join)
 @RULES(".join", Kind.STR, Kind.STR)
 def join_characters(separator: Expr, text: Expr) -> Expr:
     return join(separator, characters(text))
+
+
+RULES("coalesce", Kind.STR, Kind.STR)(functions.coalesce)
 
 
 @RULES("__add__", Kind.STR, Kind.STR)
@@ -250,139 +217,6 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
     return functions.array_element(container, position)
 
 
-SLICE = SlicePrimitives(
-    maximum=2**63 - 1,
-    literal=lit,
-    when=when,
-    coalesce=functions.coalesce,
-    clip=lambda value, lower, upper: functions.greatest(functions.least(value, upper), lower),
-)
-
-
-def array_transform(values: Expr, transform: Callable[[Expr], Expr], result: pa.DataType) -> Expr:
-    nested = functions.array_transform(
-        functions.make_array(lit(0)),
-        lambda ignored: functions.array_transform(values, transform).cast(pa.list_(result)),
-    )
-    return functions.array_element(nested.cast(pa.list_(pa.list_(result))), 1)
-
-
-SEQUENCE = SequencePrimitives(
-    bounds=replace_record(SLICE, maximum=2**31 - 1),
-    length=list_len,
-    slice=lambda value, start, size: functions.array_slice(value, start + lit(1), start + size),
-    head=lambda value, size: functions.array_slice(value, 1, size - 1 if size < 0 else size),
-    tail=lambda value, size: functions.array_slice(
-        value, -size if size > 0 else min(1 - size, 2**31 - 1), 2**31 - 1
-    ),
-    reverse=functions.array_reverse,
-    stride=lambda value, step: functions.array_slice(value, 1, 2**31 - 1, step),
-    bind=lambda value, transform, result: functions.array_element(
-        array_transform(functions.make_array(value), transform, dtype(result)),
-        1,
-    ),
-)
-
-
-TEXT = SequencePrimitives(
-    bounds=SLICE,
-    length=length,
-    slice=lambda value, start, size: functions.substr(value, start + lit(1), size),
-    head=functions.left,
-    tail=functions.right,
-    reverse=functions.reverse,
-    stride=lambda value, step: join(
-        lit(""), SEQUENCE.stride(characters(value), min(step, 2**31 - 1))
-    ),
-    bind=SEQUENCE.bind,
-)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.STR,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def str_slice(
-    text: Expr,
-    start: Expr | int | None,
-    stop: Expr | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Expr:
-    return slice_sequence(TEXT, text, start, stop, step, result=result)
-
-
-@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.LIST,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def list_slice(
-    container: Expr,
-    start: Expr | int | None,
-    stop: Expr | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Expr:
-    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
-
-
-SPLIT = SplitPrimitives(
-    sequence=SEQUENCE,
-    bind=lambda values, transform: SEQUENCE.bind(
-        functions.named_struct([(str(index), value) for index, value in enumerate(values)]),
-        lambda value: transform(
-            *(functions.get_field(value, str(index)) for index in range(len(values)))
-        ),
-        list_of(STR),
-    ),
-    split=split,
-    join=join,
-    append=functions.array_append,
-    length=length,
-    suffix=lambda value, start: functions.substr(value, start + lit(1)),
-    word_prefix=lambda value, count: functions.substr(
-        value,
-        lit(1),
-        functions.greatest(
-            functions.regexp_instr(value, lit(non_whitespace_pattern()), lit(1), count + lit(1))
-            - lit(1),
-            lit(0),
-        ),
-    ),
-    lstrip=lstrip,
-    is_null=Expr.is_null,
-    reverse=functions.reverse,
-    restore=lambda values: array_transform(
-        functions.array_reverse(values), functions.reverse, pa.string()
-    ),
-)
-
-
-@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
-def split_limit(text: Expr, separator: Expr, maximum: Expr) -> Expr:
-    return split_limited(SPLIT, text, separator, maximum)
-
-
-@RULES(".rsplit", Kind.STR, Kind.STR)
-@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
-def rsplit(text: Expr, separator: Expr, maximum: Expr | None = None) -> Expr:
-    return split_right(SPLIT, text, separator, maximum)
-
-
 register_string_predicates(RULES, lambda value, pattern: functions.regexp_like(value, lit(pattern)))
 
 
@@ -401,18 +235,6 @@ CASE = CasePrimitives(
     matches=lambda value, pattern: functions.regexp_like(value, lit(pattern)),
     characters=lambda value, transform: functions.array_to_string(
         functions.array_transform(characters(value), transform), lit("")
-    ),
-)
-
-
-register_padding(
-    RULES,
-    PaddingPrimitives(
-        sequence=TEXT,
-        literal=lit,
-        concat=functions.concat,
-        repeat=functions.repeat,
-        half=lambda value: value / lit(2),
     ),
 )
 

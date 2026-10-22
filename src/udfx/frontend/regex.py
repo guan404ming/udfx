@@ -8,9 +8,11 @@ from typing import Any, cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.binding import bind
-from udfx.frontend.calls import invoke, known_op, node_of, none_test, truth
+from udfx.frontend.callables import known_op
 from udfx.frontend.constants import constant, constant_value
+from udfx.frontend.invocation import invoke, node_of
 from udfx.frontend.logic import conjunction
+from udfx.frontend.sequence_calls import none_test, truth
 from udfx.frontend.values import Item, Match, Method, Opaque, Value
 from udfx.ir import FALSE, Lit, Node, lit
 from udfx.ops import Fault

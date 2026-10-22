@@ -10,7 +10,19 @@ from udfx.backends.faults import NativeFaults
 from udfx.backends.lowering import lower_call, lower_comprehension, lower_if
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.errors import Unsupported
-from udfx.ir import FALSE, TRUE, Call, Col, Comprehension, Element, If, ListValue, Lit, Node
+from udfx.ir import (
+    FALSE,
+    TRUE,
+    Call,
+    Col,
+    Comprehension,
+    Element,
+    Guarded,
+    If,
+    ListValue,
+    Lit,
+    Node,
+)
 from udfx.program import Program
 from udfx.types import Kind, Type, fits
 
@@ -140,6 +152,14 @@ class Backend[E](ABC):
     def lower(self, node: Node, elements: Mapping[Element, E] | None = None) -> Lowered[E]:
         elements = elements or {}
         match node:
+            case Guarded():
+                value = self.lower(node.value, elements)
+                exact = self.lower(node.exact, elements)
+                return Lowered(
+                    value.expr,
+                    self.conjunction(value.exact, self.exact(exact), exact.expr),
+                    value.overflow,
+                )
             case Element():
                 return Lowered(elements[node])
             case ListValue():

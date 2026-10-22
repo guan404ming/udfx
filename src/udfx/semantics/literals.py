@@ -74,16 +74,16 @@ def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
 
 
 def integer_matches(primitives: TextPrimitives, text: Any) -> Any:
-    return primitives.when(
-        is_ascii(primitives, text),
-        literal_matches(primitives, text, INT_LITERAL),
-        literal_matches(primitives, text, integer_pattern()),
-    )
+    return literal_matches(primitives, text, integer_pattern())
 
 
 def normalize_integer(primitives: TextPrimitives, text: Any) -> Any:
     original, replacement = integer_characters()
-    return primitives.translate(text, original + "_", replacement)
+    return primitives.when(
+        is_ascii(primitives, text),
+        primitives.replace(text, "_", ""),
+        primitives.translate(text, original + "_", replacement),
+    )
 
 
 def is_ascii(primitives: TextPrimitives, text: Any) -> Any:
@@ -110,20 +110,11 @@ def float_parses(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
 def parse_int(
     primitives: TextPrimitives, text: Any, maximum_length: int | None = None
 ) -> tuple[Any, Any]:
-    ascii_valid = literal_matches(primitives, text, INT_LITERAL)
-    ascii_cleaned = primitives.replace(primitives.strip(text, ASCII_SPACE), "_", "")
     cleaned = primitives.strip(normalize_integer(primitives, text), ASCII_SPACE)
-    value = primitives.when(
-        ascii_valid,
-        primitives.try_int(ascii_cleaned),
-        primitives.when(
-            integer_matches(primitives, text), primitives.try_int(cleaned), primitives.literal(None)
-        ),
-    )
+    value = primitives.try_int(cleaned)
     if maximum_length is not None and maximum_length <= 18:
         return value, None
-    present = value == value  # noqa: PLR0124
-    return value, primitives.coalesce(present, ~integer_matches(primitives, text))
+    return value, primitives.not_null(value) | ~integer_matches(primitives, text)
 
 
 def parse_float(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:

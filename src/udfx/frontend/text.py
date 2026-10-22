@@ -1,8 +1,17 @@
-from udfx.ir import Call, Lit
+from udfx.ir import Call, Guarded, Lit, Node
 from udfx.ops.registry import apply
+from udfx.semantics.text import CASE_METHODS
 
 
-def simplify_text(node: Call) -> Call:
+def simplify_text(node: Call) -> Node:
+    if node.op.name in {".lower", ".casefold"}:
+        source = node.arguments[0]
+        while isinstance(source, Call) and source.op.name in {
+            f".{method}" for method in CASE_METHODS
+        }:
+            source = source.arguments[0]
+        if source != node.arguments[0] and not isinstance(source, Lit):
+            return Guarded(apply(".lower", source), apply(".isascii", source))
     if node.op.name in {".lower", ".upper"}:
         argument = node.arguments[0]
         if (

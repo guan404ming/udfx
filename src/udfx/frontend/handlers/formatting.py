@@ -1,8 +1,8 @@
 import dis
 
-from udfx.frontend.calls import node_of
 from udfx.frontend.context import Context
 from udfx.frontend.formatting import format_value, join_strings
+from udfx.frontend.invocation import node_of
 from udfx.frontend.logic import fold
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step

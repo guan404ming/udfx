@@ -4,7 +4,8 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import cast
 
 from udfx.frontend.binding import bind_helper
-from udfx.frontend.calls import call, known_op
+from udfx.frontend.callables import known_op
+from udfx.frontend.calls import call
 from udfx.frontend.values import Item, Opaque, Tuple, Value
 from udfx.ops import Fault
 from udfx.semantics.paths import join_path, split_extension, split_path

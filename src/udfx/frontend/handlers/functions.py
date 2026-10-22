@@ -9,7 +9,7 @@ from functools import reduce
 from types import ModuleType
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import call, invoke, node_of, truth
+from udfx.frontend.calls import call
 from udfx.frontend.constants import (
     constant,
     constant_value,
@@ -21,11 +21,13 @@ from udfx.frontend.context import Context
 from udfx.frontend.datetimes import call_datetime, duration_attribute
 from udfx.frontend.handlers.closures import inline
 from udfx.frontend.handlers.iteration import validate_fault_handlers
+from udfx.frontend.invocation import invoke, node_of
 from udfx.frontend.iterables import call_iterable, indexed, iterator_of, source_of
 from udfx.frontend.logic import choose, conjunction, disjunction
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.paths import call_path
 from udfx.frontend.regex import call_regex
+from udfx.frontend.sequence_calls import truth
 from udfx.frontend.state import Raise, State, Step
 from udfx.frontend.values import (
     NULL,

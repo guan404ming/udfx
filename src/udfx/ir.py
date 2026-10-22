@@ -65,7 +65,17 @@ class Comprehension:
         return list_of(self.value.type)
 
 
-Node = Col | Lit | Call | If | ListValue | Element | Comprehension
+@dataclass(frozen=True)
+class Guarded:
+    value: Node
+    exact: Node
+
+    @property
+    def type(self) -> Type:
+        return self.value.type
+
+
+Node = Col | Lit | Call | If | ListValue | Element | Comprehension | Guarded
 
 TRUE = Lit(True, BOOL)
 FALSE = Lit(False, BOOL)

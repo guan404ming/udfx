@@ -6,14 +6,9 @@ from typing import Any
 from udfx.backends.rules import Lowered, Rule, RuleSet
 from udfx.semantics.facts import argument_length
 from udfx.semantics.literals import TextPrimitives, float_parses, int_parses, parse_float, parse_int
+from udfx.semantics.padding import PaddingPrimitives, pad_text
 from udfx.semantics.regex import RegexPrimitives, lower_regex
-from udfx.semantics.text import (
-    PADDING_METHODS,
-    PREDICATES,
-    PaddingPrimitives,
-    pad_text,
-    string_predicate,
-)
+from udfx.semantics.text import PADDING_METHODS, PREDICATES, string_predicate
 from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
 

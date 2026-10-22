@@ -7,7 +7,7 @@ from hypothesis import given
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.ir import FALSE, Col, If, Lit
+from udfx.ir import FALSE, Col, Guarded, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
 from udfx.types import BOOL, INT, STR, list_of
@@ -168,7 +168,7 @@ def test_closure_binds_late() -> None:
 
 def test_sibling_helper_is_inlined() -> None:
     s = Col("s", STR)
-    assert trace(siblings, {"s": STR}).value == apply(".lower", apply(".upper", s))
+    assert trace(siblings, {"s": STR}).value == Guarded(apply(".lower", s), apply(".isascii", s))
 
 
 def test_helper_fault_reaches_caller_handler() -> None:

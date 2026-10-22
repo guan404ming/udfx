@@ -1,4 +1,17 @@
-from udfx.backends.spark import conversions, core, datetimes, lists, math, numbers, regex, strings  # noqa: F401  # pyright: ignore[reportUnusedImport]
+# pyright: reportUnusedImport=false
+
+from udfx.backends.spark import (  # noqa: F401
+    conversions,
+    core,
+    datetimes,
+    lists,
+    math,
+    numbers,
+    regex,
+    slicing,
+    splitting,
+    strings,
+)
 from udfx.backends.spark.backend import SparkBackend
 
 BACKEND = SparkBackend

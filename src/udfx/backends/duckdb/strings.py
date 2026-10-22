@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from functools import cache, partial
 
 import duckdb
@@ -21,35 +21,26 @@ from udfx.backends.duckdb.rules import (
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
-    register_padding,
     register_string_predicates,
     register_translation,
 )
 from udfx.semantics import text
-from udfx.semantics.facts import result_type
+from udfx.semantics.sequences import (
+    SearchPrimitives,
+    count_occurrences,
+    reverse_find,
+)
 from udfx.semantics.text import (
     CASE_METHODS,
     CLUSTER_JOINERS,
     SIGMA,
     CaseDrift,
     CasePrimitives,
-    PaddingPrimitives,
-    SearchPrimitives,
-    SequencePrimitives,
-    SlicePrimitives,
-    SplitPrimitives,
     case_expression,
     case_guard,
-    count_occurrences,
-    non_whitespace_pattern,
-    reverse_find,
-    slice_sequence,
-    split_limited,
-    split_right,
     whitespace,
-    word_prefix_pattern,
 )
-from udfx.types import Kind, Type
+from udfx.types import Kind
 
 POINT = "udfx point"
 ITEM = "udfx item"
@@ -101,26 +92,6 @@ def rstrip(text: Expression, characters: Expression | None = None) -> Expression
     if characters is None:
         return trim(text, whitespace(), "rstrip")
     return function("rtrim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
-
-
-def split_words(text: Expression) -> Expression:
-    return function("regexp_extract_all", text, constant(non_whitespace_pattern()))
-
-
-RULES(".split", Kind.STR)(split_words)
-RULES(".rsplit", Kind.STR)(split_words)
-
-
-def split(text: Expression, separator: Expression) -> Expression:
-    return when(separator.isnull(), split_words(text), function("string_split", text, separator))
-
-
-RULES(".split", Kind.STR, Kind.STR)(split)
-
-
-@RULES("last_split", Kind.STR, Kind.STR)
-def last_split(text: Expression, separator: Expression) -> Expression:
-    return function("split_part", text, separator, constant(-1))
 
 
 def find(text: Expression, pattern: Expression) -> Expression:
@@ -181,6 +152,9 @@ def join_characters(separator: Expression, text: Expression) -> Expression:
     return join(separator, function("string_split", text, constant("")))
 
 
+RULES("coalesce", Kind.STR, Kind.STR)(duckdb.CoalesceOperator)
+
+
 @RULES("__add__", Kind.STR, Kind.STR)
 def str_add(left: Expression, right: Expression) -> Expression:
     return function("concat", left, right)
@@ -226,161 +200,6 @@ def list_getitem(container: Expression, index: Expression) -> Expression:
     return function("list_extract", container, bounded_native_index(container, index))
 
 
-SLICE = SlicePrimitives(
-    maximum=2**32 - 1,
-    literal=lambda value: constant(value).cast("BIGINT"),
-    when=when,
-    coalesce=duckdb.CoalesceOperator,
-    clip=lambda value, lower, upper: function("least", function("greatest", value, lower), upper),
-)
-
-
-def bind(
-    value: Expression, transform: Callable[[Expression], Expression], name: str = ITEM
-) -> Expression:
-    return function(
-        "list_extract",
-        function(
-            "list_transform",
-            function("list_value", value),
-            duckdb.LambdaExpression(name, transform(column(name))),
-        ),
-        constant(1),
-    )
-
-
-SEQUENCE = SequencePrimitives(
-    bounds=SLICE,
-    length=length,
-    slice=lambda value, start, size: function(
-        "list_slice", value, start + constant(1), start + size
-    ),
-    head=lambda value, size: function(
-        "list_slice", value, constant(1), constant(size - 1 if size < 0 else size)
-    ),
-    tail=lambda value, size: function(
-        "list_slice", value, constant(-size if size > 0 else 1 - size), constant(SLICE.maximum)
-    ),
-    reverse=lambda value: function("list_reverse", value),
-    stride=lambda value, step: function(
-        "list_slice", value, constant(1), constant(SLICE.maximum), constant(step)
-    ),
-    bind=lambda value, transform, result: bind(value, transform),
-)
-
-
-TEXT = SequencePrimitives(
-    bounds=SLICE,
-    length=length,
-    slice=lambda value, start, size: function("substring", value, start + constant(1), size),
-    head=lambda value, size: function("left", value, constant(size)),
-    tail=lambda value, size: function("right", value, constant(size)),
-    reverse=lambda value: join(
-        constant(""), SEQUENCE.reverse(function("string_split", value, constant("")))
-    ),
-    stride=lambda value, step: join(
-        constant(""), SEQUENCE.stride(function("string_split", value, constant("")), step)
-    ),
-    bind=SEQUENCE.bind,
-)
-
-
-@RULES("slice", Kind.STR, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.STR,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def str_slice(
-    text: Expression,
-    start: Expression | int | None,
-    stop: Expression | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Expression:
-    return slice_sequence(TEXT, text, start, stop, step, result=result)
-
-
-@RULES("slice", Kind.LIST, Kind.INT, Kind.INT, literals=(1, 2), facts={"result": result_type})
-@RULES(
-    "slice",
-    Kind.LIST,
-    Kind.INT,
-    Kind.INT,
-    Kind.INT,
-    literals=(1, 2, 3),
-    facts={"result": result_type},
-)
-def list_slice(
-    container: Expression,
-    start: Expression | int | None,
-    stop: Expression | int | None,
-    step: int | None = None,
-    *,
-    result: Type,
-) -> Expression:
-    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
-
-
-SPLIT = SplitPrimitives(
-    sequence=SEQUENCE,
-    bind=lambda values, transform: bind(
-        function("struct_pack", *(value.alias(str(index)) for index, value in enumerate(values))),
-        lambda value: transform(
-            *(
-                function("struct_extract", value, constant(str(index)))
-                for index in range(len(values))
-            )
-        ),
-        f"udfx split {len(values)}",
-    ),
-    split=split,
-    join=join,
-    append=lambda values, value: function("list_append", values, value),
-    length=length,
-    suffix=lambda value, start: function("substring", value, start + constant(1)),
-    word_prefix=lambda value, count: function(
-        "array_to_string",
-        function(
-            "list_slice",
-            function("regexp_extract_all", value, constant(word_prefix_pattern())),
-            constant(1),
-            count,
-        ),
-        constant(""),
-    ),
-    lstrip=lstrip,
-    is_null=Expression.isnull,
-    reverse=lambda value: function("reverse", value),
-    restore=lambda values: function(
-        "list_transform",
-        function("list_reverse", values),
-        duckdb.LambdaExpression(ITEM, function("reverse", column(ITEM))),
-    ),
-)
-
-
-@RULES(".split", Kind.STR, Kind.STR, Kind.INT)
-def split_limit(text: Expression, separator: Expression, maximum: Expression) -> Expression:
-    return split_limited(SPLIT, text, separator, maximum)
-
-
-@RULES(".rsplit", Kind.STR, Kind.STR)
-@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT)
-def rsplit(
-    text: Expression, separator: Expression, maximum: Expression | None = None
-) -> Lowered[Expression]:
-    exact = single_code_point_clusters(text) & duckdb.CoalesceOperator(
-        single_code_point_clusters(separator), constant(True)
-    )
-    return Lowered(split_right(SPLIT, text, separator, maximum), exact)
-
-
 register_string_predicates(
     RULES, lambda value, pattern: function("regexp_matches", value, constant(pattern))
 )
@@ -419,18 +238,6 @@ CASE = CasePrimitives(
             duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
         ),
         constant(""),
-    ),
-)
-
-
-register_padding(
-    RULES,
-    PaddingPrimitives(
-        sequence=TEXT,
-        literal=constant,
-        concat=lambda *values: function("concat", *values),
-        repeat=lambda value, count: function("repeat", value, count),
-        half=lambda value: function("//", value, constant(2)),
     ),
 )
 

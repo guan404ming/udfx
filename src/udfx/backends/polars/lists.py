@@ -34,7 +34,7 @@ def all_values(value: pl.Expr) -> pl.Expr:
 
 @RULES("sum", Kind.LIST)
 def total(value: pl.Expr) -> Lowered[pl.Expr]:
-    result = value.list.eval(pl.element().cast(pl.Int128)).list.sum().cast(pl.Int64, strict=False)
+    result = value.cast(pl.List(pl.Int128)).list.sum().cast(pl.Int64, strict=False)
     return Lowered(result, overflow=result.is_null() & value.is_not_null())
 
 

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -6,9 +7,14 @@ from conftest import backend_params
 
 from udfx import compile
 from udfx.backends.base import Backend
+from udfx.backends.datafusion import DataFusionBackend
+from udfx.backends.duckdb import DuckDBBackend
+from udfx.backends.duckdb.conversions import TEXT
+from udfx.backends.duckdb.rules import constant, function
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops.registry import apply
+from udfx.semantics.literals import normalize_integer
 from udfx.testing import check_function
 from udfx.types import BOOL, FLOAT, INT, STR, Type, list_of
 
@@ -149,10 +155,47 @@ def test_integer_validation_is_native(backend: Backend[Any]) -> None:
 
 
 @pytest.mark.parametrize("backend", backend_params())
+def test_integer_operands_are_bounded(backend: Backend[Any]) -> None:
+    name = "integer_operand"
+    text = Col(name, STR)
+    for _ in range(4):
+        parsed = backend.lower(apply("int", text))
+        valid = backend.lower(apply("int_parses", text))
+        assert str(parsed.expr).count(name) <= 3
+        assert str(backend.exact(parsed)).count(name) <= 5
+        assert str(valid.expr).count(name) <= 4
+        text = apply("__add__", text, lit("0"))
+
+
+def test_ascii_integer_lists_skip_unicode_translation() -> None:
+    backend = DuckDBBackend()
+    primitives = replace(
+        TEXT,
+        translate=lambda text, old, new: function("error", constant("Unicode translation")),
+    )
+    schema = {"items": list_of(STR)}
+    expr = backend.list_transform(
+        backend.column(Col("items", schema["items"])),
+        lambda element: normalize_integer(primitives, element),
+    )
+    assert backend.evaluate([expr], schema, [(["1_000", " -2 ", "+3"],), ([],)]) == [
+        [["1000", " -2 ", "+3"], []]
+    ]
+
+
+@pytest.mark.parametrize("backend", backend_params())
 def test_nonnegative_index_fault_is_native(backend: Backend[Any]) -> None:
     node = apply("__getitem__", Col("text", STR), lit(1))
     (fault,) = node.op.faults(*node.arguments)
     assert backend.lower(fault.when).exact is None
+
+
+def test_datafusion_last_split_keeps_literal_fast_path() -> None:
+    text = apply(".strip", Col("text", STR))
+    lowered = DataFusionBackend().lower(apply("last_split", text, lit(",")))
+    assert lowered.exact is None
+    assert "split_part(" in str(lowered.expr)
+    assert "string_to_array(" not in str(lowered.expr)
 
 
 @pytest.mark.parametrize("backend", backend_params())

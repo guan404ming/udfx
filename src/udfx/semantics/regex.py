@@ -47,7 +47,6 @@ def lower_regex(
         if (
             not translated.native
             or (name in {"sub", "split", "findall"} and translated.empty)
-            or (primitives.dialect == "re2" and translated.empty)
             or (name == "findall" and translated.groups > 1)
             or (name == "split" and translated.groups)
             or count > primitives.maximum_count

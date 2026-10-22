@@ -17,13 +17,13 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/ir.py` | IR nodes: `Col`, `Lit`, `Call`, `If`, `ListValue`, `Element`, `Comprehension` |
 | `src/udfx/program.py` | `Program`: traced function, schema, value, fault, row mode, and `run` for fallback rows |
 | `src/udfx/ops/` | Op specs: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py` |
-| `src/udfx/semantics/` | Shared Python facts and policies for scalars, numbers, text, literals, lists, regex, datetimes, translation, and paths |
+| `src/udfx/semantics/` | Shared Python facts and policies for scalars, numbers, text, literals, lists, regex, datetimes, translation, and paths. Sequence, split, and padding policies live in `sequences.py`, `splitting.py`, and `padding.py` |
 | `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
 | `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
-| `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |
+| `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Backends may also have `slicing.py` and `splitting.py`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
 | `tests/corpus/` | End to end acceptance cases, run with `uv run pytest -m corpus` |
@@ -88,7 +88,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type. DataFusion uses `arrow.dtype` instead.
-- `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py`: rules, one file per op family.
+- `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py`: rules, one file per op family. Backends may put slice and split rules in `slicing.py` and `splitting.py`.
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.
 - Constructors never touch an engine. DuckDB uses `duckdb.default_connection()` unless a connection is given; DataFusion creates its `SessionContext` on first use; Spark uses the given session, else the active one, else `getOrCreate()`, and sets no config.
 - `execute(run)` wraps every engine call so that a Python exception raised in a fallback row comes back as that exception: `run_fallback_rows` records it in thread-local state and raises a `FallbackError` whose message carries the type, and `unwrap` restores it from either. Engines that run the UDF in another thread or process (DuckDB, Spark) rely on the message, so only builtin exception types come back there.

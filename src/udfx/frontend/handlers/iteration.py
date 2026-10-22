@@ -5,8 +5,8 @@ from dataclasses import replace
 from functools import reduce
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, node_of
 from udfx.frontend.context import Context
+from udfx.frontend.invocation import invoke, node_of
 from udfx.frontend.iterables import indexed, iterator_of
 from udfx.frontend.logic import choose, depends_on, disjunction
 from udfx.frontend.machine import emit, explore, handles, unsupported

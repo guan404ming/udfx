@@ -3,9 +3,9 @@ from __future__ import annotations
 import dis
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, node_of
 from udfx.frontend.constants import constant, constant_value, scalar_map
 from udfx.frontend.context import Context
+from udfx.frontend.invocation import invoke, node_of
 from udfx.frontend.machine import handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import NULL, Opaque, Set, Tuple, Value

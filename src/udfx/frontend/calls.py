@@ -1,24 +1,19 @@
 from __future__ import annotations
 
 import inspect
-import math
-import os
-import posixpath
-import re
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime
 from typing import cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.binding import bind
+from udfx.frontend.callables import op_name
 from udfx.frontend.formatting import format_template
-from udfx.frontend.logic import disjunction, fold, negate
+from udfx.frontend.invocation import evaluated, invoke, node_of
+from udfx.frontend.logic import disjunction, fold
+from udfx.frontend.sequence_calls import iterable_node, sequence_call
 from udfx.frontend.values import (
-    MAX_UNROLL,
     Duration,
-    Generator,
     Item,
-    Match,
     Method,
     Opaque,
     Set,
@@ -27,226 +22,11 @@ from udfx.frontend.values import (
     describe,
     named,
 )
-from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Lit, Node, lit
-from udfx.ops import Fault, Op, apply, matching
-from udfx.semantics.datetimes import MICROSECONDS_PER_SECOND, format_parts, parse_parts
+from udfx.ir import FALSE, Lit, Node, lit
+from udfx.ops import Fault
+from udfx.semantics.datetimes import MICROSECONDS_PER_SECOND
 from udfx.semantics.translation import translation_table
-from udfx.types import BOOL, INT, STR, Kind, list_of, type_of
-
-CALLABLES: tuple[tuple[object, str], ...] = (
-    (abs, "abs"),
-    (any, "any"),
-    (all, "all"),
-    (bool, "bool"),
-    (float, "float"),
-    (int, "int"),
-    (len, "len"),
-    (list, "list"),
-    (set, "set"),
-    (sorted, "sorted"),
-    (sum, "sum"),
-    (max, "max"),
-    (min, "min"),
-    (round, "round"),
-    (str, "str"),
-    (str.maketrans, "str.maketrans"),
-    (os.fspath, "os.fspath"),
-    (posixpath.join, "posixpath.join"),
-    (posixpath.basename, "posixpath.basename"),
-    (posixpath.dirname, "posixpath.dirname"),
-    (posixpath.splitext, "posixpath.splitext"),
-    (posixpath.split, "posixpath.split"),
-    (math.ceil, "math.ceil"),
-    (math.floor, "math.floor"),
-    (math.isinf, "math.isinf"),
-    (math.isnan, "math.isnan"),
-    (math.log, "math.log"),
-    (math.log2, "math.log2"),
-    (math.exp, "math.exp"),
-    (math.log10, "math.log10"),
-    (math.sqrt, "math.sqrt"),
-    (re.compile, "re.compile"),
-    (re.sub, "re.sub"),
-    (re.search, "re.search"),
-    (re.match, "re.match"),
-    (re.fullmatch, "re.fullmatch"),
-    (re.findall, "re.findall"),
-    (re.split, "re.split"),
-    (re.Pattern.sub, "re.sub"),
-    (re.Pattern.search, "re.search"),
-    (re.Pattern.match, "re.match"),
-    (re.Pattern.fullmatch, "re.fullmatch"),
-    (re.Pattern.findall, "re.findall"),
-    (re.Pattern.split, "re.split"),
-)
-
-CALLABLE_IDENTITIES = {
-    ("builtins", "pandas", "isna"): "pandas.isna",
-    ("builtins", "pandas", "notna"): "pandas.notna",
-    ("builtins", "pandas.core.dtypes.missing", "isna"): "pandas.isna",
-    ("builtins", "pandas.core.dtypes.missing", "notna"): "pandas.notna",
-    ("numpy", "ufunc", "isnan"): "numpy.isnan",
-    ("numpy", "ufunc", "log"): "numpy.log",
-    ("numpy", "ufunc", "log1p"): "numpy.log1p",
-    ("numpy", "ufunc", "log2"): "numpy.log2",
-    ("numpy", "ufunc", "log10"): "numpy.log10",
-    ("numpy", "ufunc", "expm1"): "numpy.expm1",
-    ("numpy", "ufunc", "sqrt"): "numpy.sqrt",
-    ("numpy", "ufunc", "exp"): "numpy.exp",
-    ("numpy", "ufunc", "absolute"): "numpy.abs",
-    ("numpy", "ufunc", "floor"): "numpy.floor",
-    ("numpy", "ufunc", "ceil"): "numpy.ceil",
-    ("numpy", "numpy", "round"): "numpy.round",
-}
-
-
-def node_of(item: Item) -> Node:
-    if not isinstance(item, Value):
-        raise Unsupported(f"expected a value, got {describe(item)}")
-    if item.container in (tuple, set, frozenset):
-        raise Unsupported(f"constant container {describe(item)} outside an in test")
-    return item.node
-
-
-def iterable_node(item: Item) -> Node:
-    if isinstance(item, Generator):
-        return item.node
-    if isinstance(item, Set):
-        return sequence_call("list", item)[0]
-    if isinstance(item, Value) and item.container in (tuple, list):
-        return item.node
-    return node_of(item)
-
-
-def known_op(callee: object) -> str | None:
-    if (
-        getattr(callee, "__self__", None) is datetime
-        and getattr(callee, "__name__", "") == "strptime"
-    ):
-        return "datetime.strptime"
-    if isinstance(getattr(callee, "__self__", None), re.Pattern):
-        callee = getattr(re.Pattern, getattr(callee, "__name__", ""), callee)
-    for known, name in CALLABLES:
-        if known is callee:
-            return name
-    owner = type(callee)
-    module = getattr(callee, "__module__", "")
-    name = getattr(callee, "__qualname__", None) or getattr(callee, "__name__", "")
-    if owner.__module__ == "numpy" and owner.__name__ == "ufunc":
-        module = "ufunc"
-    return CALLABLE_IDENTITIES.get((owner.__module__, module, name))
-
-
-def op_name(callee: object) -> str:
-    found = known_op(callee)
-    if found is None:
-        if callee is open or (
-            getattr(callee, "__module__", "") in {"posix", "nt"}
-            and getattr(callee, "__name__", "")
-            in {
-                "stat",
-                "lstat",
-                "open",
-                "read",
-                "write",
-                "listdir",
-                "scandir",
-                "readlink",
-                "access",
-                "remove",
-                "unlink",
-                "mkdir",
-                "rmdir",
-                "rename",
-                "replace",
-                "getcwd",
-                "chdir",
-            }
-        ):
-            raise Unsupported(f"file system access: {named(callee)}")
-        raise Unsupported(f"unknown callable {named(callee)}")
-    return found
-
-
-def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
-    types = [argument.type for argument in arguments]
-    candidates = matching(name, types)
-    others = {type.kind for type in types if type.kind is not Kind.NONE}
-    preferred = [
-        op
-        for op in candidates
-        if all(
-            parameter.kind in others
-            for type, parameter in zip(types, op.parameters, strict=True)
-            if type.kind is Kind.NONE
-        )
-    ]
-    chosen = preferred or candidates
-    if not chosen:
-        raise Unsupported(f"no op {name}({', '.join(str(type.strict()) for type in types)})")
-    op = chosen[0]
-    typed = [
-        Lit(None, parameter) if argument.type.kind is Kind.NONE else argument
-        for argument, parameter in zip(arguments, op.parameters, strict=True)
-    ]
-    return op, typed
-
-
-def invoke(
-    name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
-) -> tuple[Node, list[Fault]]:
-    if name == "os.fspath" and len(arguments) == 1:
-        node = arguments[0]
-        if node.type.kind is not Kind.STR:
-            return lit(""), [Fault(TypeError, TRUE)]
-        return node, [Fault(TypeError, apply("is_none", node))] if node.type.nullable else []
-    if (
-        name in {".center", ".ljust", ".rjust"}
-        and len(arguments) == 3
-        and not isinstance(arguments[2], Lit)
-    ):
-        raise Unsupported("fill character must be a literal")
-    if name in {".strftime", "datetime.strptime"}:
-        if (
-            len(arguments) != 2
-            or not isinstance(arguments[1], Lit)
-            or not isinstance(arguments[1].value, str)
-        ):
-            raise Unsupported("datetime format must be a string literal")
-        if name == "datetime.strptime":
-            parse_parts(arguments[1].value)
-        else:
-            format_parts(arguments[1].value)
-    op, arguments = overload(name, arguments)
-    call = Call(op, tuple(arguments))
-    folded = fold(call)
-    if isinstance(folded, Lit) and folded.type.kind is not Kind.LIST:
-        return folded, []
-    faults = [
-        Fault(first_null_kind if index == 0 else TypeError, apply("is_none", argument))
-        for index, (argument, parameter) in enumerate(zip(arguments, op.parameters, strict=True))
-        if argument.type.nullable and not parameter.nullable
-    ]
-    faults.extend(op.faults(*arguments))
-    return (call if isinstance(folded, Lit) else folded), faults
-
-
-def evaluated(nodes: Sequence[Node], run: Callable[[list[object]], object]) -> Lit | None:
-    values = [
-        list(node.value)
-        if node.type.kind is Kind.LIST and isinstance(node.value, tuple)
-        else node.value
-        for node in nodes
-        if isinstance(node, Lit)
-    ]
-    if len(values) < len(nodes):
-        return None
-    try:
-        value = run(values)
-    except Exception:
-        return None
-    type = type_of(value)
-    return None if type is None else Lit(value, type)
+from udfx.types import STR, Kind, list_of
 
 
 def keyword_arguments(
@@ -371,79 +151,3 @@ def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]
         node, faults = format_template(nodes[0], nodes[1:])
         return fold(node), faults
     return invoke(f".{name}", nodes, AttributeError)
-
-
-def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
-    if isinstance(item, Tuple) and name == "len":
-        return lit(len(item.items)), []
-    if isinstance(item, Set):
-        operation = {
-            "len": "set_size",
-            "list": "set_list",
-            "sorted": "sorted_set",
-            "bool": "bool",
-        }.get(name)
-        if operation is None:
-            raise Unsupported(f"{name} of a set")
-        if (
-            item.node.type.item is not None
-            and item.node.type.item.kind is Kind.FLOAT
-            and operation in {"set_size", "set_list", "sorted_set"}
-        ):
-            operation += "_float"
-        return invoke(operation, [item.node], TypeError)
-    source = iterable_node(item)
-    faults = [Fault(TypeError, apply("is_none", source))] if source.type.nullable else []
-    if name == "list" and source.type.kind is Kind.LIST:
-        return source, faults
-    if name in {"any", "all"} and source.type.item is not None and source.type.item != BOOL:
-        if (
-            isinstance(source, Lit)
-            and isinstance(source.value, tuple | list)
-            and len(source.value) > MAX_UNROLL
-        ):
-            raise Unsupported(f"loops and comprehensions exceed {MAX_UNROLL} unrolled items")
-        element = Element("item", source.type.item)
-        test, _ = truth(Value(element))
-        source = Comprehension(source, element, test, TRUE, FALSE)
-    if name == "sum":
-        if isinstance(source, Lit) and source.value == ():
-            source = Lit((), list_of(INT))
-        if source.type.item is not None and source.type.item.kind is Kind.FLOAT:
-            name = "sum_float"
-    node, more_faults = invoke(name, [source], TypeError)
-    return node, [*faults, *more_faults]
-
-
-def truth(item: Item) -> tuple[Node, list[Fault]]:
-    match item:
-        case Tuple(items=items):
-            return lit(bool(items)), []
-        case Match():
-            return negate(none_test(item)), []
-        case Set(node=node):
-            return invoke("bool", [node], TypeError)
-        case Value(node=Lit(value=value)):
-            return lit(bool(value)), []
-        case Value(node=node) if node.type == BOOL:
-            return node, []
-        case Value(node=node):
-            return invoke("bool", [node], TypeError)
-        case _:
-            raise Unsupported(f"truth of {describe(item)}")
-
-
-def none_test(item: Item) -> Node:
-    match item:
-        case Match(node=node):
-            return none_test(Value(node))
-        case Value(node=Lit(value=value)):
-            return lit(value is None)
-        case Value(node=node) if node.type.nullable:
-            return apply("is_none", node)
-        case Value():
-            return FALSE
-        case Opaque(value=value):
-            return lit(value is None)
-        case _:
-            raise Unsupported(f"None test of {describe(item)}")

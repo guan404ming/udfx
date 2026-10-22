@@ -5,8 +5,9 @@ from functools import reduce
 from typing import cast
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, iterable_node, node_of
 from udfx.frontend.constants import constant, constant_value, dictionary_method, scalar_map
+from udfx.frontend.invocation import invoke, node_of
+from udfx.frontend.sequence_calls import iterable_node
 from udfx.frontend.sets import set_method
 from udfx.frontend.values import (
     MAX_UNROLL,

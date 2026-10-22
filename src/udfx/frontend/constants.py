@@ -7,8 +7,10 @@ from types import FunctionType, GenericAlias, UnionType
 from typing import cast
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, known_op, node_of, none_test
+from udfx.frontend.callables import known_op
+from udfx.frontend.invocation import invoke, node_of
 from udfx.frontend.logic import choose, conjunction, negate
+from udfx.frontend.sequence_calls import none_test
 from udfx.frontend.values import Function, Item, Opaque, RuntimeType, Tuple, Value, describe, named
 from udfx.ir import TRUE, Col, Lit, Node, lit
 from udfx.ops import Fault

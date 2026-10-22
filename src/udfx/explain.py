@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 
 from udfx.api import compile
 from udfx.backends.base import Backend
-from udfx.ir import Call, Col, Comprehension, Element, If, ListValue, Lit, Node
+from udfx.ir import Call, Col, Comprehension, Element, Guarded, If, ListValue, Lit, Node
 from udfx.types import Type
 
 
@@ -22,6 +22,8 @@ def render(node: Node) -> str:
             return f"{render(container)}[{render(index)}]"
         case Call():
             return f"{node.op.name}({', '.join(render(argument) for argument in node.arguments)})"
+        case Guarded():
+            return f"guard({render(node.value)}, {render(node.exact)})"
         case If():
             return f"if({render(node.condition)}, {render(node.then)}, {render(node.orelse)})"
         case ListValue():

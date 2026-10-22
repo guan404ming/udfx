@@ -46,7 +46,9 @@ class PolarsBackend(Backend[pl.Expr]):
         return pl.concat_list(items).cast(dtype(type)) if items else self.literal(Lit((), type))
 
     def list_transform(self, source: pl.Expr, transform: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
-        return evaluate_list(source, broadcast(transform(pl.element())))
+        element = pl.element()
+        body = transform(element)
+        return evaluate_list(source, broadcast(body))
 
     def list_filter(self, source: pl.Expr, predicate: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
         return evaluate_list(source, pl.element().filter(predicate(pl.element())))
