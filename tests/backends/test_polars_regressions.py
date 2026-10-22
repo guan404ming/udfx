@@ -7,10 +7,11 @@ from conftest import backend_params
 
 from tests.corpus.cases_string_splitting import index_split_limit
 from tests.corpus.cases_strings import join_characters
+from tests.corpus.cases_structure import remove_stopwords
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.testing import check_function
-from udfx.types import INT, STR
+from udfx.types import INT, STR, Type
 
 SCHEMA = {"text": STR, "maximum": INT, "index": INT}
 ROWS = [("", 0, 1), ("1_1", 1, 0)]
@@ -39,8 +40,16 @@ def test_split_index_empty_branch_lazy(
 
 
 @pytest.mark.parametrize("engine", ["in-memory", "streaming"])
-def test_join_characters_on_empty_frames(engine: Literal["in-memory", "streaming"]) -> None:
-    translation = compile(join_characters, {"text": STR, "separator": STR})
+@pytest.mark.parametrize(
+    ("function", "schema"),
+    [(join_characters, {"text": STR, "separator": STR}), (remove_stopwords, {"text": STR})],
+)
+def test_joins_on_empty_frames(
+    engine: Literal["in-memory", "streaming"],
+    function: Callable[..., object],
+    schema: dict[str, Type],
+) -> None:
+    translation = compile(function, schema)
     assert translation.expr is not None, translation.unsupported
-    frame = pl.DataFrame(schema={"text": pl.String, "separator": pl.String})
+    frame = pl.DataFrame(schema=dict.fromkeys(schema, pl.String))
     assert frame.lazy().select(translation.expr).collect(engine=engine).to_series().to_list() == []

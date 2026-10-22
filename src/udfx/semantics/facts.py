@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from udfx.ir import Call, Col, If, ListValue, Lit, Node
+from udfx.ir import Call, Col, Comprehension, If, ListValue, Lit, Node
 from udfx.semantics.numbers import FLOAT_INT_MAX
 from udfx.semantics.text import has_prefix_suffix_overlap
 from udfx.types import STR, Kind, Type, fits
@@ -35,7 +35,7 @@ def result_type(node: Call) -> Type:
 
 
 def join_source_is_column(node: Call) -> bool:
-    return isinstance(node.arguments[1], Col)
+    return isinstance(node.arguments[1], Col | Comprehension)
 
 
 def argument_length(node: Call) -> int | None:
