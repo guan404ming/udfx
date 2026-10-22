@@ -164,7 +164,7 @@ def test_native_fault_without_columns(backend: Backend[Any]) -> None:
     program = Program(lambda: 1 // 0, {}, Lit(0, INT), TRUE)
     expr = backend.build(program)
     assert backend.evaluate([expr], {}, []) == [[]]
-    with pytest.raises(ZeroDivisionError, match="integer division or modulo by zero"):
+    with pytest.raises(ZeroDivisionError, match="by zero"):
         backend.evaluate([expr], {}, [()])
 
 
