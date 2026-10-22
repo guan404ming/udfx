@@ -164,10 +164,10 @@ def dispatch_call(
     arguments: Sequence[Item],
     keywords: Mapping[str, Item],
 ) -> list[Step]:
-    if any(isinstance(argument, Row) for argument in arguments):
-        raise Unsupported("passing a row to a call", context.where(rest))
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments, keywords)
+    if any(isinstance(argument, Row) for argument in (*arguments, *keywords.values())):
+        raise Unsupported("passing a row to a call", context.where(rest))
     if (
         isinstance(callee, Opaque)
         and (callee.value is map or callee.value is filter)

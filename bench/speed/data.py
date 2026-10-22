@@ -98,6 +98,8 @@ def row_type(program: Program) -> type[dict[str, object]] | type[tuple[object, .
             elif access.opname == "LOAD_CONST" and operation.opname == "BINARY_SUBSCR":
                 positional |= isinstance(access.argval, int)
                 named |= isinstance(access.argval, str)
+    if not (positional or named or attributes):
+        return MixedRow
     if positional:
         return MixedRow if named or attributes else tuple
     return AttributeRow if attributes else dict

@@ -198,10 +198,12 @@ def summary(results: list[Result], counts: Counts) -> str:
         "priority over arithmetic, then boolean hints. Without hints, use STR, FLOAT, INT, BOOL. "
         "Visit combinations by total preference rank, then index tuple. Save the first success. "
         "Use the first attempted failure when every schema fails.",
-        "7. Require one parameter for rows. Infer columns from constant string subscripts and "
-        "attributes directly on that parameter. Use the same schema search. Reject absent "
-        "columns or columns identical to the parameter list. Pass inferred schemas to udfx. "
-        "Keep unsupported row schemas as explicit failures.",
+        "7. Require one parameter for rows. Infer columns from constant string or integer "
+        "subscripts and attributes on that parameter. Resolve local keys with one assignment "
+        "in the same function. Follow row arguments into resolved helpers through the same "
+        "depth limit. Keep column type hints from those helpers. Use the same schema search. "
+        "Reject absent columns or columns identical to the parameter list. "
+        "Pass inferred schemas to udfx. Keep unsupported row schemas as explicit failures.",
         "8. Rank failures and missing targets by unique count. Missing overloads can reflect "
         "schema guesses. Resolved helpers can remain unsupported callables. Compilation success "
         "measures acceptance only. It does not validate input types, runtime results, other "

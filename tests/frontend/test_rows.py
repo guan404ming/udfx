@@ -1,5 +1,9 @@
+# ruff: noqa: PLW0108
 from collections.abc import Callable
+from dataclasses import replace
+from types import FunctionType
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -27,6 +31,18 @@ def nested(row: Any) -> str:
 def pass_row(row: Any) -> str:
     def read(value: Any) -> str:
         return value["image"]
+
+    return read(row)
+
+
+def pass_nested_row(row: Any) -> str:
+    suffix = "!"
+
+    def read(record: Any) -> str:
+        def clean(value: Any) -> str:
+            return value.image.strip().lower() + suffix
+
+        return clean(value=record)
 
     return read(row)
 
@@ -101,6 +117,44 @@ def test_row_column_passes_through_nested_helpers() -> None:
     assert program.run([(" PHOTO ",)]) == ["photo"]
 
 
+@pytest.mark.parametrize("function", [pass_row, lambda row: pass_row(row)])
+def test_row_passes_to_helpers(function: Callable[..., object]) -> None:
+    program = trace(function, {"image": STR})
+    assert program.value == Col("image", STR)
+    assert program.run([("photo",)]) == ["photo"]
+
+
+def test_row_passes_through_nested_closures() -> None:
+    program = trace(pass_nested_row, {"image": STR})
+    assert program.value == apply(
+        "__add__", apply(".strip", apply(".lower", Col("image", STR))), lit("!")
+    )
+    assert program.run([(" PHOTO ",)]) == ["photo!"]
+
+
+@pytest.mark.parametrize("key", ["image", 0, -1])
+@pytest.mark.parametrize("helper", [False, True])
+def test_local_constant_row_key(key: str | int, helper: bool) -> None:
+    def read(row: Any) -> str:
+        feature = key
+        return row[feature]
+
+    program = trace((lambda row: read(row)) if helper else read, {"image": STR})
+    assert program.value == Col("image", STR)
+    assert program.run([("photo",)]) == ["photo"]
+
+
+def test_fallback_helper_receives_original_row() -> None:
+    program = trace(lambda row: pass_row(row), {"image": STR})
+    assert isinstance(program.function, FunctionType)
+    helper = Mock(wraps=program.function.__globals__["pass_row"])
+    program.function.__globals__["pass_row"] = helper
+    function = Mock(wraps=program.function)
+    program = replace(program, function=function)
+    assert program.run([("photo",)]) == ["photo"]
+    assert helper.call_args.args[0] is function.call_args.args[0]
+
+
 def test_matching_parameter_stays_scalar() -> None:
     program = trace(lambda image: image.lower(), {"image": STR})
     assert not program.row_mode
@@ -150,9 +204,9 @@ def test_row_position_out_of_range(index: int) -> None:
 @pytest.mark.parametrize(
     ("function", "reason"),
     [
-        (pass_row, "passing a row to a call"),
         (length, "passing a row to a call"),
         (text, "passing a row to a call"),
+        (lambda row: pow(base=row, exp=2), "passing a row to a call"),
         (lambda row: row(), "cannot call a row"),
         (iterate, "loops and comprehensions"),
         (lambda row: row == "image", "expected a value, got a row"),
@@ -171,6 +225,9 @@ def test_row_position_out_of_range(index: int) -> None:
         (lambda row: (row,), "tuple returns are unsupported"),
     ],
 )
-def test_other_row_uses_are_unsupported(function: Callable[..., object], reason: str) -> None:
+@pytest.mark.parametrize("helper", [False, True])
+def test_other_row_uses_are_unsupported(
+    function: Callable[..., object], reason: str, helper: bool
+) -> None:
     with pytest.raises(Unsupported, match=reason):
-        trace(function, {"image": STR})
+        trace((lambda row: function(row)) if helper else function, {"image": STR})
