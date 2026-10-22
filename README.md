@@ -92,7 +92,8 @@ Main limits (`compile` returns `ok == False` with an `unsupported` reason):
   `*args` without a tuple, and keyword calls without an inspectable signature.
 - Regex patterns with lookaround, backreferences, or named groups. Matches expose only guarded
   `group()`/`group(0)`; `findall` allows at most one capture group, `split` none.
-- Timezones and datetime arithmetic. Datetime formats allow `%Y %m %d %H %M %S %f %j %y %%`.
+- Timezones, and timedelta values other than `.days`, `.seconds`, and `.total_seconds()` of a
+  datetime difference. Datetime formats allow `%Y %m %d %H %M %S %f %j %y %%`.
 - `with`, explicit `raise`, imports inside UDFs, global/nonlocal writes, file I/O, and unsupported calls.
 
 ## Backends
