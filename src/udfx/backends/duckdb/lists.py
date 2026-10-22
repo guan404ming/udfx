@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import duckdb
 from duckdb import Expression
 
 from udfx.backends.duckdb.numbers import checked_int64
-from udfx.backends.duckdb.rules import RULES, column, constant, function, length, when
+from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, length, when
 from udfx.backends.duckdb.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
@@ -75,6 +77,19 @@ def characters(value: Expression) -> Expression:
     )
 
 
+def bind_sets(
+    left: Expression, right: Expression, transform: Callable[[Expression, Expression], Expression]
+) -> Expression:
+    return bind(
+        function("list_value", left, right),
+        lambda operands: transform(
+            function("list_extract", operands, constant(1)),
+            function("list_extract", operands, constant(2)),
+        ),
+        "udfx sets",
+    )
+
+
 def difference(left: Expression, right: Expression) -> Expression:
     return function(
         "list_distinct",
@@ -88,6 +103,10 @@ def difference(left: Expression, right: Expression) -> Expression:
     )
 
 
+def union(left: Expression, right: Expression) -> Expression:
+    return function("list_distinct", function("list_concat", left, right))
+
+
 register_lists(
     RULES,
     PRIMITIVES,
@@ -98,7 +117,13 @@ register_lists(
         sort=lambda value: function("list_sort", value, constant("ASC"), constant("NULLS LAST")),
         contains=list_contains,
         intersection=lambda left, right: function("list_intersect", left, right),
-        union=lambda left, right: function("list_distinct", function("list_concat", left, right)),
-        difference=difference,
+        union=union,
+        difference=lambda left, right: bind_sets(left, right, difference),
+        size=lambda value: function("list_unique", value).cast("BIGINT"),
+        symmetric_difference=lambda left, right: bind_sets(
+            left,
+            right,
+            lambda first, second: union(difference(first, second), difference(second, first)),
+        ),
     ),
 )

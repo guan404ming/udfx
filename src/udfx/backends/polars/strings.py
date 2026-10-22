@@ -15,7 +15,7 @@ from udfx.backends.registration import (
 )
 from udfx.semantics import text
 from udfx.semantics.clusters import CLUSTER_JOINERS
-from udfx.semantics.facts import pattern_is_empty
+from udfx.semantics.facts import join_source_is_column, pattern_is_empty
 from udfx.semantics.sequences import (
     SearchPrimitives,
     reverse_find,
@@ -149,11 +149,14 @@ def replace(text: pl.Expr, old: pl.Expr, new: pl.Expr, *, empty: bool | None = N
     )
 
 
-def join(separator: pl.Expr, words: pl.Expr) -> pl.Expr:
-    return broadcast(words).list.concat(pl.lit([], dtype=pl.List(pl.String))).list.join(separator)
+def join(separator: pl.Expr, words: pl.Expr, *, column: bool = False) -> pl.Expr:
+    words = broadcast(words)
+    if not column:
+        words = words.list.concat(pl.lit([], dtype=pl.List(pl.String)))
+    return words.list.join(separator)
 
 
-RULES(".join", Kind.STR, Kind.LIST)(join)
+RULES(".join", Kind.STR, Kind.LIST, facts={"column": join_source_is_column})(join)
 
 
 @RULES(".join", Kind.STR, Kind.STR)

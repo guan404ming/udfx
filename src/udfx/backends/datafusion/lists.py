@@ -4,10 +4,11 @@ import pyarrow as pa
 from datafusion import Expr, functions, lit
 
 from udfx.backends.datafusion.rules import RULES, when
+from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import characters, list_contains, list_len
 from udfx.backends.registration import Lowered, register_lists
 from udfx.semantics.lists import ListPrimitives, SetPrimitives, SumPrimitives, integer_sum_exact
-from udfx.types import Kind
+from udfx.types import BOOL, INT, Kind
 
 for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
@@ -44,12 +45,22 @@ SUM = SumPrimitives(
 )
 
 
+def checked_total(value: Expr) -> Expr:
+    value = value.cast(pa.list_(pa.int64()))
+    exact = integer_sum_exact(SUM, value)
+    result = functions.coalesce(functions.array_sum(value), lit(0))
+    return when(exact, result, lit(0)).cast(pa.int64())
+
+
 @RULES("sum", Kind.LIST)
 def total(value: Expr) -> Lowered[Expr]:
     integers = value.cast(pa.list_(pa.int64()))
-    exact = integer_sum_exact(SUM, integers)
-    result = functions.coalesce(functions.array_sum(integers), lit(0))
-    return Lowered(when(exact, result, lit(0)).cast(pa.int64()), exact)
+    return Lowered(
+        SEQUENCE.bind(integers, checked_total, INT),
+        SEQUENCE.bind(
+            integers, lambda items: integer_sum_exact(SUM, items.cast(pa.list_(pa.int64()))), BOOL
+        ),
+    )
 
 
 @RULES("sum_float", Kind.LIST)

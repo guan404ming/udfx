@@ -5,6 +5,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.polars import PolarsBackend
 from udfx.frontend import trace
@@ -13,7 +14,7 @@ from udfx.ops import apply
 from udfx.semantics.text import PREDICATES
 from udfx.testing import check_function
 from udfx.testing.text_traps import STRING_TRAPS
-from udfx.types import STR
+from udfx.types import INT, STR, list_of
 
 
 @pytest.mark.parametrize("backend", [DuckDBBackend(), PolarsBackend()], ids=["duckdb", "polars"])
@@ -108,3 +109,35 @@ def test_integer_parse_uses_one_validation_regex(backend: Backend[Any]) -> None:
     )
     literal = backend.lower(apply("int", lit("12\x00")))
     backend.evaluate([literal.expr], {"text": STR}, [("",)])
+
+
+@pytest.mark.parametrize(
+    "backend", [DuckDBBackend(), DataFusionBackend()], ids=["duckdb", "datafusion"]
+)
+def test_list_index_uses_source_once(backend: Backend[Any]) -> None:
+    words = apply(".split", Col("text", STR))
+    expression = str(backend.lower(apply("__getitem__", words, Col("index", INT))).expr)
+    assert expression.count("text") == 1
+    assert "cardinality(" not in expression
+    assert "len(" not in expression
+
+
+def test_polars_column_join_skips_concatenation() -> None:
+    items = Col("items", list_of(STR.or_none()))
+    expression = PolarsBackend().lower(apply(".join", lit(","), items)).expr
+    assert ".list.concat(" not in str(expression)
+
+
+@pytest.mark.parametrize("operation", ["search", "match", "fullmatch"])
+def test_duckdb_regex_extract_uses_one_match(operation: str) -> None:
+    node = apply(f"re.{operation}", Col("text", STR), lit("a*"), lit(0))
+    expression = str(DuckDBBackend().lower(node).expr)
+    assert expression.count("regexp_extract_all(") == 1
+    assert "regexp_matches(" not in expression
+    assert expression.count('"text"') == 1
+
+
+def test_datafusion_sum_binds_input_per_expression() -> None:
+    lowered = DataFusionBackend().lower(apply("sum", Col("items", list_of(INT))))
+    assert str(lowered.expr).count("items") == 1
+    assert str(lowered.exact).count("items") == 1

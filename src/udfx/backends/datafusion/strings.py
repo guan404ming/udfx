@@ -36,7 +36,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
-from udfx.types import STR, Kind
+from udfx.types import INT64_MAX, STR, Kind
 
 POINT = "point"
 
@@ -218,11 +218,10 @@ def str_getitem(text: Expr, index: Expr) -> Expr:
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
 def list_getitem(container: Expr, index: Expr) -> Expr:
-    total = list_len(container)
-    position = functions.when(index < lit(0), functions.greatest(index, lit(-1) - total)).otherwise(
-        functions.least(index, total) + lit(1)
+    position = functions.when(index < lit(0), index).otherwise(
+        functions.nullif(index, lit(INT64_MAX)) + lit(1)
     )
-    return functions.array_element(container, position)
+    return functions.array_element(container, position.try_cast(pa.int32()))
 
 
 register_string_predicates(RULES, lambda value, pattern: functions.regexp_like(value, lit(pattern)))

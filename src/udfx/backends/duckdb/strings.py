@@ -38,7 +38,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
-from udfx.types import Kind
+from udfx.types import INT64_MAX, Kind
 
 POINT = "udfx point"
 INDEX = "udfx index"
@@ -200,7 +200,9 @@ def str_getitem(text: Expression, index: Expression) -> Expression:
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
 def list_getitem(container: Expression, index: Expression) -> Expression:
-    return function("list_extract", container, bounded_native_index(container, index))
+    following = function("nullif", index, constant(INT64_MAX)) + constant(1)
+    position = when(index < constant(0), index, following)
+    return function("list_extract", container, position)
 
 
 register_string_predicates(

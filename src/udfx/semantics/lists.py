@@ -107,6 +107,8 @@ class SetPrimitives:
     intersection: Callable[[Any, Any], Any]
     union: Callable[[Any, Any], Any]
     difference: Callable[[Any, Any], Any]
+    size: Callable[[Any], Any] | None = None
+    symmetric_difference: Callable[[Any, Any], Any] | None = None
 
 
 def native_set_operation(primitives: SetPrimitives, left: Any, right: Any, operation: str) -> Any:
@@ -119,6 +121,8 @@ def native_set_operation(primitives: SetPrimitives, left: Any, right: Any, opera
             result = primitives.difference(left, right)
         case "issuperset":
             result = primitives.difference(right, left)
+        case "symmetric_difference" if primitives.symmetric_difference is not None:
+            result = primitives.symmetric_difference(left, right)
         case _:
             result = primitives.union(
                 primitives.difference(left, right), primitives.difference(right, left)
@@ -131,14 +135,19 @@ def native_set_operation(primitives: SetPrimitives, left: Any, right: Any, opera
 def native_set(
     primitives: SetPrimitives, value: Any, operation: str, floating: bool
 ) -> tuple[Any, Any]:
-    result = primitives.distinct(value)
     exact = None
     if operation == "set_size":
-        result = primitives.length(result)
-    elif operation == "sorted_set":
-        result = primitives.sort(result)
+        result = (
+            primitives.length(primitives.distinct(value))
+            if primitives.size is None
+            else primitives.size(value)
+        )
     else:
-        exact = primitives.length(result) <= primitives.literal(SET_ORDER_MAX_SIZE)
+        result = primitives.distinct(value)
+        if operation == "sorted_set":
+            result = primitives.sort(result)
+        else:
+            exact = primitives.length(result) <= primitives.literal(SET_ORDER_MAX_SIZE)
     if floating:
         exact = primitives.literal(True) if exact is None else exact
         for item in (float("nan"), 0.0, -0.0):

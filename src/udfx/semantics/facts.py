@@ -19,6 +19,10 @@ def result_type(node: Call) -> Type:
     return node.type
 
 
+def join_source_is_column(node: Call) -> bool:
+    return isinstance(node.arguments[1], Col)
+
+
 def argument_length(node: Call) -> int | None:
     return maximum_length(node.arguments[0])
 
