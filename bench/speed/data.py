@@ -2,13 +2,14 @@ import inspect
 import random
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from types import CodeType
 
 import pyarrow
 
 from tests.corpus.cases import Case
 from udfx.backends import arrow
+from udfx.frontend.opcodes import normalize
 from udfx.program import Program
-from udfx.semantics.functions import code_names
 from udfx.testing.outcome import Returned, run
 from udfx.types import Kind, Type
 
@@ -66,17 +67,48 @@ class AttributeRow(dict[str, object]):
     __getattr__ = dict.__getitem__
 
 
-def row_type(program: Program) -> type[dict[str, object]]:
-    return (
-        dict if code_names(program.function.__code__).isdisjoint(program.schema) else AttributeRow
-    )
+class MixedRow(AttributeRow):
+    def __getitem__(self, key: str | int) -> object:
+        if isinstance(key, int):
+            return tuple(dict.values(self))[key]
+        return dict.__getitem__(self, key)
+
+
+def row_type(program: Program) -> type[dict[str, object]] | type[tuple[object, ...]]:
+    codes = [program.function.__code__]
+    name = codes[0].co_varnames[0]
+    positional = named = attributes = False
+    while codes:
+        code = codes.pop()
+        codes.extend(
+            value
+            for value in code.co_consts
+            if isinstance(value, CodeType) and name in value.co_freevars
+        )
+        instructions = normalize(code)
+        for receiver, access, operation in zip(
+            instructions, instructions[1:], instructions[2:], strict=False
+        ):
+            if receiver.opname not in {"LOAD_FAST", "LOAD_FAST_CHECK", "LOAD_DEREF"}:
+                continue
+            if receiver.argval != name:
+                continue
+            if access.opname == "LOAD_ATTR" and access.argval in program.schema:
+                attributes = True
+            elif access.opname == "LOAD_CONST" and operation.opname == "BINARY_SUBSCR":
+                positional |= isinstance(access.argval, int)
+                named |= isinstance(access.argval, str)
+    if positional:
+        return MixedRow if named or attributes else tuple
+    return AttributeRow if attributes else dict
 
 
 def row_function(program: Program) -> Callable[..., object]:
     function = program.function
-    if row_type(program) is dict:
+    constructor = row_type(program)
+    if constructor in (dict, tuple):
         return function
-    return lambda row: function(AttributeRow(row))
+    return lambda row: function(constructor(row))
 
 
 def caller(program: Program) -> Callable[..., object]:
@@ -85,6 +117,8 @@ def caller(program: Program) -> Callable[..., object]:
     function = program.function
     constructor = row_type(program)
     names = tuple(program.schema)
+    if constructor is tuple:
+        return with_arity(lambda *values: function(values), len(names))
     return with_arity(
         lambda *values: function(constructor(zip(names, values, strict=True))), len(names)
     )
