@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import replace as replace_record
 
-import pyarrow as pa
 from datafusion import Expr, functions, lit
 
 from udfx.backends.arrow import dtype
-from udfx.backends.datafusion.rules import RULES, length, when
+from udfx.backends.datafusion.rules import RULES, array_transform, length, when
 from udfx.backends.datafusion.strings import characters, join, list_len
 from udfx.backends.registration import register_padding
 from udfx.semantics.facts import result_type
@@ -26,14 +24,6 @@ SLICE = SlicePrimitives(
     coalesce=functions.coalesce,
     clip=lambda value, lower, upper: functions.greatest(functions.least(value, upper), lower),
 )
-
-
-def array_transform(values: Expr, transform: Callable[[Expr], Expr], result: pa.DataType) -> Expr:
-    nested = functions.array_transform(
-        functions.make_array(lit(0)),
-        lambda ignored: functions.array_transform(values, transform).cast(pa.list_(result)),
-    )
-    return functions.array_element(nested.cast(pa.list_(pa.list_(result))), 1)
 
 
 SEQUENCE = SequencePrimitives(

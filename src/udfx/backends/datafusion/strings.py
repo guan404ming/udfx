@@ -10,7 +10,14 @@ from datafusion import Expr, col, functions, lit
 
 from udfx.backends.datafusion.backend import DataFusionBackend
 from udfx.backends.datafusion.conversions import TEXT as TRANSLATION
-from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
+from udfx.backends.datafusion.rules import (
+    RULES,
+    array_transform,
+    length,
+    null_safe_equal,
+    typed_literal,
+    when,
+)
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
@@ -234,7 +241,7 @@ CASE = CasePrimitives(
     when=when,
     matches=lambda value, pattern: functions.regexp_like(value, lit(pattern)),
     characters=lambda value, transform: functions.array_to_string(
-        functions.array_transform(characters(value), transform), lit("")
+        array_transform(characters(value), transform, pa.string()), lit("")
     ),
 )
 

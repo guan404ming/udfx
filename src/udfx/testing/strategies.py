@@ -13,6 +13,17 @@ __all__ = ["STRING_TRAPS"]
 
 LIST_TRAPS = (("b", "a", "b"), ("\ue000", "\U00010000"), ("z", "Z", "ä", "a", ""))
 
+INTEGER_LIST_TRAPS = (
+    (2**53,),
+    (2**53 + 1,),
+    (2**52, 2**52),
+    (2**52 + 1, -(2**52)),
+    (INT64_MAX, 1, -1),
+    (INT64_MIN, -1, 1),
+    (INT64_MAX, 1),
+    (INT64_MIN, -1),
+)
+
 FLOAT_LIST_TRAPS = (
     (-0.0, 0.0),
     (0.0, -0.0),
@@ -192,6 +203,8 @@ def _base(type: Type) -> st.SearchStrategy[object]:
             if type.item is None:
                 raise TypeError("list type needs an item type")
             items = st.lists(values(type.item), max_size=5)
+            if type.item.kind is Kind.INT:
+                return st.one_of(st.sampled_from(INTEGER_LIST_TRAPS).map(list), items)
             if type.item.kind is Kind.FLOAT:
                 return st.one_of(st.sampled_from(FLOAT_LIST_TRAPS).map(list), items)
             return (

@@ -3,8 +3,8 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.datafusion.rules import RULES, length
-from udfx.backends.datafusion.slicing import SEQUENCE, array_transform
+from udfx.backends.datafusion.rules import RULES, array_transform, length
+from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import join, lstrip
 from udfx.semantics.facts import split_non_overlapping, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right

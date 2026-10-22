@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from itertools import count
 from typing import ClassVar, cast
 
@@ -10,7 +10,13 @@ from datafusion import Expr, SessionContext, functions, udf
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
-from udfx.backends.datafusion.rules import RULES, column, typed_literal
+from udfx.backends.datafusion.rules import (
+    RULES,
+    array_filter,
+    array_transform,
+    column,
+    typed_literal,
+)
 from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
@@ -48,6 +54,12 @@ class DataFusionBackend(Backend[Expr]):
         return (
             functions.make_array(*items).cast(dtype(type)) if items else self.literal(Lit((), type))
         )
+
+    def list_transform(self, source: Expr, transform: Callable[[Expr], Expr]) -> Expr:
+        return array_transform(source, transform)
+
+    def list_filter(self, source: Expr, predicate: Callable[[Expr], Expr]) -> Expr:
+        return array_filter(source, predicate)
 
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)

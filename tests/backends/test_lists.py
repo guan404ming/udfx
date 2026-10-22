@@ -25,11 +25,8 @@ def test_comprehension_native_rows(backend: Backend[Any]) -> None:
     lowered = backend.lower(program.value)
     exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
     results, flags = backend.evaluate([lowered.expr, exact], schema, [(["abc", "b"],), ([],)])
-    if backend.name == "datafusion":
-        assert flags == [False, False]
-    else:
-        assert results == [["ABC"], []]
-        assert flags == [True, True]
+    assert results == [["ABC"], []]
+    assert flags == [True, True]
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -138,9 +135,6 @@ def test_dynamic_range_native_rows(backend: Backend[Any], enumerated: bool) -> N
 
     schema = {"stop": INT}
     rows = [(-2,), (0,), (3,)]
-    if backend.name == "datafusion":
-        assert not compile(increments, schema, backend).ok
-        return
     assert check_function(increments, schema, backend, rows) == []
     lowered = backend.lower(trace(increments, schema).value)
     assert lowered.exact is not None

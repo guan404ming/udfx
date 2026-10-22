@@ -5,6 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from udfx.semantics.numbers import FLOAT_INT_MAX
+
 SET_ORDER_MAX_SIZE = 1
 NATIVE_LIST_LIMIT = 10_000
 SET_OPERATIONS = ("intersection", "union", "difference", "symmetric_difference")
@@ -34,6 +36,26 @@ def set_operation(left: list[str], right: list[str], operation: str) -> list[str
 
 def range_list(*arguments: int) -> list[int]:
     return list(range(*arguments))
+
+
+@dataclass(frozen=True)
+class SumPrimitives:
+    literal: Callable[[object], Any]
+    when: Callable[[Any, Any, Any], Any]
+    length: Callable[[Any], Any]
+    minimum: Callable[[Any], Any]
+    maximum: Callable[[Any], Any]
+    coalesce: Callable[[Any, Any], Any]
+
+
+def integer_sum_exact(primitives: SumPrimitives, value: Any) -> Any:
+    literal = primitives.literal
+    length = primitives.length(value)
+    bound = literal(FLOAT_INT_MAX) / primitives.when(length > literal(0), length, literal(1))
+    return primitives.coalesce(
+        (primitives.minimum(value) >= literal(0) - bound) & (primitives.maximum(value) <= bound),
+        literal(True),
+    )
 
 
 @dataclass(frozen=True)

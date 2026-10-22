@@ -4,9 +4,9 @@ import pyarrow as pa
 from datafusion import Expr, functions, lit
 
 from udfx.backends.datafusion.rules import RULES, when
-from udfx.backends.datafusion.strings import list_contains
+from udfx.backends.datafusion.strings import characters, list_contains, list_len
 from udfx.backends.registration import Lowered, register_lists
-from udfx.semantics.lists import ListPrimitives, SetPrimitives
+from udfx.semantics.lists import ListPrimitives, SetPrimitives, SumPrimitives, integer_sum_exact
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
@@ -30,12 +30,26 @@ def any_value(value: Expr) -> Expr:
 
 @RULES("all", Kind.LIST)
 def all_values(value: Expr) -> Expr:
-    return ~functions.array_has(value, lit(False))
+    flags = functions.array_replace_all(value, lit(None).cast(pa.bool_()), lit(False))
+    return ~functions.array_has(flags, lit(False))
+
+
+SUM = SumPrimitives(
+    literal=lit,
+    when=when,
+    length=list_len,
+    minimum=functions.array_min,
+    maximum=functions.array_max,
+    coalesce=functions.coalesce,
+)
 
 
 @RULES("sum", Kind.LIST)
 def total(value: Expr) -> Lowered[Expr]:
-    return Lowered(lit(0).cast(pa.int64()), lit(False))
+    integers = value.cast(pa.list_(pa.int64()))
+    exact = integer_sum_exact(SUM, integers)
+    result = functions.coalesce(functions.array_sum(integers), lit(0))
+    return Lowered(when(exact, result, lit(0)).cast(pa.int64()), exact)
 
 
 @RULES("sum_float", Kind.LIST)
@@ -62,9 +76,7 @@ PRIMITIVES = ListPrimitives(
 )
 
 
-@RULES("list", Kind.STR)
-def characters(value: Expr) -> Expr:
-    return functions.string_to_array(value, lit(None).cast(pa.string()))
+RULES("list", Kind.STR)(characters)
 
 
 register_lists(
