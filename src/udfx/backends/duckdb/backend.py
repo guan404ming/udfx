@@ -32,6 +32,7 @@ FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 CONNECTIONS = weakref.WeakKeyDictionary[duckdb.DuckDBPyConnection, int]()
 NUMBERS = itertools.count()
+ELEMENTS = itertools.count()
 LOCK = threading.Lock()
 DEFAULT_FAULTS = NativeFaults()
 
@@ -86,7 +87,7 @@ class DuckDBBackend(Backend[Expression]):
     def list_transform(
         self, source: Expression, transform: Callable[[Expression], Expression]
     ) -> Expression:
-        name = f"{RESERVED}element"
+        name = f"{RESERVED}element {next(ELEMENTS)}"
         return function(
             "list_transform", source, duckdb.LambdaExpression(name, transform(column(name)))
         )
@@ -94,7 +95,7 @@ class DuckDBBackend(Backend[Expression]):
     def list_filter(
         self, source: Expression, predicate: Callable[[Expression], Expression]
     ) -> Expression:
-        name = f"{RESERVED}element"
+        name = f"{RESERVED}element {next(ELEMENTS)}"
         return function(
             "list_filter", source, duckdb.LambdaExpression(name, predicate(column(name)))
         )

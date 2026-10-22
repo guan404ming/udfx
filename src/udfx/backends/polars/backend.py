@@ -8,8 +8,9 @@ import polars as pl
 from udfx.backends.base import RAISED, RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES, broadcast, evaluate_list
-from udfx.backends.registration import RuleSet
-from udfx.ir import Col, Lit
+from udfx.backends.registration import Lowered, RuleSet
+from udfx.errors import Unsupported
+from udfx.ir import Col, Comprehension, Element, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
 
@@ -23,6 +24,13 @@ class PolarsBackend(Backend[pl.Expr]):
     def build(self, program: Program) -> pl.Expr:
         expr = super().build(program)
         return expr if expr.meta.root_names() else broadcast(expr)
+
+    def lower(
+        self, node: Node, elements: Mapping[Element, pl.Expr] | None = None
+    ) -> Lowered[pl.Expr]:
+        if isinstance(node, Comprehension) and elements:
+            raise Unsupported("Polars cannot nest list element scopes")
+        return super().lower(node, elements)
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:

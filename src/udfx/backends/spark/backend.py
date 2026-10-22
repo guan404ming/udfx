@@ -11,10 +11,11 @@ from pyspark.sql.types import StructField, StructType
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names
 from udfx.backends.faults import NativeFaults, faults_for
-from udfx.backends.registration import RuleSet
+from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.rules import RULES
-from udfx.ir import Col, Lit
+from udfx.errors import Unsupported
+from udfx.ir import Col, Comprehension, Element, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
 
@@ -39,6 +40,14 @@ class SparkBackend(Backend[Column]):
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
+
+    def lower(
+        self, node: Node, elements: Mapping[Element, Column] | None = None
+    ) -> Lowered[Column]:
+        lowered = super().lower(node, elements)
+        if isinstance(node, Comprehension) and elements and lowered.exact is not None:
+            raise Unsupported("Spark cannot pass guarded nested lambdas to a Python UDF")
+        return lowered
 
     def session(self) -> SparkSession:
         if self._session is not None:

@@ -180,6 +180,30 @@ def indexed_words(text: str) -> str:
     return result
 
 
+def add_inner(values: list[int], outer: int) -> list[int]:
+    return [outer + inner for inner in values]
+
+
+def nested_sums(values: list[int]) -> list[list[int]]:
+    return [add_inner(values, outer) for outer in values]
+
+
+def filter_inner(values: list[int], outer: int) -> list[int]:
+    return [inner for inner in values if inner > outer]
+
+
+def nested_filtered(values: list[int]) -> list[list[int]]:
+    return [filter_inner(values, outer) for outer in values]
+
+
+def prefix_inner(outer: str) -> list[str]:
+    return [outer + inner for inner in outer.split()]
+
+
+def nested_words(values: list[str]) -> list[list[str]]:
+    return [prefix_inner(outer) for outer in values]
+
+
 CASES = [
     Case(function.__name__, function, {"text": STR.or_none()}, "native")
     for function in (
@@ -219,6 +243,9 @@ CASES.extend(
         Case("word_chunks", word_chunks, {"text": STR.or_none()}, "fallback"),
         Case("unpack_pair", unpack_pair, {"pair": list_of(STR).or_none()}, "native"),
         Case("unpack_numbers", unpack_numbers, {"numbers": list_of(INT).or_none()}, "native"),
+        Case("nested_sums", nested_sums, {"values": list_of(INT)}, "fallback"),
+        Case("nested_filtered", nested_filtered, {"values": list_of(INT)}, "fallback"),
+        Case("nested_words", nested_words, {"values": list_of(STR)}, "fallback"),
     ]
 )
 
