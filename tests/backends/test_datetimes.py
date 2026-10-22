@@ -153,8 +153,7 @@ def test_arrow_pandas_datetime_fallback() -> None:
     value = pd.Timestamp("2024-02-29 12:34:56.123456")
     column = pa.array([value], type=pa.timestamp("ns"))
     program = Program(python_datetime, {"value": DATETIME}, Col("value", DATETIME))
-    output = arrow.fallback(
-        PolarsBackend(), program, pa.array([False]), [column], arrow.dtype(DATETIME)
-    )
+    native = pa.array([None], type=arrow.dtype(DATETIME))
+    output = arrow.fallback(PolarsBackend(), program, pa.array([False]), native, [column])
     assert output.to_pylist() == [value.to_pydatetime()]
     assert type(output[0].as_py()) is datetime
