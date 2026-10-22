@@ -8,19 +8,13 @@ udfx compiles Python UDFs into native expressions for Polars, DuckDB, DataFusion
 traces the function bytecode and keeps Python semantics in the generated expression. Rows where
 udfx cannot show the same result run the original Python function.
 
-## Features
-
-- One expression per function for Polars, DuckDB, DataFusion, and Spark.
-- Python semantics for truthiness, exceptions, int64 overflow, Unicode case, and literal parsing.
-- Row-level fallback to the original Python function.
-- `udfx.explain` returns a report with the traced program and the native expression.
-
 ## Install
 
 ```
-pip install "udfx[polars]"    # or duckdb, datafusion, spark
+pip install "udfx[polars]"
 ```
 
+Other backend extras: `duckdb`, `datafusion`, `spark`.
 `udfx.testing` (the Python oracle and Hypothesis strategies) needs `udfx[testing]`.
 
 ## Quick start
@@ -51,6 +45,7 @@ print(df.select(year=translation.expr)["year"].to_list())
 
 `compile(function, schema, backend="polars")` returns a `Translation`: `function`, `ok`, `expr`, `program`,
 `backend`, and `unsupported` (the reason when the function cannot be compiled).
+`udfx.explain` reports the traced program and native expression.
 
 A single parameter represents a row when the schema keys differ from its name:
 `udfx.compile(lambda row: row["price"] * row.quantity, {"price": FLOAT, "quantity": INT})`.
@@ -70,25 +65,35 @@ A single parameter represents a row when the schema keys differ from its name:
 
 | Family | Operations |
 |---|---|
-| Core | `not`, `and`, `or`, `is None`, truthiness |
-| Numbers | `+ - * / // %`, comparisons, unary `-`, `abs`, `int`, `float`, `str`, `math.log10`, `math.isnan`, `math.isinf` |
-| Strings | `lower upper strip lstrip rstrip split find rfind count startswith endswith replace join`, `+`, `in`, `len`, indexing, slices |
-| Datetimes | Naive `DATETIME` at microsecond precision: `year month day hour minute second microsecond`, `weekday isoweekday toordinal`, comparisons, `strftime` and `datetime.strptime` with literal `%Y %m %d %H %M %S %f %j %y %%` formats |
-| Rows | `row["name"]` with a constant key, `row.name` for schema columns |
+| Core | Truthiness, `not`/`and`/`or`, `is None`, scalar `pandas.isna`/`notna` |
+| Numbers | `+ - * / // %`, comparisons, unary `-`, `abs`, `math.log10`/`isnan`/`isinf` |
+| Conversions | `int`, `float`, `str` |
+| Math | Float power (`**`), `min`/`max`, `round`, `math.sqrt`/`ceil`/`floor`, selected NumPy scalar functions |
+| Strings | Case conversion, trimming, padding, character tests, split/join, search, replace/translate, `+`, `in`, `len`, indexing, slices |
+| Lists | Homogeneous literals, `list`, `+`, `in`, `len`, indexing, slices, `any`/`all`/`sum`; string sorting and sets |
+| Regex | Literal patterns with `re.search`/`match`/`fullmatch`/`sub`/`findall`/`split`, compiled patterns, guarded `group(0)` |
+| Datetimes | Naive microsecond `DATETIME`: fields, comparisons, `weekday`/`isoweekday`/`toordinal`, literal `strftime`/`strptime` formats |
 
-Python features: `if`/`else`, conditional expressions, `and`/`or`/`not`, chained comparisons,
-`try`/`except`/`finally`, Python helpers from globals and closures with constant defaults,
-keyword calls with inspectable signatures, constant dicts and sets, slices.
-String formatting: f-strings, literal `.format` templates with positional fields, and literal
-`%s`/`%d` templates. Format specs support empty, integer `d`, and string `s`; conversions support
-`!s` and numeric `!r`.
+Python features include row UDFs with `row["name"]` or `row.name`, branches, chained comparisons,
+`try`/`except`/`finally`, helpers with constant defaults, keyword calls with inspectable signatures,
+constant dict lookup and set membership, and POSIX string path operations. Tuple/list unpacking,
+starred list unpacking, and tuple `*args` calls work.
 
-Not supported, so `compile` returns `ok == False` and `unsupported` names the feature: loops,
-comprehensions, dynamic format templates/specs, other format specs, string `!r`, `!a`,
-list and set literals, `with`, `raise`, generators, imports, global
-assignment, other attribute access on a column value, `*args`/`**kwargs` calls, keywords without an
-inspectable signature (such as `int(base=...)`), `is` against anything but `None`,
-calls without a supported helper or registered op.
+`for` loops support constant tuples/lists of at most 64 items. List comprehensions support one
+iterator with filters. Generator expressions must go directly to `any`, `all`, `sum`, `list`,
+`sorted`, or string `join`. F-strings and literal `.format` positional templates support empty,
+`d`, and `s` specs, `!s`, and numeric `!r`; literal `%s`/`%d` templates also work.
+
+Main limits (`compile` returns `ok == False` with an `unsupported` reason):
+
+- Dynamic `for` loops, `while`, nested comprehensions, list mutation, deferred generators, and
+  comprehension faults under exception handlers.
+- Dynamic format templates/specs, other format specs, string `!r`, and `!a`; nonempty `**kwargs`,
+  `*args` without a tuple, and keyword calls without an inspectable signature.
+- Regex patterns with lookaround, backreferences, or named groups. Matches expose only guarded
+  `group()`/`group(0)`; `findall` allows at most one capture group, `split` none.
+- Timezones and datetime arithmetic. Datetime formats allow `%Y %m %d %H %M %S %f %j %y %%`.
+- `with`, explicit `raise`, imports inside UDFs, global/nonlocal writes, file I/O, and unsupported calls.
 
 ## Backends
 
