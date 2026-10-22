@@ -86,6 +86,7 @@ def test_slice_opcode_versions(
             load._replace(opname="BINARY_OP", argrepr="[]"),
         ]
     else:
+        load = load._replace(opname="LOAD_FAST")
         sliced = [
             *(load._replace(opname="LOAD_CONST", argval=value) for value in (None, None, step)),
             load._replace(opname="BUILD_SLICE", arg=3, argval=3),
