@@ -129,15 +129,8 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 
 ## Performance
 
-`uv run python bench/speed.py`, one million rows, Polars, best of three:
-
-| Function | Python UDF | udfx eager | udfx lazy |
-|---|---|---|---|
-| `euro` (dict lookup, `float`, `/`, `try`) | 0.79 s | 164x | 168x |
-| `lower_strip` | 0.57 s | 7.6x | 34x |
-| `split_part` (`split("::")[2]`, `try`) | 0.70 s | 6.4x | 40x |
-| `year` (`int(date[:4])`, `try`) | 0.73 s | 1.6x | 8.8x |
-| `safe_division` | 0.56 s | 140x | 302x |
+Run `uv run python -m bench.speed` to compare udfx with Python UDFs on Polars eager and lazy,
+DuckDB, DataFusion, and Spark; numbers depend on the machine.
 
 ## Contributing
 

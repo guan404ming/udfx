@@ -30,6 +30,13 @@ Run `uv run python -m bench.mine <csv> <output>` from the project root. The CSV 
 `kernel_id` and `source` columns. The command writes `candidates.jsonl` and `summary.md` to the
 output directory.
 
+## Benchmark performance
+
+Run `uv run python -m bench.speed` from the project root, or select a smaller run with
+`uv run python -m bench.speed --rows 200 --engines polars duckdb --cases lower_strip row_total --repeats 1`.
+The benchmark checks results against Python before timing and reports K2 (each speedup is at
+least 1), K3 (geometric mean speedup is at least 3), and K5 (cases with no fallback in the plan).
+
 ## Code rules
 
 - No comments, no docstrings. Lint and type directives are the only exceptions.
