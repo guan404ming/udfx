@@ -4,7 +4,7 @@ from hypothesis import given
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.logic import conjunction, negate
+from udfx.frontend.core.logic import conjunction, negate
 from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function

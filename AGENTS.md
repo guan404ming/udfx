@@ -18,7 +18,12 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/program.py` | `Program`: traced function, schema, value, fault, row mode, and `run` for fallback rows |
 | `src/udfx/ops/` | Op specs: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py` |
 | `src/udfx/semantics/` | Shared Python facts and policies for scalars, numbers, text, literals, lists, regex, datetimes, translation, and paths. Sequence, split, and padding policies live in `sequences.py`, `splitting.py`, and `padding.py` |
-| `src/udfx/frontend/` | Bytecode to IR. Knows nothing about backends. `handlers/` has one file per opcode family |
+| `src/udfx/frontend/` | `trace.py` turns a function and schema into a program. The frontend knows nothing about backends |
+| `src/udfx/frontend/decode/` | Decode version-specific bytecode and stack effects into blocks of semantic ops. `ops.py` defines the ops, `rules/` holds one module per opcode family plus `py313.py`, `py314.py`, and `py315.py` |
+| `src/udfx/frontend/flow/` | Execute decoded blocks, helper calls, loops, and exception paths |
+| `src/udfx/frontend/core/` | Shared values, bindings, evaluation results, and IR construction and simplification |
+| `src/udfx/frontend/resolve/` | Resolve callables, constants, snapshots, and helper definitions and signatures |
+| `src/udfx/frontend/operations/` | Evaluate Python operators, calls, containers, attributes, and formatting with explicit operands |
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
@@ -32,11 +37,13 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 
 - Write no comments and no docstrings. License headers and lint or type directives are the only exceptions.
 - Put imports at the top of the file.
+- Keep each code file at 250 lines or fewer.
+- Keep shared frontend dependencies in one direction: `operations/` uses `resolve/` and `core/`; `resolve/` uses `core/`. None imports `flow/` or `decode/`.
 - Use the simplest code that works. Do not add abstractions, options, or config that no code uses.
 - Reuse existing helpers. Do not copy logic between files.
 - Use full words in names. Use no abbreviations except `op`, `ir`, `expr`.
 - Keep op contracts in `ops/`, shared Python facts in `semantics/`, and engine calls in `backends/`.
-- Handlers target CPython 3.12 bytecode. `frontend/opcodes/` normalizes 3.13 and 3.14 streams to that set. Add a new version there, never in a handler.
+- Only `frontend/decode/` knows the CPython version. `BASE` in `tables.py` is the 3.12 opcode table and `OVERRIDES` holds the changes of each later version. Add a new version there. Semantic ops (`Call`, `BinaryOp`, `Branch`, `ForEach`, and so on) carry explicit operands, so `flow/` and the shared op modules never read a stack.
 
 ## Op contract
 

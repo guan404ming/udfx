@@ -4,9 +4,9 @@ from types import CodeType
 import pytest
 
 from udfx.frontend import trace
-from udfx.frontend.logic import fold
-from udfx.frontend.machine import HANDLERS
-from udfx.frontend.opcodes import normalize
+from udfx.frontend.core.logic import fold
+from udfx.frontend.decode import decode
+from udfx.frontend.decode.graph import Refuse
 from udfx.ir import FALSE, Col, If, Lit, Node
 from udfx.ops import apply
 from udfx.types import INT, STR, Type
@@ -112,9 +112,10 @@ def codes(code: CodeType) -> Iterator[CodeType]:
 
 
 @pytest.mark.parametrize("function", [case[0] for case in CASES])
-def test_normalize_emits_canonical_opcodes(function: Callable[..., object]) -> None:
+def test_decoder_refuses_nothing_in_the_cases(function: Callable[..., object]) -> None:
     for code in codes(function.__code__):
-        assert {instruction.opname for instruction in normalize(code)} <= set(HANDLERS)
+        decoded = decode(code)
+        assert not any(isinstance(block.exit, Refuse) for block in decoded.blocks.values())
 
 
 @pytest.mark.parametrize(("function", "schema", "value", "fault"), CASES)

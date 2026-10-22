@@ -175,3 +175,21 @@ def test_regex_unsupported_group() -> None:
 
     with pytest.raises(Unsupported, match="group"):
         trace(first, {"text": STR})
+
+
+@pytest.mark.parametrize("bound", [False, True])
+def test_compiled_match_signature(bound: bool) -> None:
+    function: Any = COMPILED.match if bound else re.Pattern.match
+
+    def tested(text: str) -> str:
+        found = function(string=text) if bound else function(COMPILED, string=text)
+        return found.group() if found else "missing"
+
+    def reference(text: str) -> str:
+        found = re.match(COMPILED, text)
+        return found.group() if found else "missing"
+
+    expected = trace(reference, {"text": STR})
+    actual = trace(tested, {"text": STR})
+    assert actual.value == expected.value
+    assert actual.fault == expected.fault

@@ -1,12 +1,11 @@
 import dis
-from types import ModuleType
 
 import pytest
 
+from tests.frontend.streams import VERSION_IDS, VERSIONS, Version, traced
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.logic import conjunction, disjunction, fold, negate
-from udfx.frontend.opcodes import py312, py313, py314
+from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
 from udfx.types import INT, STR
@@ -71,16 +70,16 @@ def test_zero_slice_step_fault() -> None:
     assert trace(caught, {"s": STR}).value == Lit("zero", STR)
 
 
-@pytest.mark.parametrize("normalizer", [py312, py313, py314], ids=["3.12", "3.13", "3.14"])
+@pytest.mark.parametrize("version", VERSIONS, ids=VERSION_IDS)
 @pytest.mark.parametrize("step", [-2, -1, 2])
 def test_slice_opcode_versions(
-    monkeypatch: pytest.MonkeyPatch, normalizer: ModuleType, step: int
+    monkeypatch: pytest.MonkeyPatch, version: Version, step: int
 ) -> None:
     def function(s: str) -> str:
         return s
 
     resume, load, returned = dis.get_instructions(function)
-    if normalizer is py314:
+    if version >= (3, 14):
         sliced = [
             load._replace(opname="LOAD_CONST", argval=slice(None, None, step)),
             load._replace(opname="BINARY_OP", argrepr="[]"),
@@ -92,11 +91,8 @@ def test_slice_opcode_versions(
             load._replace(opname="BUILD_SLICE", arg=3, argval=3),
             load._replace(opname="BINARY_SUBSCR"),
         ]
-    instructions = [resume, load, *sliced, returned]
-    instructions = [item._replace(offset=2 * index) for index, item in enumerate(instructions)]
-    monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
-    monkeypatch.setattr("udfx.frontend.context.normalize", normalizer.normalize)
-    assert trace(function, {"s": STR}).value == apply("slice", S, OPEN, OPEN, Lit(step, INT))
+    program = traced(monkeypatch, function, [resume, load, *sliced, returned], version, {"s": STR})
+    assert program.value == apply("slice", S, OPEN, OPEN, Lit(step, INT))
 
 
 @pytest.mark.parametrize(

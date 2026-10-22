@@ -5,7 +5,7 @@ import pytest
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.values import MAX_UNROLL
+from udfx.frontend.core.values import MAX_UNROLL
 from udfx.testing import check_function
 from udfx.types import STR
 

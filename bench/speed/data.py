@@ -8,7 +8,8 @@ import pyarrow
 
 from tests.corpus.cases import Case
 from udfx.backends import arrow
-from udfx.frontend.opcodes import normalize
+from udfx.frontend.decode import decode
+from udfx.frontend.decode.ops import Attribute, Constant, Local, Subscript
 from udfx.program import Program
 from udfx.testing.outcome import Returned, run
 from udfx.types import Kind, Type
@@ -85,19 +86,16 @@ def row_type(program: Program) -> type[dict[str, object]] | type[tuple[object, .
             for value in code.co_consts
             if isinstance(value, CodeType) and name in value.co_freevars
         )
-        instructions = normalize(code)
-        for receiver, access, operation in zip(
-            instructions, instructions[1:], instructions[2:], strict=False
-        ):
-            if receiver.opname not in {"LOAD_FAST", "LOAD_FAST_CHECK", "LOAD_DEREF"}:
-                continue
-            if receiver.argval != name:
-                continue
-            if access.opname == "LOAD_ATTR" and access.argval in program.schema:
+        operations = decode(code).operations(0)
+        constants = {op.result: op.value for op in operations if isinstance(op, Constant)}
+        receivers = {op.result for op in operations if isinstance(op, Local) and op.name == name}
+        for op in operations:
+            if isinstance(op, Attribute) and op.owner in receivers and op.name in program.schema:
                 attributes = True
-            elif access.opname == "LOAD_CONST" and operation.opname == "BINARY_SUBSCR":
-                positional |= isinstance(access.argval, int)
-                named |= isinstance(access.argval, str)
+            elif isinstance(op, Subscript) and op.container in receivers:
+                key = constants.get(op.index)
+                positional |= isinstance(key, int)
+                named |= isinstance(key, str)
     if not (positional or named or attributes):
         return MixedRow
     if positional:

@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+from udfx.frontend.decode.builder import Rule
+from udfx.frontend.decode.rules import control, loads, py313, py314, py315, values
+
+Version = tuple[int, int]
+
+BASE: dict[str, Rule] = {
+    "RESUME": loads.skip,
+    "NOP": loads.skip,
+    "CACHE": loads.skip,
+    "EXTENDED_ARG": loads.skip,
+    "MAKE_CELL": loads.skip,
+    "COPY_FREE_VARS": loads.skip,
+    "LOAD_FAST": loads.load_local,
+    "LOAD_FAST_CHECK": loads.load_local,
+    "LOAD_FAST_AND_CLEAR": loads.load_clear,
+    "LOAD_DEREF": loads.load_cell,
+    "LOAD_CLOSURE": loads.load_closure,
+    "LOAD_CONST": loads.load_constant,
+    "LOAD_GLOBAL": loads.load_global,
+    "LOAD_ATTR": loads.load_attribute,
+    "STORE_FAST": loads.store_local,
+    "STORE_DEREF": loads.store_cell,
+    "DELETE_FAST": loads.delete_local,
+    "POP_TOP": loads.pop_top,
+    "COPY": loads.copy,
+    "SWAP": loads.swap,
+    "PUSH_NULL": loads.push_null,
+    "KW_NAMES": values.keyword_names,
+    "CALL": values.call,
+    "CALL_FUNCTION_EX": values.call_unpacked,
+    "DICT_MERGE": values.merge_keywords,
+    "BINARY_OP": values.binary_op,
+    "COMPARE_OP": values.compare,
+    "IS_OP": values.identity,
+    "CONTAINS_OP": values.membership,
+    "UNARY_NOT": values.unary_not,
+    "UNARY_NEGATIVE": values.unary_negative,
+    "BINARY_SUBSCR": values.subscript,
+    "BINARY_SLICE": values.cut,
+    "BUILD_SLICE": values.build_slice,
+    "BUILD_TUPLE": values.build("tuple"),
+    "BUILD_LIST": values.build("list"),
+    "BUILD_SET": values.build("set"),
+    "BUILD_MAP": values.build("map", 2),
+    "BUILD_CONST_KEY_MAP": values.build("keys", 1, 1),
+    "BUILD_STRING": values.build("string"),
+    "LIST_EXTEND": values.extend("list"),
+    "SET_UPDATE": values.extend("set"),
+    "LIST_APPEND": values.list_append,
+    "UNPACK_SEQUENCE": values.unpack,
+    "UNPACK_EX": values.unpack,
+    "GET_ITER": values.get_iterator,
+    "FOR_ITER": control.for_each,
+    "END_FOR": control.end_for,
+    "FORMAT_VALUE": values.format_value,
+    "MAKE_FUNCTION": values.make_function,
+    "RETURN_VALUE": control.return_value,
+    "RETURN_CONST": control.return_constant,
+    "POP_JUMP_IF_FALSE": control.branch_if_false,
+    "POP_JUMP_IF_TRUE": control.branch_if_true,
+    "POP_JUMP_IF_NONE": control.branch_if_none,
+    "POP_JUMP_IF_NOT_NONE": control.branch_if_not_none,
+    "JUMP_FORWARD": control.jump,
+    "JUMP_BACKWARD": control.jump_backward,
+    "JUMP_BACKWARD_NO_INTERRUPT": control.jump_backward,
+    "PUSH_EXC_INFO": control.push_exception,
+    "POP_EXCEPT": loads.pop_top,
+    "CHECK_EXC_MATCH": control.check_exception,
+    "RERAISE": control.reraise,
+    "YIELD_VALUE": control.yield_value,
+    "RETURN_GENERATOR": control.return_generator,
+    "IMPORT_NAME": loads.refuse,
+    "STORE_GLOBAL": loads.refuse,
+    "DELETE_GLOBAL": loads.refuse,
+    "BEFORE_WITH": loads.refuse,
+    "WITH_EXCEPT_START": loads.refuse,
+    "RAISE_VARARGS": loads.refuse,
+}
+
+
+OVERRIDES: dict[Version, dict[str, Rule]] = {
+    (3, 12): {},
+    (3, 13): py313.OVERRIDES,
+    (3, 14): py314.OVERRIDES,
+    (3, 15): py315.OVERRIDES,
+}
+
+
+def resolve(version: Version) -> dict[str, Rule]:
+    return {**BASE, **OVERRIDES[version]}

@@ -4,7 +4,7 @@ from hypothesis import given
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.machine import MAX_STEPS
+from udfx.frontend.flow.machine import MAX_STEPS
 from udfx.ir import FALSE, Col, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function

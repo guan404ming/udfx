@@ -4,8 +4,8 @@ import pytest
 
 from udfx.explain import render
 from udfx.frontend import trace
-from udfx.frontend.merge import merge
-from udfx.frontend.state import Return
+from udfx.frontend.core.evaluation import Return
+from udfx.frontend.core.merge import merge
 from udfx.ir import TRUE, Col, If, Node, lit
 from udfx.ops import apply
 from udfx.types import BOOL, INT, STR, Type

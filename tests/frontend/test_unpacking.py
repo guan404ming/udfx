@@ -1,13 +1,12 @@
 import dis
 from collections.abc import Callable
-from types import ModuleType
 
 import pytest
 
+from tests.frontend.streams import VERSION_IDS, VERSIONS, Version, traced
 from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.opcodes import py312, py313, py314
 from udfx.ir import FALSE, Col, Lit, lit
 from udfx.ops import apply
 from udfx.testing import check_function
@@ -125,16 +124,16 @@ def test_frontend_tuple_return_is_unsupported() -> None:
         trace(lambda text: (text, 1), {"text": STR})
 
 
-@pytest.mark.parametrize("normalizer", [py312, py313, py314], ids=["3.12", "3.13", "3.14"])
+@pytest.mark.parametrize("version", VERSIONS, ids=VERSION_IDS)
 @pytest.mark.parametrize("starred", [False, True])
 def test_unpack_opcode_versions(
-    monkeypatch: pytest.MonkeyPatch, normalizer: ModuleType, starred: bool
+    monkeypatch: pytest.MonkeyPatch, version: Version, starred: bool
 ) -> None:
     def function(items: list[str]) -> list[str]:
         return items
 
     resume, load, returned = dis.get_instructions(function)
-    load = load._replace(opname="LOAD_FAST_BORROW" if normalizer is py314 else "LOAD_FAST")
+    load = load._replace(opname="LOAD_FAST_BORROW" if version >= (3, 14) else "LOAD_FAST")
     unpack = load._replace(
         opname="UNPACK_EX" if starred else "UNPACK_SEQUENCE",
         arg=257 if starred else 2,
@@ -144,7 +143,7 @@ def test_unpack_opcode_versions(
     if starred:
         instructions.append(load._replace(opname="EXTENDED_ARG", arg=1, argval=1))
     instructions.append(unpack)
-    if normalizer is py312:
+    if version == (3, 12):
         instructions.extend(
             load._replace(opname="STORE_FAST", argval=name) for name in ("first", "second")
         )
@@ -155,11 +154,8 @@ def test_unpack_opcode_versions(
     if starred:
         instructions.append(load._replace(opname="STORE_FAST", argval="last"))
     instructions.extend([load._replace(argval="second"), returned])
-    instructions = [part._replace(offset=2 * index) for index, part in enumerate(instructions)]
-    monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
-    monkeypatch.setattr("udfx.frontend.context.normalize", normalizer.normalize)
     source = Col("items", list_of(STR))
-    program = trace(function, {"items": source.type})
+    program = traced(monkeypatch, function, instructions, version, {"items": source.type})
     assert program.value == (
         apply("slice", source, lit(1), lit(-1, INT.or_none()))
         if starred
