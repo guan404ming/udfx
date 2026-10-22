@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import builtins
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
-from udfx.backends.faults import NativeFaults
-from udfx.backends.lowering import lower_call, lower_comprehension, lower_if
+from udfx.backends.faults import FALLBACK_MARKER, NativeFaults, decode_fallback_error
+from udfx.backends.lowering import lower_call, lower_comprehension, lower_if, lower_program
 from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.rules import fold_predicate
 from udfx.errors import Unsupported
 from udfx.ir import (
     FALSE,
@@ -41,26 +41,13 @@ def output_names(count: int) -> list[str]:
 
 
 RAISED = threading.local()
-MARKER = "udfx raised "
 
 
 class FallbackError(RuntimeError):
     def __init__(self, error: Exception | str) -> None:
         super().__init__(
-            error if isinstance(error, str) else f"{MARKER}{type(error).__name__}: {error}"
+            error if isinstance(error, str) else f"{FALLBACK_MARKER}{type(error).__name__}: {error}"
         )
-
-
-def decode_fallback_error(text: str) -> Exception | None:
-    _, found, detail = text.partition(MARKER)
-    name, _, message = detail.partition(": ")
-    kind = getattr(builtins, name.strip(), None)
-    if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
-        return None
-    try:
-        return kind(message.partition("\n")[0])
-    except TypeError:
-        return None
 
 
 class Backend[E](ABC):
@@ -141,6 +128,12 @@ class Backend[E](ABC):
     def list_filter(self, source: E, predicate: Callable[[E], E]) -> E:
         raise Unsupported(f"{self.name} has no list filter")
 
+    def record(self, fields: Mapping[str, E]) -> E:
+        raise Unsupported(f"{self.name} has no record constructor")
+
+    def field(self, record: E, name: str) -> E:
+        raise Unsupported(f"{self.name} has no record fields")
+
     @abstractmethod
     def fallback(self, native: E, exact: E, program: Program) -> E: ...
 
@@ -154,7 +147,10 @@ class Backend[E](ABC):
         match node:
             case Guarded():
                 value = self.lower(node.value, elements)
-                exact = self.lower(node.exact, elements)
+                predicate = fold_predicate(node.exact)
+                if predicate == TRUE:
+                    return value
+                exact = self.lower(predicate, elements)
                 return Lowered(
                     value.expr,
                     self.conjunction(value.exact, self.exact(exact), exact.expr),
@@ -207,20 +203,10 @@ class Backend[E](ABC):
 
     def build(self, program: Program) -> E:
         self.check_names(program.schema)
-        value = self.lower(program.value)
-        expr, exact, failure = value.expr, value.exact, value.overflow
-        if program.fault != FALSE:
-            fault = self.lower(program.fault)
-            exact = self.conjunction(exact, self.exact(fault))
-            failure = self._any(failure, fault.expr)
-        if failure is not None:
-            raised = self.native_raise(program)
-            if raised is None:
-                exact = self.conjunction(exact, self.negate(failure))
-            else:
-                condition = failure if exact is None else self.both(exact, failure)
-                expr = self.select(condition, raised, expr)
-        return expr if exact is None else self.fallback(expr, exact, program)
+        value = lower_program(self, program)
+        return (
+            value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
+        )
 
     def exact(self, lowered: Lowered[E]) -> E | None:
         return self.conjunction(
@@ -232,12 +218,19 @@ class Backend[E](ABC):
         exact = self.exact(lowered)
         return exact if exact is not None else self.literal(TRUE)
 
-    def _any(self, *parts: E | None) -> E | None:
-        opposite = self.conjunction(*(self.negate(part) for part in parts if part is not None))
-        return None if opposite is None else self.negate(opposite)
-
-    def conjunction(self, *parts: E | None) -> E | None:
+    def disjunction(self, *parts: E | None) -> E | None:
         present = [part for part in parts if part is not None]
+        if not present:
+            return None
+        combined = present[0]
+        for part in present[1:]:
+            combined = cast("Any", combined) | part
+        return combined
+
+    def conjunction(self, *parts: E | bool | None) -> E | None:
+        if any(part is False for part in parts):
+            return self.literal(FALSE)
+        present = [cast("E", part) for part in parts if part is not None and part is not True]
         if not present:
             return None
         combined = present[0]

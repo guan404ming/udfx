@@ -4,17 +4,40 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 from udfx.backends.registration import Lowered, RuleResult
+from udfx.backends.rules import fold_predicate
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, If, Lit
 from udfx.ops import OpKey
+from udfx.program import Program
 from udfx.types import Kind
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
 
 
+def lower_program[E](backend: Backend[E], program: Program) -> Lowered[E]:
+    value = backend.lower(program.value)
+    expr, exact, failure = value.expr, value.exact, value.overflow
+    predicate = fold_predicate(program.fault)
+    if predicate != FALSE:
+        fault = backend.lower(predicate)
+        exact = backend.conjunction(exact, backend.exact(fault))
+        failure = backend.disjunction(failure, fault.expr)
+    if failure is not None:
+        raised = backend.native_raise(program)
+        if raised is None:
+            exact = backend.conjunction(exact, backend.negate(failure))
+        else:
+            condition = failure if exact is None else backend.both(exact, failure)
+            expr = backend.select(condition, raised, expr)
+    return Lowered(expr, exact)
+
+
 def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Element, E]) -> Lowered[E]:
-    condition = backend.lower(node.condition, elements)
+    predicate = fold_predicate(node.condition)
+    if predicate in (TRUE, FALSE):
+        return backend.lower(node.then if predicate == TRUE else node.orelse, elements)
+    condition = backend.lower(predicate, elements)
     then, orelse = backend.lower(node.then, elements), backend.lower(node.orelse, elements)
     expr = backend.select(condition.expr, then.expr, orelse.expr)
     exact = backend.exact(condition)
@@ -36,6 +59,10 @@ def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Element, E]) ->
 
 
 def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Element, E]) -> Lowered[E]:
+    if node.type.kind is Kind.BOOL:
+        folded = fold_predicate(node)
+        if folded != node:
+            return backend.lower(folded, elements)
     rule = backend.rules.get(node.op.key)
     if rule is None:
         raise Unsupported(f"{backend.name} has no rule for {node.op.key}")
@@ -51,9 +78,16 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Element, E]
         **{name: fact(node) for name, fact in options.facts.items()},
     )
     lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
+    guards = [
+        guard(argument.value if isinstance(argument, Lit) else arguments[index].expr)
+        for index, guard in options.guards.items()
+        for argument in (node.arguments[index],)
+    ]
     return Lowered(
         lowered.expr,
-        backend.conjunction(*(backend.exact(argument) for argument in arguments), lowered.exact),
+        backend.conjunction(
+            *(backend.exact(argument) for argument in arguments), lowered.exact, *guards
+        ),
         lowered.overflow,
     )
 
@@ -63,7 +97,7 @@ def lower_comprehension[E](
 ) -> Lowered[E]:
     source = backend.lower(node.source, elements)
 
-    guarded = False
+    guarded, recorded = False, False
 
     def parts(element: E) -> tuple[Lowered[E], Lowered[E], E | None]:
         nonlocal guarded
@@ -82,6 +116,19 @@ def lower_comprehension[E](
         )
         guarded = guarded or exact is not None
         return condition, value, exact
+
+    def body(element: E) -> E:
+        nonlocal recorded
+        condition, value, exact = parts(element)
+        if node.condition == TRUE and exact is None:
+            return value.expr
+        recorded = True
+        fields = {"udfx value": value.expr}
+        if node.condition != TRUE:
+            fields["udfx condition"] = condition.expr
+        if exact is not None:
+            fields["udfx exact"] = exact
+        return backend.record(fields)
 
     try:
         if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
@@ -105,15 +152,20 @@ def lower_comprehension[E](
             for chunk in chunks:
                 result = cast("E", concatenate(result, chunk))
             return Lowered(result, backend.conjunction(backend.exact(source), *exacts))
-        filtered = source.expr
-        if node.condition != TRUE:
-            filtered = backend.list_filter(filtered, lambda element: parts(element)[0].expr)
-        value = filtered
-        if node.value != node.element:
-            value = backend.list_transform(filtered, lambda element: parts(element)[1].expr)
-        if not guarded and node.fault == FALSE:
+        packed = backend.list_transform(source.expr, body)
+        if not recorded:
+            return Lowered(packed, backend.exact(source))
+        filtered = (
+            backend.list_filter(packed, lambda element: backend.field(element, "udfx condition"))
+            if node.condition != TRUE
+            else packed
+        )
+        value = backend.list_transform(
+            filtered, lambda element: backend.field(element, "udfx value")
+        )
+        if not guarded:
             return Lowered(value, backend.exact(source))
-        flags = backend.list_transform(source.expr, lambda element: cast("E", parts(element)[2]))
+        flags = backend.list_transform(packed, lambda element: backend.field(element, "udfx exact"))
         every = backend.rules.get(OpKey("all", (Kind.LIST,)))
         if every is None:
             raise Unsupported(f"{backend.name} has no list reduction")

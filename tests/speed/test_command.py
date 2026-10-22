@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 from conftest import engine_names
 
@@ -9,7 +11,11 @@ from bench.speed.command import main
     "engine",
     [pytest.param(name, id=name, marks=pytest.mark.xdist_group(name)) for name in engine_names()],
 )
-def test_engine_report(engine: str, capsys: pytest.CaptureFixture[str]) -> None:
+def test_engine_report(
+    engine: str, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = importlib.import_module(f"bench.speed.{engine}")
+    monkeypatch.setattr(module, "timed", lambda action, repeats: 1.0)
     main(
         [
             "--rows",
@@ -41,13 +47,14 @@ def test_engine_report(engine: str, capsys: pytest.CaptureFixture[str]) -> None:
     }
     assert {row[1] for row in details} == engines
     for row in details:
-        assert len(row) == 8
+        assert len(row) == 9
         assert row[2] in {"map_elements", "native", "arrow", "pickled"}
         assert float(row[3]) > 0
         assert float(row[4]) > 0
         assert row[5].endswith("x")
         assert row[6] in {"true", "false"}
-        assert row[7].removesuffix(" |") in {"PASS", "FAIL"}
+        assert row[7].endswith("%")
+        assert row[8].removesuffix(" |") in {"PASS", "FAIL"}
     assert "cases | groups | K2 fails | geomean | deduplicated geomean | K3" in tables[2]
     assert {row[0].removeprefix("| ") for row in summaries} == engines
     for row in summaries:

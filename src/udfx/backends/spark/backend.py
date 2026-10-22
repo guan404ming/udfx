@@ -87,6 +87,12 @@ class SparkBackend(Backend[Column]):
     def list_filter(self, source: Column, predicate: Callable[[Column], Column]) -> Column:
         return functions.filter(source, predicate)
 
+    def record(self, fields: Mapping[str, Column]) -> Column:
+        return functions.struct(*(value.alias(name) for name, value in fields.items()))
+
+    def field(self, record: Column, name: str) -> Column:
+        return record.getField(name)
+
     @property
     def native_faults(self) -> NativeFaults:
         return faults_for(self.session().sparkContext)

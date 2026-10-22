@@ -7,7 +7,7 @@ from duckdb.func import ARROW, NATIVE, SPECIAL
 
 from bench.speed.data import batched, caller
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
+from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
 from udfx.backends import arrow
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.duckdb.dtypes import dtype
@@ -58,5 +58,10 @@ def measure(
             )
         baseline, form = min(baselines)
         native_time = timed(lambda: relation.select(native).to_arrow_table(), repeats)
-        fallback = fallback_in_plan(backend, program)
-    return [Measurement(name, "duckdb", baseline, native_time, form, fallback, expression)]
+        fallback = fallback_in_plan(native, backend.name)
+        pending = pending_share(
+            backend,
+            program,
+            lambda expr: relation.select(expr).to_arrow_table().column(0).to_pylist(),
+        )
+    return [Measurement(name, "duckdb", baseline, native_time, form, fallback, expression, pending)]

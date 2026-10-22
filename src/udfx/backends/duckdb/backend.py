@@ -100,6 +100,12 @@ class DuckDBBackend(Backend[Expression]):
             "list_filter", source, duckdb.LambdaExpression(name, predicate(column(name)))
         )
 
+    def record(self, fields: Mapping[str, Expression]) -> Expression:
+        return function("struct_pack", *(value.alias(name) for name, value in fields.items()))
+
+    def field(self, record: Expression, name: str) -> Expression:
+        return function("struct_extract", record, constant(name))
+
     @property
     def native_faults(self) -> NativeFaults:
         return DEFAULT_FAULTS if self._connection is None else faults_for(self._connection)

@@ -17,8 +17,8 @@ from udfx.backends.datafusion.rules import (
     column,
     typed_literal,
 )
-from udfx.backends.registration import RuleSet
-from udfx.ir import Col, Lit
+from udfx.backends.registration import Lowered, RuleSet
+from udfx.ir import Col, Comprehension, Element, Lit, Node
 from udfx.program import Program
 from udfx.types import BOOL, Type
 
@@ -44,6 +44,14 @@ class DataFusionBackend(Backend[Expr]):
     def column(self, node: Col) -> Expr:
         return column(node.name)
 
+    def lower(self, node: Node, elements: Mapping[Element, Expr] | None = None) -> Lowered[Expr]:
+        lowered = super().lower(node, elements)
+        return (
+            Lowered(lowered.expr.cast(dtype(node.type)), lowered.exact, lowered.overflow)
+            if isinstance(node, Comprehension)
+            else lowered
+        )
+
     def literal(self, node: Lit) -> Expr:
         return typed_literal(node.value, node.type)
 
@@ -60,6 +68,12 @@ class DataFusionBackend(Backend[Expr]):
 
     def list_filter(self, source: Expr, predicate: Callable[[Expr], Expr]) -> Expr:
         return array_filter(source, predicate)
+
+    def record(self, fields: Mapping[str, Expr]) -> Expr:
+        return functions.named_struct(list(fields.items()))
+
+    def field(self, record: Expr, name: str) -> Expr:
+        return record[name]
 
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)
@@ -81,9 +95,13 @@ class DataFusionBackend(Backend[Expr]):
             f"udfx fallback {next(FALLBACKS)}",
         )
         packed = functions.named_struct(
-            [(EXACT, exact), (NATIVE, native), *((name, column(name)) for name in program.schema)]
+            [
+                (EXACT, exact),
+                (NATIVE, self.literal(Lit(None, program.result))),
+                *((name, column(name)) for name in program.schema),
+            ]
         )
-        return slow(packed.cast(fields))
+        return self.select(exact, native, slow(packed.cast(fields)))
 
     def evaluate(
         self, exprs: Sequence[Expr], schema: Mapping[str, Type], rows: Sequence[Row]

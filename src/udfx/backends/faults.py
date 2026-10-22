@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import json
 import re
 from datetime import datetime
@@ -11,6 +12,19 @@ from udfx.types import Kind, Type
 
 MARKER = "udfx fault "
 PATTERN = re.compile(r"udfx fault ([0-9a-f]+):([0-9A-Fa-f]+)")
+FALLBACK_MARKER = "udfx raised "
+
+
+def decode_fallback_error(text: str) -> Exception | None:
+    _, found, detail = text.partition(FALLBACK_MARKER)
+    name, _, message = detail.partition(": ")
+    kind = getattr(builtins, name.strip(), None)
+    if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
+        return None
+    try:
+        return kind(message.partition("\n")[0])
+    except TypeError:
+        return None
 
 
 def restore(value: Any, type: Type) -> object:

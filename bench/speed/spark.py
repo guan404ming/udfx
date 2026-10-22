@@ -5,7 +5,7 @@ from pyspark.sql import Column, DataFrame, functions
 
 from bench.speed.data import batched, caller
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
+from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED
 from udfx.backends.spark import SparkBackend
@@ -55,8 +55,11 @@ def measure(
                 baseline,
                 native_time,
                 form,
-                fallback_in_plan(backend, program),
+                fallback_in_plan(native, backend.name),
                 expression,
+                pending_share(
+                    backend, program, lambda expr: [row[0] for row in frame.select(expr).collect()]
+                ),
             )
         ]
     finally:

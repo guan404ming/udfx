@@ -61,28 +61,30 @@ class PolarsBackend(Backend[pl.Expr]):
     def list_filter(self, source: pl.Expr, predicate: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
         return evaluate_list(source, pl.element().filter(predicate(pl.element())))
 
+    def record(self, fields: Mapping[str, pl.Expr]) -> pl.Expr:
+        return pl.struct(*(value.alias(name) for name, value in fields.items()))
+
+    def field(self, record: pl.Expr, name: str) -> pl.Expr:
+        return record.struct.field(name)
+
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         result = dtype(program.result)
         flag_name, value_name = output_names(2)
         expressions = [exact.alias(flag_name), native.alias(value_name)]
 
         def patch(series: Sequence[pl.Series]) -> pl.Series:
-            length = len(series[0])
-            outputs = (
-                pl.DataFrame(series)
-                .lazy()
-                .select(expressions)
-                .collect(engine="in-memory")
-                .get_columns()
-            )
+            length = len(series[-1])
             flags, values = (
-                item if len(item) == length else item.new_from_index(0, length) for item in outputs
+                item if len(item) == length else item.new_from_index(0, length)
+                for item in series[:2]
             )
             pending = (~flags.fill_null(False)).arg_true().to_list()
 
             def gather(rows: list[int]) -> list[list[object]]:
                 return (
-                    [column.gather(rows).to_list() for column in series] if program.schema else []
+                    [column.gather(rows).to_list() for column in series[2:]]
+                    if program.schema
+                    else []
                 )
 
             if not pending:
@@ -91,7 +93,9 @@ class PolarsBackend(Backend[pl.Expr]):
             return values.zip_with(flags.fill_null(False), pl.Series(patched, dtype=result))
 
         inputs = [pl.col(name) for name in program.schema] or [pl.int_range(pl.len()).alias(ROW)]
-        return pl.map_batches(inputs, patch, return_dtype=result, is_elementwise=True)
+        return pl.map_batches(
+            [*expressions, *inputs], patch, return_dtype=result, is_elementwise=True
+        )
 
     def evaluate(
         self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]

@@ -24,6 +24,7 @@ from udfx.semantics.lists import (
 )
 from udfx.semantics.math import transcendental
 from udfx.semantics.numbers import (
+    FLOAT_INT_MAX,
     Binary,
     OrderPrimitives,
     RoundPrimitives,
@@ -123,11 +124,23 @@ def register_math[E](
 def register_widened_variants[E](
     rules: RuleSet[E], name: str, rule: Binary, to_float: Callable[[E], E], order: OrderPrimitives
 ) -> None:
-    rules(name, Kind.INT, Kind.FLOAT)(
-        lambda left, right: Lowered(rule(to_float(left), right), widened_exact(order, left))
+    def exact(value: Any) -> Any:
+        primitives = (
+            OrderPrimitives(
+                lambda left, right: False,
+                lambda value: value is None,
+                lambda value: value is not None and -FLOAT_INT_MAX <= value <= FLOAT_INT_MAX,
+            )
+            if isinstance(value, int) or value is None
+            else order
+        )
+        return widened_exact(primitives, value)
+
+    rules(name, Kind.INT, Kind.FLOAT, guards={0: exact})(
+        lambda left, right: rule(to_float(left), right)
     )
-    rules(name, Kind.FLOAT, Kind.INT)(
-        lambda left, right: Lowered(rule(left, to_float(right)), widened_exact(order, right))
+    rules(name, Kind.FLOAT, Kind.INT, guards={1: exact})(
+        lambda left, right: rule(left, to_float(right))
     )
 
 

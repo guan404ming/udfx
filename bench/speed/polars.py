@@ -6,7 +6,7 @@ import pyarrow
 
 from bench.speed.data import caller, row_function, row_type
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
+from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.polars.dtypes import dtype
 from udfx.program import Program
@@ -38,7 +38,8 @@ def measure(
     backend = PolarsBackend()
     native = backend.build(program)
     expression = fingerprint(backend, program)
-    fallback = fallback_in_plan(backend, program)
+    fallback = fallback_in_plan(native, backend.name)
+    pending = pending_share(backend, program, lambda expr: frame.select(expr).to_series().to_list())
     measurements: list[Measurement] = []
     for engine, execute in (
         ("polars eager", lambda expr: frame.with_columns(expr.alias("out")).select("out")),
@@ -53,6 +54,6 @@ def measure(
         baseline = timed(run_python, repeats)
         native_time = timed(partial(execute, native), repeats)
         measurements.append(
-            Measurement(name, engine, baseline, native_time, form, fallback, expression)
+            Measurement(name, engine, baseline, native_time, form, fallback, expression, pending)
         )
     return measurements

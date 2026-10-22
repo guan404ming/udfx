@@ -5,7 +5,7 @@ import pyarrow
 
 from bench.speed.data import batched, caller
 from bench.speed.fingerprint import fingerprint
-from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
+from bench.speed.timing import Measurement, fallback_in_plan, pending_share, timed, verify
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED
 from udfx.backends.datafusion import DataFusionBackend
@@ -47,7 +47,12 @@ def measure(
             baseline,
             native_time,
             "arrow",
-            fallback_in_plan(backend, program),
+            fallback_in_plan(native, backend.name),
             expression,
+            pending_share(
+                backend,
+                program,
+                lambda expr: frame.select(expr).to_arrow_table().column(0).to_pylist(),
+            ),
         )
     ]

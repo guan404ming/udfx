@@ -12,14 +12,16 @@ def report(
     load = " ".join(f"{value:.2f}" for value in os.getloadavg())
     lines = [
         f"rows {row_count}, best of {repeats}, load average {load}\n",
-        "| case | engine | python form | python s | udfx s | speedup | fallback in plan | K2 |",
-        "|---|---|---|---|---|---|---|---|",
+        "| case | engine | python form | python s | udfx s | speedup | fallback in plan"
+        " | pending share | K2 |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for item in sorted(measurements, key=lambda item: item.speedup):
         verdict = "PASS" if item.speedup >= 1.0 else "FAIL"
         lines.append(
             f"| {item.case} | {item.engine} | {item.form} | {item.python:.6f} | {item.native:.6f}"
-            f" | {item.speedup:.2f}x | {str(item.fallback).lower()} | {verdict} |"
+            f" | {item.speedup:.2f}x | {str(item.fallback).lower()}"
+            f" | {item.pending:.2%} | {verdict} |"
         )
     lines.extend(
         [

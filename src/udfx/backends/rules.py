@@ -5,7 +5,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from udfx.ir import Call
+from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
+from udfx.ir import Call, Node
 from udfx.ops.registry import OpKey
 from udfx.types import Kind
 
@@ -29,10 +30,19 @@ BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
 }
 
 
+def fold_predicate(node: Node) -> Node:
+    if not isinstance(node, Call) or node.op.key not in BOOLEAN_RULES:
+        return fold(node)
+    arguments = tuple(fold_predicate(argument) for argument in node.arguments)
+    builders = {"not": negate, "and": conjunction, "or": disjunction}
+    return builders[node.op.name](*arguments)
+
+
 @dataclass(frozen=True)
 class RuleOptions:
     literals: tuple[int, ...] = ()
     facts: Mapping[str, Callable[[Call], object]] = field(default_factory=dict)
+    guards: Mapping[int, Callable[[Any], Any]] = field(default_factory=dict)
 
 
 class RuleSet[E]:
@@ -46,6 +56,7 @@ class RuleSet[E]:
         *kinds: Kind,
         literals: tuple[int, ...] = (),
         facts: Mapping[str, Callable[[Call], object]] | None = None,
+        guards: Mapping[int, Callable[[Any], Any]] | None = None,
     ) -> Callable[[Callable[P, RuleResult[E]]], Callable[P, RuleResult[E]]]:
         key = OpKey(name, kinds)
 
@@ -53,7 +64,7 @@ class RuleSet[E]:
             if key in self._rules:
                 raise ValueError(f"duplicate rule {key}")
             self._rules[key] = rule
-            self._options[key] = RuleOptions(literals, facts or {})
+            self._options[key] = RuleOptions(literals, facts or {}, guards or {})
             return rule
 
         return decorate

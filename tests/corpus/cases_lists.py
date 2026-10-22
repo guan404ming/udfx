@@ -3,6 +3,7 @@ from __future__ import annotations
 from udfx.types import INT, STR, list_of
 
 from . import Case
+from .cases_list_sets import CASES as SET_CASES
 
 STOPWORDS = frozenset({"a", "the", "of"})
 
@@ -138,24 +139,6 @@ def unique_characters(text: str) -> int:
     return len(set(text))
 
 
-def jaccard(left: str, right: str) -> float:
-    first = set(left.split())
-    second = set(right.split())
-    return len(first & second) / len(first | second)
-
-
-def set_membership(left: str, right: str) -> bool:
-    return "a" in (set(left.split()) ^ set(right.split()))
-
-
-def set_chained(left: str, right: str) -> list[str]:
-    return sorted((set(left) | set(right)) - (set(left) & set(right)))
-
-
-def set_iterable_methods(left: str, right: str) -> int:
-    return len(set(left).intersection().union(right, left.split()).difference(right.split()))
-
-
 def repeated_words(text: str) -> list[str]:
     return text.split() * 3
 
@@ -249,12 +232,4 @@ CASES.extend(
     ]
 )
 
-CASES.extend(
-    Case(function.__name__, function, {"left": STR.or_none(), "right": STR.or_none()}, "native")
-    for function in (
-        jaccard,
-        set_membership,
-        set_chained,
-        set_iterable_methods,
-    )
-)
+CASES.extend(SET_CASES)

@@ -1,11 +1,12 @@
 import math
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from udfx.backends.base import Backend
-from udfx.ir import FALSE
+from udfx.backends.lowering import lower_program
 from udfx.program import Program
 from udfx.testing.outcome import same
 
@@ -19,6 +20,7 @@ class Measurement:
     form: str
     fallback: bool
     fingerprint: str
+    pending: float
 
     @property
     def speedup(self) -> float:
@@ -34,8 +36,25 @@ def timed(action: Callable[[], object], repeats: int) -> float:
     return best
 
 
-def fallback_in_plan(backend: Backend[Any], program: Program) -> bool:
-    return backend.lower(program.value).exact is not None or program.fault != FALSE
+def fallback_in_plan(expr: Any, engine: str) -> bool:
+    if engine == "polars":
+        return '"AnonymousFunction":' in expr.meta.serialize(format="json")
+    text = str(expr)
+    if engine == "duckdb":
+        text = re.sub(r"'(?:''|[^'])*'", "", text)
+    if engine == "datafusion":
+        text = re.sub(r'Utf8\("(?:\\.|[^"\\])*"\)', "", text)
+    return bool(re.search(r"udfx fallback [^()]+\(|\bpatch\(", text))
+
+
+def pending_share(
+    backend: Backend[Any], program: Program, evaluate: Callable[[Any], Sequence[object]]
+) -> float:
+    exact = lower_program(backend, program).exact
+    if exact is None:
+        return 0.0
+    flags = evaluate(exact)
+    return sum(flag is not True for flag in flags) / len(flags) if flags else 0.0
 
 
 def verify(engine: str, case: str, actual: Sequence[object], expected: Sequence[object]) -> None:
