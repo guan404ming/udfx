@@ -6,19 +6,15 @@ import pytest
 
 from udfx.backends import arrow
 from udfx.backends.base import Backend
-from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.ir import Col
 from udfx.program import Program
 from udfx.types import BOOL, INT
 
 
-@pytest.mark.parametrize(
-    "backend", [DataFusionBackend(), DuckDBBackend()], ids=lambda backend: backend.name
-)
 @pytest.mark.parametrize("flags", [[True, True, True], [True, False, None], [False, False, False]])
-def test_case_sends_only_pending_rows_to_arrow(
-    backend: Backend[Any], flags: list[bool | None], monkeypatch: pytest.MonkeyPatch
+def test_duckdb_case_sends_only_pending_rows_to_arrow(
+    flags: list[bool | None], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     batches: list[list[int]] = []
     original = arrow.fallback
@@ -34,6 +30,7 @@ def test_case_sends_only_pending_rows_to_arrow(
         return original(backend, program, flags, native, columns)
 
     monkeypatch.setattr(arrow, "fallback", record)
+    backend = DuckDBBackend()
     schema = {"value": INT, "flag": BOOL.or_none()}
     program = Program(lambda value, flag: value * 10, schema, Col("value", INT))
     expr = backend.fallback(

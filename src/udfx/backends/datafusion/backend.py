@@ -89,13 +89,9 @@ class DataFusionBackend(Backend[Expr]):
             f"udfx fallback {next(FALLBACKS)}",
         )
         packed = functions.named_struct(
-            [
-                (EXACT, exact),
-                (NATIVE, self.literal(Lit(None, program.result))),
-                *((name, column(name)) for name in program.schema),
-            ]
+            [(EXACT, exact), (NATIVE, native), *((name, column(name)) for name in program.schema)]
         )
-        return self.select(exact, native, slow(packed.cast(fields)))
+        return slow(packed.cast(fields))
 
     def evaluate(
         self, exprs: Sequence[Expr], schema: Mapping[str, Type], rows: Sequence[Row]
