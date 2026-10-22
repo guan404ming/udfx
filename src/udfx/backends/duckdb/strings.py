@@ -67,28 +67,22 @@ def recase(value: Expression, method: str) -> RuleResult[Expression]:
     return expr if exact is None else Lowered(expr, exact)
 
 
-@RULES(".strip", Kind.STR)
-@RULES(".strip", Kind.STR, Kind.STR)
-def strip(text: Expression, characters: Expression | None = None) -> Expression:
-    if characters is None:
-        return trim(text, whitespace(), "strip")
-    return function("trim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
+NATIVE_TRIMS = {"strip": "trim", "lstrip": "ltrim", "rstrip": "rtrim"}
 
 
-@RULES(".lstrip", Kind.STR)
-@RULES(".lstrip", Kind.STR, Kind.STR)
-def lstrip(text: Expression, characters: Expression | None = None) -> Expression:
-    if characters is None:
-        return trim(text, whitespace(), "lstrip")
-    return function("ltrim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
+def strip_text(
+    text: Expression, characters: Expression | str | None = None, *, method: str
+) -> Expression:
+    if not isinstance(characters, Expression):
+        return text if characters == "" else trim(text, characters or whitespace(), method)
+    return function(
+        NATIVE_TRIMS[method], text, duckdb.CoalesceOperator(characters, constant(whitespace()))
+    )
 
 
-@RULES(".rstrip", Kind.STR)
-@RULES(".rstrip", Kind.STR, Kind.STR)
-def rstrip(text: Expression, characters: Expression | None = None) -> Expression:
-    if characters is None:
-        return trim(text, whitespace(), "rstrip")
-    return function("rtrim", text, duckdb.CoalesceOperator(characters, constant(whitespace())))
+for _method in NATIVE_TRIMS:
+    RULES(f".{_method}", Kind.STR)(partial(strip_text, method=_method))
+    RULES(f".{_method}", Kind.STR, Kind.STR, literals=(1,))(partial(strip_text, method=_method))
 
 
 def find(text: Expression, pattern: Expression) -> Expression:

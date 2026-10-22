@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+
 import duckdb
 from duckdb import Expression
 
@@ -14,7 +16,7 @@ from udfx.backends.duckdb.rules import (
     when,
 )
 from udfx.backends.duckdb.slicing import SEQUENCE
-from udfx.backends.duckdb.strings import join, lstrip, single_code_point_clusters
+from udfx.backends.duckdb.strings import join, single_code_point_clusters, strip_text
 from udfx.backends.registration import Lowered
 from udfx.semantics.facts import separator_is_none, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
@@ -77,7 +79,7 @@ SPLIT = SplitPrimitives(
         ),
         constant(""),
     ),
-    lstrip=lstrip,
+    lstrip=partial(strip_text, method="lstrip"),
     is_null=Expression.isnull,
     reverse=lambda value: function("reverse", value),
     restore=lambda values: function(
