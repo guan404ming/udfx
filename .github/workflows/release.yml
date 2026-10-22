@@ -30,8 +30,10 @@ jobs:
       - run: uv run pytest
         env:
           HYPOTHESIS_PROFILE: ci
+          UDFX_TESTS: full
       - run: uv run pytest -m corpus
         env:
           HYPOTHESIS_PROFILE: ci
+          UDFX_TESTS: full
       - run: uv build --no-sources
       - uses: pypa/gh-action-pypi-publish@release/v1
