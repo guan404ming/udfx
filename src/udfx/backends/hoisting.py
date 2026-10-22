@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from functools import cache
 
 from udfx.ir import Call, Col, Comprehension, Element, Guarded, If, ListValue, Node
+from udfx.types import Kind
 
 
 def children(node: Node) -> tuple[Node, ...]:
@@ -49,6 +50,7 @@ def invariant(node: Comprehension, elements: Mapping[Node, object]) -> Node | No
     def visit(part: Node) -> None:
         if (
             isinstance(part, Call)
+            and part.type.kind is Kind.LIST
             and free(part) <= free(node)
             and reads_input(part)
             and part not in elements
@@ -60,6 +62,5 @@ def invariant(node: Comprehension, elements: Mapping[Node, object]) -> Node | No
 
     for part in (node.value, node.condition, node.fault):
         visit(part)
-    if not found:
-        return None
-    return max(found, key=lambda part: (found[part], size(part)))
+    best = max(found, key=lambda part: (found[part], size(part)), default=None)
+    return best if best is not None and found[best] > 1 else None

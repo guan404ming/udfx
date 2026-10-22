@@ -5,7 +5,7 @@ from conftest import backend_params
 
 from udfx.backends.base import Backend
 from udfx.backends.hoisting import invariant
-from udfx.ir import FALSE, TRUE, Col, Comprehension, Element, Node
+from udfx.ir import FALSE, TRUE, Col, Comprehension, Element, Lit, Node
 from udfx.ops import apply
 from udfx.types import BOOL, INT, STR, list_of
 
@@ -42,11 +42,15 @@ def test_nested_comprehension_lowering_evaluates(backend: Backend[Any]) -> None:
         ) == [[expected]]
 
 
-def test_invariant_skips_inner_elements_and_picks_outer_calls() -> None:
+def test_invariant_picks_repeated_outer_list_calls() -> None:
     words = apply(".split", Col("text", STR))
     element = Element("index", INT)
-    value = apply("__getitem__", words, element)
-    node = Comprehension(Col("indexes", list_of(INT)), element, value, TRUE, FALSE)
+    word = apply("__getitem__", words, element)
+    once = Comprehension(Col("indexes", list_of(INT)), element, word, TRUE, FALSE)
+    node = Comprehension(
+        Col("indexes", list_of(INT)), element, word, apply("__eq__", word, Lit("a", STR)), FALSE
+    )
+    assert invariant(once, {}) is None
     assert invariant(node, {}) == words
     assert invariant(node, {words: None}) is None
     assert invariant(nested(Col("values", list_of(list_of(STR))), 2), {}) is None
