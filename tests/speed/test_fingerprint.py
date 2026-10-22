@@ -8,6 +8,7 @@ from conftest import backend_params
 
 from bench.speed.fingerprint import expression_text, fingerprint
 from udfx.backends.base import Backend
+from udfx.backends.duckdb import DuckDBBackend
 from udfx.frontend import trace
 from udfx.ir import Col
 from udfx.program import Program
@@ -130,3 +131,17 @@ def test_duckdb_fingerprint_strips_fallback_identity() -> None:
     second = duckdb.FunctionExpression(f"udfx fallback {'b' * 64} 23", literal)
     assert expression_text(first, "duckdb") == expression_text(second, "duckdb")
     assert str(literal) in expression_text(first, "duckdb")
+
+
+def test_duckdb_fingerprint_separates_python_programs() -> None:
+    backend = DuckDBBackend()
+    programs = [
+        trace(lambda a, b: len(set(a.split()) & set(b.split())), {"a": STR, "b": STR}),
+        trace(lambda x, y: len(set(x.split()) & set(y.split())), {"x": STR, "y": STR}),
+        trace(lambda a, b: len(set(a.split()) | set(b.split())), {"a": STR, "b": STR}),
+    ]
+    assert all(backend.native_program(program) is None for program in programs)
+    fingerprints = [fingerprint(backend, program) for program in programs]
+    assert fingerprints[0] == fingerprints[1]
+    assert fingerprints[0] != fingerprints[2]
+    assert all(value.endswith(" in python") for value in fingerprints)
