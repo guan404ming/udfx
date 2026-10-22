@@ -19,6 +19,8 @@ from udfx.testing.strategies import (
 )
 from udfx.types import INT, Kind, Type
 
+NEUTRAL: dict[Kind, object] = {Kind.FLOAT: 1.0, Kind.INT: 1, Kind.STR: "a"}
+
 CASES = [
     pytest.param(backend, op, id=f"{label}-{op}", marks=pytest.mark.xdist_group(label))
     for label, backend in backends()
@@ -41,7 +43,7 @@ def test_op_matches_python(backend: Backend[Any], op: Op) -> None:
     def draw(data: st.DataObject) -> tuple[list[Row], dict[int, object]]:
         rows = data.draw(batches(schema))
         neutral = tuple(
-            1.0 if parameter.kind is Kind.FLOAT else 1 if parameter.kind is Kind.INT else value
+            NEUTRAL.get(parameter.kind, value)
             for parameter, value in zip(op.parameters, rows[0], strict=True)
         )
         for index, parameter in enumerate(op.parameters):
