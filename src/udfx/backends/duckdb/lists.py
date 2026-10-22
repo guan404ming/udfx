@@ -4,10 +4,10 @@ import duckdb
 from duckdb import Expression
 
 from udfx.backends.duckdb.numbers import checked_int64
-from udfx.backends.duckdb.rules import RULES, constant, function, length
+from udfx.backends.duckdb.rules import RULES, constant, function, length, when
 from udfx.backends.duckdb.strings import list_contains
-from udfx.backends.registration import Lowered
-from udfx.semantics.lists import SET_ORDER_MAX_SIZE
+from udfx.backends.registration import Lowered, register_lists
+from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
@@ -50,24 +50,39 @@ def ordered(value: Expression) -> Expression:
     return function("list_sort", value, constant("ASC"), constant("NULLS LAST"))
 
 
-@RULES("set_size", Kind.LIST)
-def distinct_count(value: Expression) -> Expression:
-    return length(function("list_distinct", value))
-
-
-@RULES("set_list", Kind.LIST)
-def distinct(value: Expression) -> Lowered[Expression]:
-    result = function("list_distinct", value)
-    return Lowered(result, length(result) <= constant(SET_ORDER_MAX_SIZE))
-
-
-@RULES("sorted_set", Kind.LIST)
-def ordered_distinct(value: Expression) -> Expression:
-    return function(
-        "list_sort", function("list_distinct", value), constant("ASC"), constant("NULLS LAST")
-    )
-
-
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)
 def float_contains(value: Expression, item: Expression) -> Lowered[Expression]:
     return Lowered(list_contains(value, item), ~function("isnan", item))
+
+
+PRIMITIVES = ListPrimitives(
+    literal=constant,
+    when=when,
+    length=length,
+    repeat=lambda value, count: function(
+        "flatten", function("list_resize", function("list_value", value), count, value)
+    ),
+    range=lambda start, stop, step: function("range", start, stop, step),
+)
+
+
+@RULES("list", Kind.STR)
+def characters(value: Expression) -> Expression:
+    return when(
+        value == constant(""),
+        function("list_value").cast("VARCHAR[]"),
+        function("string_split", value, constant("")),
+    )
+
+
+register_lists(
+    RULES,
+    PRIMITIVES,
+    SetPrimitives(
+        literal=constant,
+        length=length,
+        distinct=lambda value: function("list_distinct", value),
+        sort=lambda value: function("list_sort", value, constant("ASC"), constant("NULLS LAST")),
+        contains=list_contains,
+    ),
+)

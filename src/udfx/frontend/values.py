@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from types import CodeType, ModuleType
 
 from udfx.errors import Unsupported
-from udfx.ir import Col, Lit, Node
+from udfx.ir import Col, Element, Lit, Node
 
 MAX_UNROLL = 64
 
@@ -62,6 +62,9 @@ class Iterator:
     items: tuple[Item, ...]
     position: int = 0
     source: Node | None = None
+    element: Element | None = None
+    value: Item | None = None
+    requires_native: bool = False
 
 
 @dataclass(frozen=True)

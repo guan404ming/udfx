@@ -16,6 +16,13 @@ from udfx.semantics.datetimes import (
     shift_datetime,
     shift_overflows,
 )
+from udfx.semantics.lists import (
+    ListPrimitives,
+    SetPrimitives,
+    native_range,
+    native_set,
+    repeat_list,
+)
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -308,3 +315,27 @@ def register_datetime_arithmetic[E](
     rules("datetime_shift_overflows", Kind.DATETIME, Kind.INT)(
         lambda value, offset: shift_overflows(primitives, primitives.to_microseconds(value), offset)
     )
+
+
+def register_lists[E](rules: RuleSet[E], primitives: ListPrimitives, sets: SetPrimitives) -> None:
+    rules("__mul__", Kind.LIST, Kind.INT)(
+        lambda value, count: Lowered(*repeat_list(primitives, value, count))
+    )
+    rules("__mul__", Kind.INT, Kind.LIST)(
+        lambda count, value: Lowered(*repeat_list(primitives, value, count))
+    )
+    rules("range", Kind.INT)(
+        lambda stop: Lowered(
+            *native_range(primitives, primitives.literal(0), stop, primitives.literal(1))
+        )
+    )
+    rules("range", Kind.INT, Kind.INT, Kind.INT)(
+        lambda start, stop, step: Lowered(*native_range(primitives, start, stop, step))
+    )
+    for operation in ("set_size", "set_list", "sorted_set"):
+        for floating in (False, True):
+            rules(operation + ("_float" if floating else ""), Kind.LIST)(
+                lambda value, operation=operation, floating=floating: Lowered(
+                    *native_set(sets, value, operation, floating)
+                )
+            )

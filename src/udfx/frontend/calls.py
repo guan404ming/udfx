@@ -112,7 +112,7 @@ def iterable_node(item: Item) -> Node:
     if isinstance(item, Generator):
         return item.node
     if isinstance(item, Set):
-        return invoke("set_list", [item.node], TypeError)[0]
+        return sequence_call("list", item)[0]
     if isinstance(item, Value) and item.container in (tuple, list):
         return item.node
     return node_of(item)
@@ -385,9 +385,17 @@ def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
         }.get(name)
         if operation is None:
             raise Unsupported(f"{name} of a set")
+        if (
+            item.node.type.item is not None
+            and item.node.type.item.kind is Kind.FLOAT
+            and operation in {"set_size", "set_list", "sorted_set"}
+        ):
+            operation += "_float"
         return invoke(operation, [item.node], TypeError)
     source = iterable_node(item)
     faults = [Fault(TypeError, apply("is_none", source))] if source.type.nullable else []
+    if name == "list" and source.type.kind is Kind.LIST:
+        return source, faults
     if name in {"any", "all"} and source.type.item is not None and source.type.item != BOOL:
         if (
             isinstance(source, Lit)

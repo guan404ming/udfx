@@ -20,7 +20,7 @@ def for_loop(s: str) -> str:
 
 
 def comprehension(s: str) -> int:
-    return len([character for character in s])
+    return len([character for word in s.split() for character in word])
 
 
 def while_loop(a: int) -> int:

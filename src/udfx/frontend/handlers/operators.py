@@ -11,18 +11,20 @@ from udfx.frontend.constants import (
     annotation,
     constant,
     constant_value,
+    is_scalar,
     lookup,
     type_comparison,
 )
 from udfx.frontend.context import Context
 from udfx.frontend.datetimes import datetime_binary
 from udfx.frontend.formatting import format_percent
-from udfx.frontend.logic import fold, negate
+from udfx.frontend.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Row, Set, Slice, Tuple, Value
-from udfx.ir import Lit, lit
+from udfx.ir import FALSE, TRUE, Lit, Node, lit
 from udfx.ops import Fault
+from udfx.semantics.lists import matches_itself
 from udfx.types import Kind
 
 BINARY_OPS: dict[str, str] = {
@@ -140,6 +142,9 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
     if isinstance(container, Opaque) and isinstance(container.value, dict):
         node, faults = lookup(dict.fromkeys(container.value, True), node_of(item), lit(False))
         return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
+    if isinstance(container, Tuple):
+        node, faults = tuple_membership(item, container)
+        return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
     members = container.node if isinstance(container, Value | Set) else node_of(container)
     node, faults = invoke("__contains__", [members, node_of(item)], TypeError)
     return emit(context, rest, Value(negate(node) if instruction.arg else node), faults)
@@ -152,9 +157,11 @@ def binary_subscr(context: Context, state: State, instruction: dis.Instruction) 
         position = constant_value(index)
         if not isinstance(position, int):
             raise Unsupported("tuple index must be an integer literal", context.where(state))
-        if -len(container.items) <= position < len(container.items):
-            return [rest.push(container.items[position]).advance()]
-        return emit(context, rest, Value(lit(None)), [Fault(IndexError, lit(True))])
+        try:
+            item = container.items[position]
+        except IndexError:
+            return [context.raised(rest, IndexError)]
+        return [rest.push(item).advance()]
     if isinstance(container, Row):
         if not (
             isinstance(index, Value)
@@ -199,3 +206,46 @@ def binary_slice(context: Context, state: State, instruction: dis.Instruction) -
 
 def is_none_constant(item: Item) -> bool:
     return isinstance(item, Value) and isinstance(item.node, Lit) and item.node.value is None
+
+
+def tuple_membership(item: Item, container: Tuple) -> tuple[Node, list[Fault]]:
+    if any(not isinstance(candidate, Tuple) for candidate in container.items):
+        raise Unsupported("membership in a dynamic tuple")
+    if isinstance(item, Value) and item.container is not tuple:
+        return FALSE, []
+    if any(
+        not is_scalar(constant_value(part))
+        for candidate in container.items
+        if isinstance(candidate, Tuple)
+        for part in candidate.items
+    ):
+        raise Unsupported("tuple membership requires scalar constants")
+    candidates = tuple(constant_value(candidate) for candidate in container.items)
+    try:
+        value = constant_value(item)
+    except Unsupported:
+        pass
+    else:
+        if not isinstance(value, tuple) or not all(is_scalar(member) for member in value):
+            raise Unsupported("tuple membership requires scalar values")
+        return lit(value in candidates), []
+    if not isinstance(item, Tuple):
+        value = constant_value(item)
+        if not isinstance(value, tuple):
+            return FALSE, []
+        item = Tuple(tuple(constant(member) for member in value))
+    result: Node = FALSE
+    faults: list[Fault] = []
+    for candidate in container.items:
+        if not isinstance(candidate, Tuple) or len(candidate.items) != len(item.items):
+            continue
+        matched: Node = TRUE
+        for left, right in zip(item.items, candidate.items, strict=True):
+            value = constant_value(right)
+            if not matches_itself(value):
+                raise Unsupported("non-reflexive values in dynamic tuple membership")
+            test, pending = invoke("__eq__", [node_of(left), node_of(right)], TypeError)
+            matched = conjunction(matched, test)
+            faults.extend(pending)
+        result = disjunction(result, matched)
+    return result, faults

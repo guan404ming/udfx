@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
-from udfx.ir import FALSE, TRUE, Call, If, Lit, Node
+from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, If, ListValue, Lit, Node
 from udfx.ops import apply
 from udfx.semantics.text import simplify_text
 from udfx.types import Kind, Type, fits, unify
@@ -17,6 +17,8 @@ def fold(node: Node) -> Node:
     folded = simplify_text(Call(node.op, tuple(fold(argument) for argument in node.arguments)))
     values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]
     if len(values) < len(folded.arguments):
+        return folded
+    if folded.type.kind is Kind.LIST and folded.op.name in {"range", "__mul__"}:
         return folded
     try:
         value = folded.op.reference(*values)
@@ -111,3 +113,20 @@ def retype(node: Node, type: Type) -> Node:
     if isinstance(node, Lit) and node.type.kind is Kind.NONE:
         return Lit(None, type.or_none())
     return node
+
+
+def depends_on(node: Node, element: Element) -> bool:
+    match node:
+        case Element():
+            return node == element
+        case Call():
+            children = node.arguments
+        case If():
+            children = (node.condition, node.then, node.orelse)
+        case ListValue():
+            children = node.items
+        case Comprehension():
+            children = (node.source, node.value, node.condition, node.fault)
+        case _:
+            return False
+    return any(depends_on(child, element) for child in children)

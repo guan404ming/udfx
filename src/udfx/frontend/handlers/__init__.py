@@ -1,4 +1,5 @@
 from udfx.frontend.handlers import (
+    closures,
     exceptions,
     flow,
     formatting,
@@ -10,6 +11,7 @@ from udfx.frontend.handlers import (
 from udfx.frontend.machine import explore
 
 __all__ = [
+    "closures",
     "exceptions",
     "explore",
     "flow",

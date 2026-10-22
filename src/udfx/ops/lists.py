@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import operator
 
+from udfx.ir import Node, lit
 from udfx.ops.core import is_none
-from udfx.ops.registry import Op, register
+from udfx.ops.registry import Fault, Op, apply, register
 from udfx.ops.strings import out_of_range, slice_of
-from udfx.semantics.lists import set_list, set_size, sorted_set
+from udfx.semantics.lists import range_list, set_list, set_size, sorted_set
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
 
 for item in (STR, INT, FLOAT, BOOL):
     sequence = list_of(item)
     register(Op("list", (sequence,), sequence, list))
     register(Op("__add__", (sequence, sequence), sequence, operator.add))
+    register(Op("__mul__", (sequence, INT), sequence, operator.mul))
+    register(Op("__mul__", (INT, sequence), sequence, operator.mul))
     if item != STR:
         register(Op("slice", (sequence, INT.or_none(), INT.or_none()), sequence, slice_of))
         register(Op("len", (sequence,), INT, len))
@@ -28,6 +31,17 @@ register(Op("sum", (list_of(INT),), INT, sum))
 register(Op("sum", (list_of(BOOL),), INT, sum))
 register(Op("sum_float", (list_of(FLOAT),), FLOAT, sum))
 register(Op("sorted", (list_of(STR),), list_of(STR), sorted))
-register(Op("set_size", (list_of(STR),), INT, set_size))
-register(Op("set_list", (list_of(STR),), list_of(STR), set_list))
-register(Op("sorted_set", (list_of(STR),), list_of(STR), sorted_set))
+for item in (STR, INT, FLOAT, BOOL):
+    suffix = "_float" if item == FLOAT else ""
+    register(Op(f"set_size{suffix}", (list_of(item),), INT, set_size))
+    register(Op(f"set_list{suffix}", (list_of(item),), list_of(item), set_list))
+    register(Op(f"sorted_set{suffix}", (list_of(item),), list_of(item), sorted_set))
+
+
+def range_faults(start: Node, stop: Node, step: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("__eq__", step, lit(0))),)
+
+
+register(Op("list", (STR,), list_of(STR), list))
+register(Op("range", (INT,), list_of(INT), range_list))
+register(Op("range", (INT, INT, INT), list_of(INT), range_list, range_faults))

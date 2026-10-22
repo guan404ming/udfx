@@ -58,6 +58,7 @@ class Comprehension:
     value: Node
     condition: Node
     fault: Node
+    requires_native: bool = False
 
     @property
     def type(self) -> Type:

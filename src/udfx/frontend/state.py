@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from udfx.errors import Unsupported
-from udfx.frontend.values import Generator, Item, Row
+from udfx.frontend.values import Generator, Item, Iterator, Row
 from udfx.ir import Node
 
 
@@ -26,7 +26,7 @@ class State:
         return self.stack[cut:], replace(self, stack=self.stack[:cut])
 
     def store(self, name: str, item: Item) -> State:
-        if isinstance(item, Generator):
+        if isinstance(item, Generator | Iterator):
             raise Unsupported("generator must be consumed immediately")
         if isinstance(item, Row):
             raise Unsupported("assignment of a row")

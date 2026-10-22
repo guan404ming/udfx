@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
 from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
 from typing import cast
 
 from udfx.errors import Unsupported
-from udfx.frontend.calls import invoke, known_op, none_test
+from udfx.frontend.calls import invoke, known_op, node_of, none_test
 from udfx.frontend.logic import choose, conjunction, negate
-from udfx.frontend.values import Function, Item, Opaque, RuntimeType, Value, describe, named
+from udfx.frontend.values import Function, Item, Opaque, RuntimeType, Tuple, Value, describe, named
 from udfx.ir import TRUE, Col, Lit, Node, lit
 from udfx.ops import Fault
 from udfx.semantics.scalars import PYTHON_TYPES
@@ -90,6 +90,8 @@ def constant_value(item: Item) -> object:
             return container(value) if container is not None else value
         case Opaque(value=value):
             return value
+        case Tuple(items=items):
+            return tuple(constant_value(member) for member in items)
         case _:
             raise Unsupported(f"expected a constant, got {describe(item)}")
 
@@ -147,3 +149,36 @@ def lookup(mapping: object, key: Node, default: Node | None = None) -> tuple[Nod
     if default is not None:
         return choose([*cases, (miss, default)]), faults
     return choose(cases), [*faults, Fault(KeyError, miss)]
+
+
+def dictionary_method(
+    name: str, arguments: Sequence[Item], keywords: Mapping[str, Item]
+) -> tuple[Item, list[Fault]] | None:
+    if (
+        not arguments
+        or not isinstance(arguments[0], Opaque)
+        or not isinstance(arguments[0].value, dict)
+    ):
+        return None
+    owner = arguments[0].value
+    if name == "get" and not keywords:
+        if len(arguments) not in (2, 3):
+            raise Unsupported("dict.get takes one or two arguments")
+        node, faults = lookup(
+            owner,
+            node_of(arguments[1]),
+            node_of(arguments[2]) if len(arguments) == 3 else lit(None),
+        )
+        return Value(node), faults
+    if name in {"keys", "values", "items"}:
+        if len(arguments) != 1 or keywords:
+            raise Unsupported("dict views take no arguments")
+        members = tuple(getattr(owner, name)())
+        if not members:
+            return Tuple(()), []
+        if name == "items":
+            return Tuple(
+                tuple(Tuple(tuple(constant(part) for part in member)) for member in members)
+            ), []
+        return constant(members), []
+    return None

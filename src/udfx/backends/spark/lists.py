@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.registration import Lowered
-from udfx.backends.spark.rules import RULES
+from udfx.backends.registration import Lowered, register_lists
+from udfx.backends.spark.rules import RULES, when
 from udfx.backends.spark.strings import list_contains
-from udfx.semantics.lists import SET_ORDER_MAX_SIZE
+from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
@@ -52,22 +52,44 @@ def ordered(value: Column) -> Column:
     return functions.sort_array(value)
 
 
-@RULES("set_size", Kind.LIST)
-def distinct_count(value: Column) -> Column:
-    return functions.size(functions.array_distinct(value)).cast("long")
-
-
-@RULES("set_list", Kind.LIST)
-def distinct(value: Column) -> Lowered[Column]:
-    result = functions.array_distinct(value)
-    return Lowered(result, functions.size(result) <= SET_ORDER_MAX_SIZE)
-
-
-@RULES("sorted_set", Kind.LIST)
-def ordered_distinct(value: Column) -> Column:
-    return functions.sort_array(functions.array_distinct(value))
-
-
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)
 def float_contains(value: Column, item: Column) -> Lowered[Column]:
     return Lowered(list_contains(value, item), ~functions.isnan(item))
+
+
+def range_values(start: Column, stop: Column, step: Column) -> Column:
+    end = functions.when(start == stop, start).otherwise(
+        stop - functions.when(step > 0, functions.lit(1)).otherwise(functions.lit(-1))
+    )
+    return functions.when(start == stop, functions.array().cast("array<long>")).otherwise(
+        functions.sequence(start, end, step)
+    )
+
+
+PRIMITIVES = ListPrimitives(
+    literal=functions.lit,
+    when=when,
+    length=lambda value: functions.size(value).cast("long"),
+    repeat=lambda value, count: functions.flatten(functions.array_repeat(value, count.cast("int"))),
+    range=range_values,
+)
+
+
+@RULES("list", Kind.STR)
+def characters(value: Column) -> Column:
+    return functions.when(value == "", functions.array().cast("array<string>")).otherwise(
+        functions.split(value, "", -1)
+    )
+
+
+register_lists(
+    RULES,
+    PRIMITIVES,
+    SetPrimitives(
+        literal=functions.lit,
+        length=lambda value: functions.size(value).cast("long"),
+        distinct=functions.array_distinct,
+        sort=functions.sort_array,
+        contains=functions.array_contains,
+    ),
+)

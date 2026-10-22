@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import struct
 from collections.abc import Mapping
 from datetime import datetime
 
@@ -177,6 +178,14 @@ def regex_constants(name: str) -> st.SearchStrategy[dict[int, object]]:
 
 LIST_TRAPS = (("b", "a", "b"), ("\ue000", "\U00010000"), ("z", "Z", "ä", "a", ""))
 
+FLOAT_LIST_TRAPS = (
+    (-0.0, 0.0),
+    (0.0, -0.0),
+    (float("nan"), float("nan")),
+    (1.0, float("-nan")),
+    tuple(struct.unpack("!d", bytes.fromhex("7ff8000000000001"))[0] for _index in range(2)),
+)
+
 PREDICATE_TRAPS = ("Aa " * 10000,)
 
 INT_TRAPS = (0, 1, -1, 2, -2, 3, 5, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
@@ -306,6 +315,8 @@ def _base(type: Type) -> st.SearchStrategy[object]:
             if type.item is None:
                 raise TypeError("list type needs an item type")
             items = st.lists(values(type.item), max_size=5)
+            if type.item.kind is Kind.FLOAT:
+                return st.one_of(st.sampled_from(FLOAT_LIST_TRAPS).map(list), items)
             return (
                 st.one_of(st.sampled_from(LIST_TRAPS).map(list), items)
                 if type.item.kind is Kind.STR

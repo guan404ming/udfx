@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import polars as pl
 
-from udfx.backends.polars.rules import RULES
+from udfx.backends.polars.rules import RULES, when
 from udfx.backends.polars.strings import list_contains
-from udfx.backends.registration import Lowered
-from udfx.semantics.lists import SET_ORDER_MAX_SIZE
+from udfx.backends.registration import Lowered, register_lists
+from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
@@ -48,21 +48,33 @@ def ordered(value: pl.Expr) -> pl.Expr:
     return value.list.sort()
 
 
-@RULES("set_size", Kind.LIST)
-def distinct_count(value: pl.Expr) -> pl.Expr:
-    return value.list.n_unique().cast(pl.Int64)
-
-
-@RULES("set_list", Kind.LIST)
-def distinct(value: pl.Expr) -> Lowered[pl.Expr]:
-    return Lowered(value.list.unique(), value.list.n_unique() <= SET_ORDER_MAX_SIZE)
-
-
-@RULES("sorted_set", Kind.LIST)
-def ordered_distinct(value: pl.Expr) -> pl.Expr:
-    return value.list.unique().list.sort()
-
-
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)
 def float_contains(value: pl.Expr, item: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(list_contains(value, item), item.is_not_nan())
+
+
+PRIMITIVES = ListPrimitives(
+    literal=pl.lit,
+    when=when,
+    length=lambda value: value.list.len().cast(pl.Int64),
+    repeat=lambda value, count: value.repeat_by(count).list.eval(pl.element().explode()),
+    range=pl.int_ranges,
+)
+
+
+@RULES("list", Kind.STR)
+def characters(value: pl.Expr) -> pl.Expr:
+    return value.str.split("")
+
+
+register_lists(
+    RULES,
+    PRIMITIVES,
+    SetPrimitives(
+        literal=pl.lit,
+        length=lambda value: value.list.len().cast(pl.Int64),
+        distinct=lambda value: value.list.unique(),
+        sort=lambda value: value.list.sort(),
+        contains=lambda value, item: value.list.contains(item),
+    ),
+)

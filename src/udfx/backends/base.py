@@ -277,6 +277,8 @@ class Backend[E](ABC):
                 raise Unsupported(f"{self.name} has no list reduction")
             return Lowered(value, self._all(source.exact, cast("E", every(flags))))
         except Unsupported:
+            if node.requires_native:
+                raise
             return Lowered(self.literal(Lit((), node.type)), self.literal(FALSE))
 
     def _exact(self, lowered: Lowered[E]) -> E:

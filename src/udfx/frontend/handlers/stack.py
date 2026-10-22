@@ -101,9 +101,15 @@ def build_container(context: Context, state: State, instruction: dis.Instruction
             return [rest.push(constant({constant_value(item) for item in items})).advance()]
         except Unsupported:
             nodes = tuple(node_of(item) for item in items)
-            if any(node.type != STR for node in nodes):
-                raise Unsupported("set requires string items", context.where(state)) from None
-            return [rest.push(Set(ListValue(nodes, list_of(STR)))).advance()]
+            if any(
+                node.type != nodes[0].type
+                or node.type.kind not in {Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL}
+                for node in nodes
+            ):
+                raise Unsupported(
+                    "set requires matching scalar items", context.where(state)
+                ) from None
+            return [rest.push(Set(ListValue(nodes, list_of(nodes[0].type)))).advance()]
     nodes = tuple(node_of(item) for item in items)
     if nodes and any(node.type != nodes[0].type for node in nodes):
         raise Unsupported("list items must share one type", context.where(state))

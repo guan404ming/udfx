@@ -3,10 +3,10 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.datafusion.rules import RULES
+from udfx.backends.datafusion.rules import RULES, when
 from udfx.backends.datafusion.strings import list_contains
-from udfx.backends.registration import Lowered
-from udfx.semantics.lists import SET_ORDER_MAX_SIZE
+from udfx.backends.registration import Lowered, register_lists
+from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
@@ -48,22 +48,38 @@ def ordered(value: Expr) -> Expr:
     return functions.array_sort(value)
 
 
-@RULES("set_size", Kind.LIST)
-def distinct_count(value: Expr) -> Expr:
-    return functions.cardinality(functions.array_distinct(value)).cast(pa.int64())
-
-
-@RULES("set_list", Kind.LIST)
-def distinct(value: Expr) -> Lowered[Expr]:
-    result = functions.array_distinct(value)
-    return Lowered(result, functions.cardinality(result) <= lit(SET_ORDER_MAX_SIZE))
-
-
-@RULES("sorted_set", Kind.LIST)
-def ordered_distinct(value: Expr) -> Expr:
-    return functions.array_sort(functions.array_distinct(value))
-
-
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)
 def float_contains(value: Expr, item: Expr) -> Lowered[Expr]:
     return Lowered(list_contains(value, item), ~functions.isnan(item) & (item != lit(0.0)))
+
+
+PRIMITIVES = ListPrimitives(
+    literal=lit,
+    when=when,
+    length=lambda value: functions.cardinality(value).cast(pa.int64()),
+    repeat=lambda value, count: functions.flatten(functions.array_repeat(value, count)),
+    range=functions.range,
+)
+
+
+@RULES("list", Kind.STR)
+def characters(value: Expr) -> Expr:
+    return functions.string_to_array(value, lit(None).cast(pa.string()))
+
+
+register_lists(
+    RULES,
+    PRIMITIVES,
+    SetPrimitives(
+        literal=lit,
+        length=lambda value: functions.cardinality(value).cast(pa.int64()),
+        distinct=functions.array_distinct,
+        sort=functions.array_sort,
+        contains=lambda value, item: functions.array_any_match(
+            value,
+            lambda candidate: (
+                (candidate == item) | (functions.isnan(candidate) & functions.isnan(item))
+            ),
+        ),
+    ),
+)

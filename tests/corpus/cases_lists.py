@@ -113,6 +113,55 @@ def unpack_numbers(numbers: list[int]) -> int:
     return first + sum(middle) + last
 
 
+def mapped_characters(text: str) -> list[int]:
+    mapping = {"a": 1, "b": 2, " ": 0}
+    return list(map(lambda character: mapping[character], list(text)))
+
+
+def filtered_words(text: str) -> list[str]:
+    return list(filter(lambda word: len(word) > 1, text.split()))
+
+
+def numbered_words(text: str) -> list[str]:
+    return [str(index) + word for index, word in enumerate(text.split(), 1)]
+
+
+def paired_words(text: str) -> list[str]:
+    return [left + right for left, right in zip(text.split(), ("a", "b"), strict=False)]
+
+
+def word_chunks(text: str) -> list[list[str]]:
+    return [text.split()[index : index + 6] for index in range(0, len(text.split()), 6)]
+
+
+def unique_characters(text: str) -> int:
+    return len(set(text))
+
+
+def repeated_words(text: str) -> list[str]:
+    return text.split() * 3
+
+
+def dictionary_items(text: str) -> list[str]:
+    return [key + str(value) for key, value in {"a": 1, "b": 2}.items() if key in text]
+
+
+def weighted_word_length(text: str) -> int:
+    result = 3
+    for word, weight in zip(text.split(), (1, 2), strict=False):
+        result += len(word) * weight
+    return result
+
+
+def indexed_words(text: str) -> str:
+    result = "prefix:"
+    for index, word in enumerate(text.split()):
+        if word == "a":
+            continue
+        result += str(index) + word
+    return result
+
+
 CASES = [
     Case(function.__name__, function, {"text": STR.or_none()}, "native")
     for function in (
@@ -135,11 +184,21 @@ CASES = [
         unpack_tuple,
         unpack_constant,
         unpack_caught,
+        mapped_characters,
+        filtered_words,
+        numbered_words,
+        paired_words,
+        unique_characters,
+        repeated_words,
+        dictionary_items,
+        weighted_word_length,
+        indexed_words,
     )
 ]
 
 CASES.extend(
     [
+        Case("word_chunks", word_chunks, {"text": STR.or_none()}, "fallback"),
         Case("unpack_pair", unpack_pair, {"pair": list_of(STR).or_none()}, "native"),
         Case("unpack_numbers", unpack_numbers, {"numbers": list_of(INT).or_none()}, "native"),
     ]

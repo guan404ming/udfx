@@ -1,5 +1,6 @@
 # pyright: reportCallIssue=false
 # ruff: noqa: UP032
+import os
 import sys
 from collections.abc import Callable
 
@@ -150,6 +151,31 @@ def test_variadic_comprehension() -> None:
         return helper(text, "train", text)
 
     assert check_function(function, {"text": STR}, PolarsBackend(), [("",), ("a",)]) == []
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda values: [os.path.basename(value) for _index, value in enumerate(values)],
+        lambda values: [
+            left.translate(str.maketrans("a", "A")) + right
+            for left, right in zip(values, ("x", "y"), strict=False)
+        ],
+        lambda values: list(map(lambda value: {"a": "A"}.get(value, value), values)),
+        lambda values: list(filter(lambda value: len(value) > 0, values)),
+        lambda values: len(set([len(value) for value in values])),
+        lambda values: [key + value + values[-1] for key, value in {"a": "x", "b": "y"}.items()],
+    ],
+)
+def test_variadic_iterables(operation: Callable[[tuple[str, ...]], object]) -> None:
+    def helper(*values: str) -> object:
+        return operation(values)
+
+    def function(text: str) -> object:
+        return helper(text, "b")
+
+    rows = [("",), ("a",), ("dir/a",), ("😀",)]
+    assert check_function(function, {"text": STR}, PolarsBackend(), rows) == []
 
 
 def test_replace_count_respects_the_python_signature() -> None:

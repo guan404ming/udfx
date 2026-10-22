@@ -1,15 +1,95 @@
 from __future__ import annotations
 
+import operator
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
 SET_ORDER_MAX_SIZE = 1
+NATIVE_LIST_LIMIT = 10_000
 
 
-def set_size(values: list[str]) -> int:
+def matches_itself(value: object) -> bool:
+    return operator.eq(value, value)
+
+
+def set_size(values: list[Any]) -> int:
     return len(set(values))
 
 
-def set_list(values: list[str]) -> list[str]:
+def set_list(values: list[Any]) -> list[Any]:
     return list(set(values))
 
 
-def sorted_set(values: list[str]) -> list[str]:
+def sorted_set(values: list[Any]) -> list[Any]:
     return sorted(set(values))
+
+
+def range_list(*arguments: int) -> list[int]:
+    return list(range(*arguments))
+
+
+@dataclass(frozen=True)
+class ListPrimitives:
+    literal: Callable[[object], Any]
+    when: Callable[[Any, Any, Any], Any]
+    length: Callable[[Any], Any]
+    repeat: Callable[[Any, Any], Any]
+    range: Callable[[Any, Any, Any], Any]
+
+
+def repeat_list(primitives: ListPrimitives, value: Any, count: Any) -> tuple[Any, Any]:
+    literal = primitives.literal
+    length = primitives.length(value)
+    empty = length == literal(0)
+    capacity = literal(NATIVE_LIST_LIMIT) / primitives.when(empty, literal(1), length)
+    exact = empty | (count <= capacity)
+    safe = primitives.when(exact & ~empty & (count > literal(0)), count, literal(0))
+    return primitives.repeat(value, safe), exact
+
+
+def native_range(primitives: ListPrimitives, start: Any, stop: Any, step: Any) -> tuple[Any, Any]:
+    literal = primitives.literal
+    when = primitives.when
+    limit = literal(NATIVE_LIST_LIMIT)
+    zero = literal(0)
+    exact = (
+        (start >= literal(-NATIVE_LIST_LIMIT))
+        & (start <= limit)
+        & (stop >= literal(-NATIVE_LIST_LIMIT))
+        & (stop <= limit)
+    )
+    exact = exact & (step >= literal(-NATIVE_LIST_LIMIT)) & (step <= limit)
+    start = when(exact, start, zero)
+    stop = when(exact, stop, zero)
+    step = when(exact & (step != zero), step, literal(1))
+    forward = step > zero
+    stop = when((forward & (stop > start)) | (~forward & (stop < start)), stop, start)
+    return primitives.range(start, stop, step), exact
+
+
+@dataclass(frozen=True)
+class SetPrimitives:
+    literal: Callable[[object], Any]
+    length: Callable[[Any], Any]
+    distinct: Callable[[Any], Any]
+    sort: Callable[[Any], Any]
+    contains: Callable[[Any, Any], Any]
+
+
+def native_set(
+    primitives: SetPrimitives, value: Any, operation: str, floating: bool
+) -> tuple[Any, Any]:
+    result = primitives.distinct(value)
+    exact = None
+    if operation == "set_size":
+        result = primitives.length(result)
+    elif operation == "sorted_set":
+        result = primitives.sort(result)
+    else:
+        exact = primitives.length(result) <= primitives.literal(SET_ORDER_MAX_SIZE)
+    if floating:
+        exact = primitives.literal(True) if exact is None else exact
+        for item in (float("nan"), 0.0, -0.0):
+            exact = exact & ~primitives.contains(value, primitives.literal(item))
+    return result, exact

@@ -5,56 +5,46 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
-from types import CodeType, FunctionType, ModuleType
-from typing import cast
+from functools import reduce
+from types import ModuleType
 
 from udfx.errors import Unsupported
-from udfx.frontend.binding import bind_helper, helper_signature
-from udfx.frontend.calls import call, invoke, iterable_node, node_of
+from udfx.frontend.calls import call, invoke, node_of, truth
 from udfx.frontend.constants import (
     constant,
     constant_value,
-    lookup,
     make_translation_table,
     runtime_type,
-    scalar_map,
     type_test,
 )
 from udfx.frontend.context import Context
 from udfx.frontend.datetimes import call_datetime, duration_attribute
-from udfx.frontend.frozen import closure
-from udfx.frontend.handlers.iteration import comprehension, source_of
-from udfx.frontend.machine import emit, explore, handles
+from udfx.frontend.handlers.closures import inline
+from udfx.frontend.handlers.iteration import validate_fault_handlers
+from udfx.frontend.iterables import call_iterable, indexed, iterator_of, source_of
+from udfx.frontend.logic import choose, conjunction, disjunction
+from udfx.frontend.machine import emit, handles
 from udfx.frontend.paths import call_path
 from udfx.frontend.regex import call_regex
-from udfx.frontend.state import Return, State, Step
+from udfx.frontend.state import Raise, State, Step
 from udfx.frontend.values import (
     NULL,
-    Cell,
     Duration,
     Function,
     Generator,
     Item,
-    Iterator,
     Match,
     Method,
     Null,
     Opaque,
     Row,
-    Set,
     Tuple,
     Value,
     describe,
 )
-from udfx.ir import Lit, lit
+from udfx.ir import FALSE, TRUE, Comprehension, Node, lit
 from udfx.semantics.datetimes import ATTRIBUTES
-from udfx.types import STR, Kind
-
-DEFAULTS = 0x01
-KEYWORD_DEFAULTS = 0x02
-CLOSURE = 0x08
-ANNOTATIONS = 0x04
-MAX_DEPTH = 32
+from udfx.types import Kind
 
 
 @handles("PUSH_NULL")
@@ -87,7 +77,7 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             attribute = Opaque(datetime.strptime)
         case Opaque(value=python_type) if python_type is str and name == "maketrans":
             attribute = Opaque(str.maketrans)
-        case Opaque(value=dict()) if name == "get" and method:
+        case Opaque(value=dict()) if name in {"get", "keys", "values", "items"} and method:
             return [rest.push(Method(name), owner).advance()]
         case Opaque(value=re.Pattern() as pattern):
             attribute = Opaque(getattr(pattern, name, None))
@@ -177,6 +167,12 @@ def dispatch_call(
         raise Unsupported("passing a row to a call", context.where(rest))
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments, keywords)
+    if (
+        isinstance(callee, Opaque)
+        and (callee.value is map or callee.value is filter)
+        and not keywords
+    ):
+        return transformed(context, rest, callee.value is filter, arguments)
     special = (
         call_datetime(callee, arguments, keywords)
         or call_path(callee, arguments, keywords)
@@ -185,156 +181,70 @@ def dispatch_call(
     if special is not None:
         item, faults = special
         return emit(context, rest, item, faults)
+    try:
+        iterable = call_iterable(callee, arguments, keywords)
+    except (TypeError, ValueError) as error:
+        return [context.raised(rest, type(error))]
+    if iterable is not None:
+        item, faults = iterable
+        return emit(context, rest, item, faults)
     if isinstance(callee, Opaque) and not keywords:
         if callee.value is str.maketrans:
             item, faults = make_translation_table(arguments)
             return emit(context, rest, item, faults)
-        if callee.value is set and len(arguments) == 1:
-            source = iterable_node(arguments[0])
-            if source.type.item != STR:
-                raise Unsupported("set requires list[str]", context.where(rest))
-            node, faults = invoke("list", [source], TypeError)
-            return emit(context, rest, Set(node), faults)
         if callee.value is type and len(arguments) == 1:
             return [rest.push(runtime_type(arguments[0])).advance()]
         if callee.value is isinstance and len(arguments) == 2:
             test = type_test(runtime_type(arguments[0]), constant_value(arguments[1]), True)
             return [rest.push(Value(test)).advance()]
-    if isinstance(callee, Method) and callee.name == "get" and arguments and not keywords:
-        owner, *parameters = arguments
-        if isinstance(owner, Opaque) and isinstance(owner.value, dict):
-            if len(parameters) not in (1, 2):
-                raise Unsupported("dict.get takes one or two arguments", context.where(rest))
-            key, *defaults = map(node_of, parameters)
-            node, faults = lookup(owner.value, key, defaults[0] if defaults else lit(None))
-            return emit(context, rest, Value(node), faults)
     node, faults = call(callee, arguments, keywords)
     return emit(context, rest, Value(node), faults)
 
 
-def inline(
-    context: Context,
-    state: State,
-    function: Function,
-    arguments: Sequence[Item],
-    keywords: Mapping[str, Item],
+def transformed(
+    context: Context, state: State, filtering: bool, arguments: Sequence[Item]
 ) -> list[Step]:
-    code = function.code
-    if context.depth >= MAX_DEPTH:
-        raise Unsupported(f"recursive helper {code.co_qualname}")
-    defaults = function.defaults
-    keyword_defaults = function.keyword_defaults
-    if isinstance(function.home, FunctionType):
-        helper = function.home
-        defaults = tuple(constant(value) for value in helper.__defaults__ or ())
-        keyword_defaults = {
-            name: constant(value) for name, value in (helper.__kwdefaults__ or {}).items()
-        }
-        free = closure(helper)
-        nested = Context.from_code(
-            code, helper.__globals__, helper.__builtins__, (context, state), context.snapshot
-        )
+    if len(arguments) != 2:
+        raise Unsupported("map and filter require a function and one iterable")
+    function, iterable = arguments
+    iterator, pending = iterator_of(iterable)
+    if not iterator.items and iterator.source is None:
+        return emit(context, state, Generator(source_of(iterator)), pending)
+    source, element, item = indexed(iterator, f"{context.code.co_qualname}:{state.index}:map")
+    nested = replace(context, protected=(), caller=(context, state))
+    start = state.under(TRUE)
+    if isinstance(function, Function):
+        outcomes = inline(nested, start, function, [item], {})
     else:
-        frame = context.frame(state, function.home)
-        home = cast("Context", function.home)
-        free = {
-            name: frame.load(cell)
-            for name, cell in zip(code.co_freevars, function.cells, strict=True)
-        }
-        nested = Context.from_code(
-            code, home.scope, home.builtins, (context, state), context.snapshot
+        value, faults = (
+            truth(item)
+            if filtering and isinstance(function, Value) and function.node == lit(None)
+            else call(function, [item])
         )
-    if code.co_name == "<genexpr>" and len(arguments) == 1 and isinstance(arguments[0], Iterator):
-        iterator = arguments[0]
-        index = next(
-            index
-            for index, instruction in enumerate(nested.instructions)
-            if instruction.opname == "FOR_ITER"
-        )
-        start = State(index, (iterator,), {".0": iterator, **free}, state.path)
-        node = (
-            comprehension(nested, start, iterator, "YIELD_VALUE")
-            if iterator.items or iterator.source is not None
-            else source_of(iterator)
-        )
-        return [state.push(Generator(node)).advance()]
-    for item in (*defaults, *keyword_defaults.values()):
-        if isinstance(item, Opaque) and isinstance(item.value, dict):
-            scalar_map(item.value.items())
-        elif not isinstance(item, Value) or not isinstance(item.node, Lit):
-            raise Unsupported("helper with non-constant parameter defaults")
-    signature = helper_signature(code, defaults, keyword_defaults)
-    bindings = bind_helper(signature, arguments, keywords)
-    start = State(0, (), {**bindings, **free}, state.path)
-    steps: list[Step] = []
-    for outcome in explore(nested, start):
-        under = state.under(outcome.path)
-        if isinstance(outcome, Return):
-            steps.append(under.push(Value(outcome.value)).advance())
-        else:
-            steps.append(context.raised(under, outcome.kind))
-    return steps
-
-
-@handles("MAKE_FUNCTION")
-def make_function(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    flags = instruction.arg or 0
-    if flags & ~(CLOSURE | ANNOTATIONS | DEFAULTS | KEYWORD_DEFAULTS):
-        raise Unsupported("helper with parameter defaults", context.where(state))
-    (code,), rest = state.pop()
-    cells: tuple[str, ...] = ()
-    if flags & CLOSURE:
-        (closure,), rest = rest.pop()
-        cells = cell_names(closure)
-    if flags & ANNOTATIONS:
-        rest = rest.pop()[1]
-    keyword_defaults: dict[str, Item] = {}
-    if flags & KEYWORD_DEFAULTS:
-        (item,), rest = rest.pop()
-        values = constant_value(item)
-        if not isinstance(values, dict):
-            raise Unsupported("helper with non-constant parameter defaults")
-        keyword_defaults = {name: constant(value) for name, value in values.items()}
-    defaults: tuple[Item, ...] = ()
-    if flags & DEFAULTS:
-        (item,), rest = rest.pop()
-        values = constant_value(item)
-        if not isinstance(values, tuple):
-            raise Unsupported("helper with non-constant parameter defaults")
-        defaults = tuple(constant(value) for value in values)
-    if not isinstance(code, Opaque) or not isinstance(code.value, CodeType):
-        raise Unsupported(f"function from {describe(code)}", context.where(state))
-    return [rest.push(Function(code.value, cells, context, defaults, keyword_defaults)).advance()]
-
-
-def cell_names(item: Item) -> tuple[str, ...]:
-    members = item.value if isinstance(item, Opaque) else None
-    if not isinstance(members, tuple):
-        raise Unsupported(f"closure {describe(item)}")
-    names = tuple(member.name for member in members if isinstance(member, Cell))
-    if len(names) != len(members):
-        raise Unsupported(f"closure {describe(item)}")
-    return names
-
-
-@handles("LOAD_CLOSURE")
-def load_closure(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    return [state.push(Opaque(Cell(instruction.argval))).advance()]
-
-
-@handles("LOAD_DEREF")
-def load_deref(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    return [state.push(state.load(instruction.argval)).advance()]
-
-
-@handles("STORE_DEREF")
-def store_deref(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    if instruction.argval in context.code.co_freevars:
-        raise Unsupported(f"nonlocal write to {instruction.argval}", context.where(state))
-    (item,), rest = state.pop()
-    return [rest.store(instruction.argval, item).advance()]
-
-
-@handles("MAKE_CELL", "COPY_FREE_VARS")
-def prepare_cells(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
-    return [state.advance()]
+        outcomes = emit(nested, start, Value(value), faults)
+    cases: list[tuple[Node, Node]] = []
+    failures: list[Node] = []
+    for outcome in outcomes:
+        if isinstance(outcome, Raise):
+            failures.append(outcome.path)
+        elif isinstance(outcome, State):
+            result = outcome.stack[-1]
+            if filtering:
+                value, faults = truth(result)
+                failures.extend(conjunction(outcome.path, fault.when) for fault in faults)
+            else:
+                value = node_of(result)
+            cases.append((outcome.path, value))
+    value = choose(cases) if cases else lit("")
+    fault = reduce(disjunction, failures, FALSE)
+    node = Comprehension(
+        source,
+        element,
+        node_of(item) if filtering else value,
+        (value if cases else FALSE) if filtering else TRUE,
+        fault,
+        iterator.requires_native,
+    )
+    if fault != FALSE:
+        validate_fault_handlers(context)
+    return emit(context, state, Generator(node), pending)
