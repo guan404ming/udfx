@@ -4,6 +4,7 @@ import pyarrow
 from pyspark.sql import Column, DataFrame, functions
 
 from bench.speed.data import batched, caller
+from bench.speed.fingerprint import fingerprint
 from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED
@@ -27,6 +28,7 @@ def measure(
         frame.count()
         arguments = [functions.col(column) for column in program.schema]
         native = backend.build(program)
+        expression = fingerprint(backend, program)
         function = caller(program)
         forms = {
             "pickled": functions.udf(function, dtype(program.result), useArrow=False),
@@ -48,7 +50,13 @@ def measure(
         native_time = timed(consume(frame, native), repeats)
         return [
             Measurement(
-                name, "spark", baseline, native_time, form, fallback_in_plan(backend, program)
+                name,
+                "spark",
+                baseline,
+                native_time,
+                form,
+                fallback_in_plan(backend, program),
+                expression,
             )
         ]
     finally:

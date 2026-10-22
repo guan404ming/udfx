@@ -4,6 +4,7 @@ import datafusion
 import pyarrow
 
 from bench.speed.data import batched, caller
+from bench.speed.fingerprint import fingerprint
 from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED
@@ -26,6 +27,7 @@ def measure(
     arguments = [datafusion.col(column) for column in program.schema]
     backend = DataFusionBackend(context)
     native = backend.build(program)
+    expression = fingerprint(backend, program)
     position = f"{RESERVED}position"
     checked = context.from_arrow(
         table.append_column(position, pyarrow.array(range(table.num_rows), pyarrow.int64()))
@@ -40,6 +42,12 @@ def measure(
     native_time = timed(lambda: frame.select(native).to_arrow_table(), repeats)
     return [
         Measurement(
-            name, "datafusion", baseline, native_time, "arrow", fallback_in_plan(backend, program)
+            name,
+            "datafusion",
+            baseline,
+            native_time,
+            "arrow",
+            fallback_in_plan(backend, program),
+            expression,
         )
     ]

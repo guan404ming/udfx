@@ -35,7 +35,11 @@ output directory.
 Run `uv run python -m bench.speed` from the project root, or select a smaller run with
 `uv run python -m bench.speed --rows 200 --engines polars duckdb --cases lower_strip row_total --repeats 1`.
 The benchmark checks results against Python before timing and reports K2 (each speedup is at
-least 1), K3 (geometric mean speedup is at least 3), and K5 (cases with no fallback in the plan).
+least 1), K3 (deduplicated geometric mean speedup is at least 3), and K5 (cases with no fallback
+in the plan). Each engine groups cases by the text of the built native expression, with input
+columns renamed by schema position. The report shows case and group counts, both geometric means,
+and duplicate groups with their fingerprint hashes, case names, and speedups. The deduplicated
+mean gives each group equal weight, using the geometric mean of its case speedups.
 
 ## Code rules
 

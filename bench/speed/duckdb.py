@@ -6,6 +6,7 @@ import pyarrow
 from duckdb.func import ARROW, NATIVE, SPECIAL
 
 from bench.speed.data import batched, caller
+from bench.speed.fingerprint import fingerprint
 from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
 from udfx.backends import arrow
 from udfx.backends.duckdb import DuckDBBackend
@@ -28,6 +29,7 @@ def measure(
         arguments = [duckdb.ColumnExpression(column) for column in program.schema]
         backend = DuckDBBackend(connection)
         native = backend.build(program)
+        expression = fingerprint(backend, program)
         verify(
             "duckdb", name, relation.select(native).to_arrow_table().column(0).to_pylist(), expected
         )
@@ -57,4 +59,4 @@ def measure(
         baseline, form = min(baselines)
         native_time = timed(lambda: relation.select(native).to_arrow_table(), repeats)
         fallback = fallback_in_plan(backend, program)
-    return [Measurement(name, "duckdb", baseline, native_time, form, fallback)]
+    return [Measurement(name, "duckdb", baseline, native_time, form, fallback, expression)]

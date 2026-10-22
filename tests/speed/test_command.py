@@ -24,6 +24,8 @@ def test_engine_report(engine: str, capsys: pytest.CaptureFixture[str]) -> None:
             "--cases",
             "lower_strip",
             "row_total",
+            "type_identity",
+            "instance_text",
         ]
     )
     output = capsys.readouterr().out
@@ -33,8 +35,13 @@ def test_engine_report(engine: str, capsys: pytest.CaptureFixture[str]) -> None:
     details = [line.split(" | ") for line in tables[1].splitlines()[2:]]
     summaries = [line.split(" | ") for line in tables[2].splitlines()[2:]]
     engines = {"polars eager", "polars lazy"} if engine == "polars" else {engine}
-    assert len(details) == 2 * len(engines)
-    assert {row[0].removeprefix("| ") for row in details} == {"lower_strip", "row_total"}
+    assert len(details) == 4 * len(engines)
+    assert {row[0].removeprefix("| ") for row in details} == {
+        "lower_strip",
+        "row_total",
+        "type_identity",
+        "instance_text",
+    }
     assert {row[1] for row in details} == engines
     for row in details:
         assert len(row) == 8
@@ -44,14 +51,24 @@ def test_engine_report(engine: str, capsys: pytest.CaptureFixture[str]) -> None:
         assert row[5].endswith("x")
         assert row[6] in {"true", "false"}
         assert row[7].removesuffix(" |") in {"PASS", "FAIL"}
-    assert "K2 fails | geomean | K3 | K5 no fallback" in tables[2]
+    assert "cases | groups | K2 fails | geomean | deduplicated geomean | K3" in tables[2]
     assert {row[0].removeprefix("| ") for row in summaries} == engines
     for row in summaries:
-        assert len(row) == 6
-        assert row[1] == "2"
-        assert 0 <= int(row[2]) <= 2
-        assert row[4] in {"PASS", "FAIL"}
-        assert row[5].removesuffix(" |") in {"0/2", "1/2", "2/2"}
+        assert len(row) == 8
+        assert row[1] == "4"
+        assert row[2] == "3"
+        assert 0 <= int(row[3]) <= 4
+        assert row[4].endswith("x")
+        assert row[5].endswith("x")
+        assert row[6] in {"PASS", "FAIL"}
+        assert row[7].removesuffix(" |") in {"0/4", "1/4", "2/4", "3/4", "4/4"}
+    duplicates = [line.split(" | ") for line in tables[3].splitlines()[2:]]
+    assert len(duplicates) == len(engines)
+    assert {row[0].removeprefix("| ") for row in duplicates} == engines
+    for row in duplicates:
+        assert len(row[1]) == 12
+        assert row[2] == "type_identity, instance_text"
+        assert len(row[3].removesuffix(" |").split(", ")) == 2
 
 
 @pytest.mark.parametrize(

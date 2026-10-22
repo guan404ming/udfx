@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from types import CellType, CodeType, FunctionType, ModuleType
+from types import CellType, FunctionType, ModuleType
 
 from udfx.frontend.calls import known_op
 from udfx.frontend.constants import constant
 from udfx.frontend.values import Item
+from udfx.semantics.functions import code_names
 
 
 class Snapshot:
@@ -56,7 +57,7 @@ class Snapshot:
         self.values[id(frozen)] = frozen
         frozen.__globals__.update(
             (name, self.value(function.__globals__[name]))
-            for name in _global_names(function.__code__)
+            for name in code_names(function.__code__)
             if name in function.__globals__
         )
         frozen.__defaults__ = tuple(self.value(value) for value in function.__defaults__ or ())
@@ -69,14 +70,6 @@ class Snapshot:
             except ValueError:
                 continue
         return frozen
-
-
-def _global_names(code: CodeType) -> set[str]:
-    names = set(code.co_names)
-    for value in code.co_consts:
-        if isinstance(value, CodeType):
-            names.update(_global_names(value))
-    return names
 
 
 def _freeze_cell(cell: CellType) -> CellType:

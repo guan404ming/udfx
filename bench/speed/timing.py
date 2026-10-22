@@ -18,6 +18,7 @@ class Measurement:
     native: float
     form: str
     fallback: bool
+    fingerprint: str
 
     @property
     def speedup(self) -> float:

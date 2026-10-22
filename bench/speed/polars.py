@@ -4,7 +4,8 @@ from functools import partial
 import polars
 import pyarrow
 
-from bench.speed.data import caller
+from bench.speed.data import caller, row_function
+from bench.speed.fingerprint import fingerprint
 from bench.speed.timing import Measurement, fallback_in_plan, timed, verify
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.polars.dtypes import dtype
@@ -17,9 +18,11 @@ def measure(
 ) -> list[Measurement]:
     frame = polars.from_arrow(table)
     assert isinstance(frame, polars.DataFrame)
-    function = caller(program)
+    function = row_function(program) if program.row_mode else caller(program)
     names = list(program.schema)
-    if len(names) == 1 and all(type.kind is not Kind.LIST for type in program.schema.values()):
+    if program.row_mode:
+        python = polars.struct(names).map_elements(function, return_dtype=dtype(program.result))
+    elif len(names) == 1 and all(type.kind is not Kind.LIST for type in program.schema.values()):
         python = polars.col(names[0]).map_elements(
             function, return_dtype=dtype(program.result), skip_nulls=False
         )
@@ -30,6 +33,7 @@ def measure(
         )
     backend = PolarsBackend()
     native = backend.build(program)
+    expression = fingerprint(backend, program)
     fallback = fallback_in_plan(backend, program)
     measurements: list[Measurement] = []
     for engine, execute in (
@@ -44,6 +48,6 @@ def measure(
         baseline = timed(partial(execute, python), repeats)
         native_time = timed(partial(execute, native), repeats)
         measurements.append(
-            Measurement(name, engine, baseline, native_time, "map_elements", fallback)
+            Measurement(name, engine, baseline, native_time, "map_elements", fallback, expression)
         )
     return measurements

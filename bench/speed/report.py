@@ -1,6 +1,7 @@
-import math
 import os
 from collections.abc import Mapping, Sequence
+from hashlib import sha256
+from statistics import geometric_mean
 
 from bench.speed.timing import Measurement
 
@@ -22,21 +23,39 @@ def report(
         )
     lines.extend(
         [
-            "\n| engine | cases | K2 fails | geomean | K3 | K5 no fallback |",
-            "|---|---|---|---|---|---|",
+            "\n| engine | cases | groups | K2 fails | geomean | deduplicated geomean | K3"
+            " | K5 no fallback |",
+            "|---|---|---|---|---|---|---|---|",
         ]
     )
+    duplicates = [
+        "\n| engine | fingerprint | cases | speedups |",
+        "|---|---|---|---|",
+    ]
     for engine in dict.fromkeys(item.engine for item in measurements):
         rows = [item for item in measurements if item.engine == engine]
+        groups: dict[str, list[Measurement]] = {}
+        for item in rows:
+            groups.setdefault(item.fingerprint, []).append(item)
         speedups = [item.speedup for item in rows]
         native_only = sum(not item.fallback for item in rows)
         fails = sum(speedup < 1.0 for speedup in speedups)
-        mean = math.exp(sum(math.log(value) for value in speedups) / len(speedups))
-        verdict = "PASS" if mean >= 3.0 else "FAIL"
-        lines.append(
-            f"| {engine} | {len(rows)} | {fails} | {mean:.2f}x | {verdict}"
-            f" | {native_only}/{len(rows)} |"
+        mean = geometric_mean(speedups)
+        deduplicated = geometric_mean(
+            geometric_mean(item.speedup for item in group) for group in groups.values()
         )
+        verdict = "PASS" if deduplicated >= 3.0 else "FAIL"
+        lines.append(
+            f"| {engine} | {len(rows)} | {len(groups)} | {fails} | {mean:.2f}x"
+            f" | {deduplicated:.2f}x | {verdict} | {native_only}/{len(rows)} |"
+        )
+        for fingerprint, group in groups.items():
+            if len(group) > 1:
+                digest = sha256(fingerprint.encode()).hexdigest()[:12]
+                names = ", ".join(item.case for item in group)
+                values = ", ".join(f"{item.speedup:.2f}x" for item in group)
+                duplicates.append(f"| {engine} | {digest} | {names} | {values} |")
+    lines.extend(duplicates)
     for name, reason in skipped.items():
         lines.append(f"\nskipped {name}: {reason}")
     return "\n".join(lines)

@@ -8,6 +8,7 @@ import pyarrow
 from tests.corpus.cases import Case
 from udfx.backends import arrow
 from udfx.program import Program
+from udfx.semantics.functions import code_names
 from udfx.testing.outcome import Returned, run
 from udfx.types import Kind, Type
 
@@ -61,11 +62,31 @@ def with_arity[Function: Callable[..., object]](function: Function, count: int) 
     return function
 
 
+class AttributeRow(dict[str, object]):
+    __getattr__ = dict.__getitem__
+
+
+def row_type(program: Program) -> type[dict[str, object]]:
+    return (
+        dict if code_names(program.function.__code__).isdisjoint(program.schema) else AttributeRow
+    )
+
+
+def row_function(program: Program) -> Callable[..., object]:
+    function = program.function
+    if row_type(program) is dict:
+        return function
+    return lambda row: function(AttributeRow(row))
+
+
 def caller(program: Program) -> Callable[..., object]:
     if not program.row_mode:
         return program.function
+    function = program.function
+    constructor = row_type(program)
+    names = tuple(program.schema)
     return with_arity(
-        lambda *values: program.function(*program.arguments(values)), len(program.schema)
+        lambda *values: function(constructor(zip(names, values, strict=True))), len(names)
     )
 
 
