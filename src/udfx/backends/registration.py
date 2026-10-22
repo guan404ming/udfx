@@ -40,6 +40,7 @@ from udfx.semantics.text import (
     pad_text,
     string_predicate,
 )
+from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
 
 
@@ -110,6 +111,14 @@ def register_string_predicates[E](rules: RuleSet[E], matches: Callable[[E, str],
         rules(f".{method}", Kind.STR)(
             lambda value, method=method: string_predicate(matches, value, method)
         )
+
+
+def register_translation[E](rules: RuleSet[E], primitives: TextPrimitives) -> None:
+    rules(".translate", Kind.STR, Kind.STR, Kind.LIST)(
+        lambda text, characters, replacements: Lowered(
+            *lower_translation(primitives, text, characters, replacements)
+        )
+    )
 
 
 def register_padding[E](rules: RuleSet[E], primitives: PaddingPrimitives) -> None:

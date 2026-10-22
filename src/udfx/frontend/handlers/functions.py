@@ -9,12 +9,13 @@ from types import CodeType, FunctionType, ModuleType
 from typing import cast
 
 from udfx.errors import Unsupported
-from udfx.frontend.binding import bind, helper_signature
+from udfx.frontend.binding import bind_helper, helper_signature
 from udfx.frontend.calls import call, invoke, iterable_node, node_of
 from udfx.frontend.constants import (
     constant,
     constant_value,
     lookup,
+    make_translation_table,
     runtime_type,
     scalar_map,
     type_test,
@@ -23,6 +24,7 @@ from udfx.frontend.context import Context
 from udfx.frontend.frozen import closure
 from udfx.frontend.handlers.iteration import comprehension, source_of
 from udfx.frontend.machine import emit, explore, handles
+from udfx.frontend.paths import call_path
 from udfx.frontend.regex import call_regex
 from udfx.frontend.state import Return, State, Step
 from udfx.frontend.values import (
@@ -38,6 +40,7 @@ from udfx.frontend.values import (
     Opaque,
     Row,
     Set,
+    Tuple,
     Value,
     describe,
 )
@@ -80,6 +83,8 @@ def load_attr(context: Context, state: State, instruction: dis.Instruction) -> l
             attribute = constant(context.snapshot.attribute(module, name))
         case Opaque(value=python_type) if python_type is datetime and name == "strptime":
             attribute = Opaque(datetime.strptime)
+        case Opaque(value=python_type) if python_type is str and name == "maketrans":
+            attribute = Opaque(str.maketrans)
         case Opaque(value=dict()) if name == "get" and method:
             return [rest.push(Method(name), owner).advance()]
         case Opaque(value=re.Pattern() as pattern):
@@ -119,25 +124,68 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
     items, rest = state.pop(count + 2)
     head, second, *others = items
     callee, arguments = (second, others) if isinstance(head, Null) else (head, [second, *others])
-    if any(isinstance(argument, Row) for argument in arguments):
-        raise Unsupported("passing a row to a call", context.where(state))
     keywords: dict[str, Item] = {}
     if state.keywords:
         split = len(arguments) - len(state.keywords)
         keywords = dict(zip(state.keywords, arguments[split:], strict=True))
         arguments = arguments[:split]
         rest = replace(rest, keywords=())
+    return dispatch_call(context, rest, callee, arguments, keywords)
+
+
+@handles("CALL_FUNCTION_EX")
+def call_unpacked(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    rest = state
+    if instruction.arg:
+        (keywords,), rest = rest.pop()
+        if constant_value(keywords) != {}:
+            raise Unsupported("nonempty unpacked keyword arguments", context.where(state))
+    (head, callee, arguments), rest = rest.pop(3)
+    if not isinstance(head, Null):
+        raise Unsupported("unpacked call arguments", context.where(state))
+    if isinstance(arguments, Tuple):
+        items = arguments.items
+    else:
+        values = constant_value(arguments)
+        if not isinstance(values, tuple):
+            raise Unsupported("unpacked call arguments require a tuple", context.where(state))
+        items = tuple(constant(value) for value in values)
+    return dispatch_call(context, rest, callee, items, {})
+
+
+@handles("DICT_MERGE")
+def merge_keywords(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
+    (keywords,), rest = state.pop()
+    if constant_value(keywords) != {}:
+        raise Unsupported("nonempty unpacked keyword arguments", context.where(state))
+    return [rest.advance()]
+
+
+def dispatch_call(
+    context: Context,
+    rest: State,
+    callee: Item,
+    arguments: Sequence[Item],
+    keywords: Mapping[str, Item],
+) -> list[Step]:
+    if any(isinstance(argument, Row) for argument in arguments):
+        raise Unsupported("passing a row to a call", context.where(rest))
     if isinstance(callee, Function):
         return inline(context, rest, callee, arguments, keywords)
-    regex = call_regex(callee, arguments, keywords, state.path)
-    if regex is not None:
-        item, faults = regex
+    special = call_path(callee, arguments, keywords) or call_regex(
+        callee, arguments, keywords, rest.path
+    )
+    if special is not None:
+        item, faults = special
         return emit(context, rest, item, faults)
     if isinstance(callee, Opaque) and not keywords:
+        if callee.value is str.maketrans:
+            item, faults = make_translation_table(arguments)
+            return emit(context, rest, item, faults)
         if callee.value is set and len(arguments) == 1:
             source = iterable_node(arguments[0])
             if source.type.item != STR:
-                raise Unsupported("set requires list[str]", context.where(state))
+                raise Unsupported("set requires list[str]", context.where(rest))
             node, faults = invoke("list", [source], TypeError)
             return emit(context, rest, Set(node), faults)
         if callee.value is type and len(arguments) == 1:
@@ -149,7 +197,7 @@ def call_(context: Context, state: State, instruction: dis.Instruction) -> list[
         owner, *parameters = arguments
         if isinstance(owner, Opaque) and isinstance(owner.value, dict):
             if len(parameters) not in (1, 2):
-                raise Unsupported("dict.get takes one or two arguments", context.where(state))
+                raise Unsupported("dict.get takes one or two arguments", context.where(rest))
             key, *defaults = map(node_of, parameters)
             node, faults = lookup(owner.value, key, defaults[0] if defaults else lit(None))
             return emit(context, rest, Value(node), faults)
@@ -209,11 +257,7 @@ def inline(
         elif not isinstance(item, Value) or not isinstance(item.node, Lit):
             raise Unsupported("helper with non-constant parameter defaults")
     signature = helper_signature(code, defaults, keyword_defaults)
-    bindings = bind(signature, arguments, keywords)
-    bindings = {
-        name: bindings.get(name, cast("Item", parameter.default))
-        for name, parameter in signature.parameters.items()
-    }
+    bindings = bind_helper(signature, arguments, keywords)
     start = State(0, (), {**bindings, **free}, state.path)
     steps: list[Step] = []
     for outcome in explore(nested, start):

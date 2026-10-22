@@ -7,6 +7,7 @@ import duckdb
 import pyarrow as pa
 from duckdb import Expression
 
+from udfx.backends.duckdb.conversions import TEXT as TRANSLATION
 from udfx.backends.duckdb.rules import (
     RULES,
     column,
@@ -14,6 +15,7 @@ from udfx.backends.duckdb.rules import (
     function,
     length,
     null_safe_equal,
+    trim,
     when,
 )
 from udfx.backends.registration import (
@@ -21,6 +23,7 @@ from udfx.backends.registration import (
     RuleResult,
     register_padding,
     register_string_predicates,
+    register_translation,
 )
 from udfx.semantics import text
 from udfx.semantics.text import (
@@ -42,7 +45,6 @@ from udfx.semantics.text import (
     slice_sequence,
     split_limited,
     split_right,
-    strip_pattern,
     whitespace,
     word_prefix_pattern,
 )
@@ -74,16 +76,6 @@ def recase(value: Expression, method: str) -> RuleResult[Expression]:
         sigma,
     )
     return expr if exact is None else Lowered(expr, exact)
-
-
-def trim(text: Expression, characters: str, method: str) -> Expression:
-    return function(
-        "regexp_replace",
-        text,
-        constant(strip_pattern(characters, method)),
-        constant(""),
-        constant("g"),
-    )
 
 
 @RULES(".strip", Kind.STR)
@@ -424,3 +416,6 @@ register_padding(
         half=lambda value: function("//", value, constant(2)),
     ),
 )
+
+
+register_translation(RULES, TRANSLATION)

@@ -11,12 +11,14 @@ from datafusion import Expr, col, functions, lit
 
 from udfx.backends.arrow import dtype
 from udfx.backends.datafusion.backend import DataFusionBackend
+from udfx.backends.datafusion.conversions import TEXT as TRANSLATION
 from udfx.backends.datafusion.rules import RULES, length, null_safe_equal, typed_literal, when
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
     register_padding,
     register_string_predicates,
+    register_translation,
 )
 from udfx.semantics import text
 from udfx.semantics.text import (
@@ -396,3 +398,6 @@ register_padding(
         half=lambda value: value / lit(2),
     ),
 )
+
+
+register_translation(RULES, TRANSLATION)

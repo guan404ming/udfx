@@ -38,6 +38,8 @@ def nested_keyword_helper(text: str) -> str:
         (lambda value: round(value, ndigits=2), {"value": FLOAT}, [(2.675,), (1.125,)]),
         (lambda value: round(ndigits=2, number=value), {"value": FLOAT}, [(2.675,)]),
         (lambda value: round(number=value), {"value": FLOAT}, [(2.675,)]),
+        (lambda text: clean_text(*(text,)), {"text": STR}, [(" A ",)]),
+        (lambda text: clean_text(text, **{}), {"text": STR}, [(" A ",)]),
     ],
 )
 def test_keywords_match_python(
@@ -69,8 +71,7 @@ def test_keyword_state_does_not_leak_to_next_call() -> None:
         (lambda text: text.strip(chars=" "), {"text": STR}, "positional.only"),
         (lambda text: int(text, base=10), {"text": STR}, "keyword arguments.*no signature"),
         (lambda text: "{text}".format(text=text), {"text": STR}, "keyword arguments"),
-        (lambda text: clean_text(*(text,)), {"text": STR}, "unpacked call arguments"),
-        (lambda text: clean_text(text, **{}), {"text": STR}, "unpacked call arguments"),
+        (lambda text: clean_text(text, **{"suffix": "!"}), {"text": STR}, "nonempty unpacked"),
     ],
 )
 def test_unsupported_keywords(
@@ -80,19 +81,74 @@ def test_unsupported_keywords(
         trace(function, schema)
 
 
-@pytest.mark.parametrize("keyword", [False, True])
-def test_variable_helper_parameters_remain_unsupported(keyword: bool) -> None:
-    def positional(*values: str) -> str:
-        return values[0]
-
+def test_nonempty_variable_keywords_remain_unsupported() -> None:
     def keywords(**values: str) -> str:
         return values["text"]
 
     def function(text: str) -> str:
-        return keywords(text=text) if keyword else positional(text)
+        return keywords(text=text)
 
-    with pytest.raises(Unsupported, match="variable parameters"):
+    with pytest.raises(Unsupported, match="nonempty variable keyword"):
         trace(function, {"text": STR})
+
+
+def variadic_helper(prefix: str = "[", *values: str, suffix: str = "]", **keywords: str) -> str:
+    result = prefix
+    for value in values:
+        result += value
+    return result + str(len(values)) + suffix
+
+
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda text: variadic_helper(text, "train", text, suffix="!"),
+        lambda text: variadic_helper(prefix=text),
+        lambda text: variadic_helper(),
+        lambda text: variadic_helper(text, **{}),
+        lambda text: variadic_helper(*(text, "train", text)),
+    ],
+)
+def test_variadic_helpers(function: Callable[[str], str]) -> None:
+    assert check_function(function, {"text": STR}, PolarsBackend(), [("",), ("a",)]) == []
+
+
+def test_nested_variadic_helper() -> None:
+    def function(text: str) -> str:
+        def helper(*values: str, suffix: str = "!") -> str:
+            result = ""
+            if not values:
+                return suffix
+            for value in values:
+                result += value
+            return result + suffix
+
+        return helper(text, "train") + helper()
+
+    assert check_function(function, {"text": STR}, PolarsBackend(), [("",), ("a",)]) == []
+
+
+def test_variadic_tuple_index() -> None:
+    def helper(*values: str) -> str:
+        try:
+            return values[-1]
+        except IndexError:
+            return "empty"
+
+    def function(text: str) -> str:
+        return helper(text, "train") + helper()
+
+    assert check_function(function, {"text": STR}, PolarsBackend(), [("",), ("a",)]) == []
+
+
+def test_variadic_comprehension() -> None:
+    def helper(*values: str) -> int:
+        return sum(len(value) for value in values)
+
+    def function(text: str) -> int:
+        return helper(text, "train", text)
+
+    assert check_function(function, {"text": STR}, PolarsBackend(), [("",), ("a",)]) == []
 
 
 def test_replace_count_respects_the_python_signature() -> None:

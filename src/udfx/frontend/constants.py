@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime
 from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
+from typing import cast
 
 from udfx.errors import Unsupported
 from udfx.frontend.calls import invoke, known_op, none_test
@@ -91,6 +92,15 @@ def constant_value(item: Item) -> object:
             return value
         case _:
             raise Unsupported(f"expected a constant, got {describe(item)}")
+
+
+def make_translation_table(arguments: Iterable[Item]) -> tuple[Item, list[Fault]]:
+    values = [constant_value(argument) for argument in arguments]
+    try:
+        table = cast("Callable[..., object]", str.maketrans)(*values)
+    except (TypeError, ValueError) as error:
+        return Opaque({}), [Fault(type(error), TRUE)]
+    return Opaque(table), []
 
 
 def is_annotation(value: object) -> bool:

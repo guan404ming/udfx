@@ -32,6 +32,11 @@ def lower(instructions: Iterable[dis.Instruction]) -> list[dis.Instruction]:
                 lowered.extend(subscript(lowered.pop(), instruction))
             case "SET_FUNCTION_ATTRIBUTE" if instruction.argval == ANNOTATE:
                 lowered.append(instruction._replace(arg=ANNOTATIONS, argval=ANNOTATIONS))
+            case "CALL_FUNCTION_EX":
+                empty = lowered[-1].opname == "PUSH_NULL"
+                if empty:
+                    lowered[-1] = lowered[-1]._replace(opname="NOP")
+                lowered.append(instruction._replace(arg=int(not empty), argval=int(not empty)))
             case _:
                 lowered.append(instruction)
     return lowered

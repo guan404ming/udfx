@@ -6,12 +6,14 @@ from functools import cache, partial
 
 import polars as pl
 
+from udfx.backends.polars.conversions import TEXT as TRANSLATION
 from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
 from udfx.backends.registration import (
     Lowered,
     RuleResult,
     register_padding,
     register_string_predicates,
+    register_translation,
 )
 from udfx.semantics import text
 from udfx.semantics.text import (
@@ -367,3 +369,6 @@ register_padding(
         half=lambda value: value // 2,
     ),
 )
+
+
+register_translation(RULES, TRANSLATION)

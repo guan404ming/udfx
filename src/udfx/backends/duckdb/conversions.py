@@ -10,9 +10,9 @@ from udfx.backends.duckdb.rules import (
     constant,
     function,
     length,
+    trim,
     when,
 )
-from udfx.backends.duckdb.strings import trim
 from udfx.backends.registration import Lowered, register_text_conversions
 from udfx.semantics.literals import (
     FLOAT_LITERAL,

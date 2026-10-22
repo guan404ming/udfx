@@ -5,6 +5,7 @@ import operator
 from udfx.ir import Call, Lit, Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.semantics.text import CASE_METHODS, PADDING_METHODS, PREDICATES
+from udfx.semantics.translation import translate_text
 from udfx.types import BOOL, INT, STR, list_of
 
 STRINGS = list_of(STR)
@@ -80,6 +81,7 @@ register(Op(".count", (STR, STR), INT, str.count))
 register(Op(".startswith", (STR, STR), BOOL, str.startswith))
 register(Op(".endswith", (STR, STR), BOOL, str.endswith))
 register(Op(".replace", (STR, STR, STR), STR, str.replace))
+register(Op(".translate", (STR, STR, STRINGS), STR, translate_text))
 register(Op(".join", (STR, STRINGS), STR, str.join))
 register(Op(".join", (STR, OPTIONAL_STRINGS), STR, str.join, none_item))
 register(Op(".join", (STR, STR), STR, str.join))

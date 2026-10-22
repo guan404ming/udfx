@@ -206,6 +206,36 @@ def test_keyword_opcode_versions(monkeypatch: pytest.MonkeyPatch, normalizer: Mo
     )
 
 
+@pytest.mark.parametrize("normalizer", [py312, py313, py314], ids=["3.12", "3.13", "3.14"])
+@pytest.mark.parametrize("keywords", [False, True])
+def test_unpacked_call_versions(
+    monkeypatch: pytest.MonkeyPatch, normalizer: ModuleType, keywords: bool
+) -> None:
+    template = next(dis.get_instructions(branch))
+    instructions = [
+        template._replace(opname="RESUME", arg=0),
+        template._replace(opname="LOAD_GLOBAL", arg=1, argval="str"),
+        template._replace(opname="LOAD_FAST", arg=0, argval="s"),
+        template._replace(opname="BUILD_TUPLE", arg=1, argval=1),
+    ]
+    if keywords:
+        instructions.append(template._replace(opname="BUILD_MAP", arg=0, argval=0))
+    elif normalizer is py314:
+        instructions.append(template._replace(opname="PUSH_NULL", arg=None))
+    instructions.extend(
+        [
+            template._replace(
+                opname="CALL_FUNCTION_EX", arg=None if normalizer is py314 else int(keywords)
+            ),
+            template._replace(opname="RETURN_VALUE", arg=None),
+        ]
+    )
+    instructions = [item._replace(offset=2 * index) for index, item in enumerate(instructions)]
+    monkeypatch.setattr(dis, "get_instructions", lambda code: iter(instructions))
+    monkeypatch.setattr("udfx.frontend.context.normalize", normalizer.normalize)
+    assert trace(branch, {"s": STR}).value == apply("str", Col("s", STR))
+
+
 @pytest.mark.parametrize("normalizer", [py313, py314], ids=["3.13", "3.14"])
 def test_loop_cleanup_versions(monkeypatch: pytest.MonkeyPatch, normalizer: ModuleType) -> None:
     template = next(dis.get_instructions(branch))

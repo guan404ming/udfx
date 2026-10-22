@@ -21,6 +21,7 @@ from udfx.frontend.machine import emit, handles
 from udfx.frontend.state import State, Step
 from udfx.frontend.values import Item, Opaque, Row, Set, Slice, Tuple, Value
 from udfx.ir import Lit, lit
+from udfx.ops import Fault
 from udfx.types import Kind
 
 BINARY_OPS: dict[str, str] = {
@@ -142,6 +143,13 @@ def contains_op(context: Context, state: State, instruction: dis.Instruction) ->
 @handles("BINARY_SUBSCR")
 def binary_subscr(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (container, index), rest = state.pop(2)
+    if isinstance(container, Tuple):
+        position = constant_value(index)
+        if not isinstance(position, int):
+            raise Unsupported("tuple index must be an integer literal", context.where(state))
+        if -len(container.items) <= position < len(container.items):
+            return [rest.push(container.items[position]).advance()]
+        return emit(context, rest, Value(lit(None)), [Fault(IndexError, lit(True))])
     if isinstance(container, Row):
         if not (
             isinstance(index, Value)

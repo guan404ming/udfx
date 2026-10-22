@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import math
+import os
+import posixpath
 import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
@@ -19,6 +21,7 @@ from udfx.frontend.values import (
     Method,
     Opaque,
     Set,
+    Tuple,
     Value,
     describe,
     named,
@@ -26,7 +29,8 @@ from udfx.frontend.values import (
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Lit, Node, lit
 from udfx.ops import Fault, Op, apply, matching
 from udfx.semantics.datetimes import format_parts, parse_parts
-from udfx.types import BOOL, INT, Kind, list_of, type_of
+from udfx.semantics.translation import translation_table
+from udfx.types import BOOL, INT, STR, Kind, list_of, type_of
 
 CALLABLES: tuple[tuple[object, str], ...] = (
     (abs, "abs"),
@@ -44,6 +48,13 @@ CALLABLES: tuple[tuple[object, str], ...] = (
     (min, "min"),
     (round, "round"),
     (str, "str"),
+    (str.maketrans, "str.maketrans"),
+    (os.fspath, "os.fspath"),
+    (posixpath.join, "posixpath.join"),
+    (posixpath.basename, "posixpath.basename"),
+    (posixpath.dirname, "posixpath.dirname"),
+    (posixpath.splitext, "posixpath.splitext"),
+    (posixpath.split, "posixpath.split"),
     (math.ceil, "math.ceil"),
     (math.floor, "math.floor"),
     (math.isinf, "math.isinf"),
@@ -121,6 +132,30 @@ def known_op(callee: object) -> str | None:
 def op_name(callee: object) -> str:
     found = known_op(callee)
     if found is None:
+        if callee is open or (
+            getattr(callee, "__module__", "") in {"posix", "nt"}
+            and getattr(callee, "__name__", "")
+            in {
+                "stat",
+                "lstat",
+                "open",
+                "read",
+                "write",
+                "listdir",
+                "scandir",
+                "readlink",
+                "access",
+                "remove",
+                "unlink",
+                "mkdir",
+                "rmdir",
+                "rename",
+                "replace",
+                "getcwd",
+                "chdir",
+            }
+        ):
+            raise Unsupported(f"file system access: {named(callee)}")
         raise Unsupported(f"unknown callable {named(callee)}")
     return found
 
@@ -152,6 +187,11 @@ def overload(name: str, arguments: Sequence[Node]) -> tuple[Op, list[Node]]:
 def invoke(
     name: str, arguments: Sequence[Node], first_null_kind: type[Exception]
 ) -> tuple[Node, list[Fault]]:
+    if name == "os.fspath" and len(arguments) == 1:
+        node = arguments[0]
+        if node.type.kind is not Kind.STR:
+            return lit(""), [Fault(TypeError, TRUE)]
+        return node, [Fault(TypeError, apply("is_none", node))] if node.type.nullable else []
     if (
         name in {".center", ".ljust", ".rjust"}
         and len(arguments) == 3
@@ -274,14 +314,14 @@ def call(
         arguments = keyword_arguments(cast("Callable[..., object]", function), arguments, keywords)
     if isinstance(callee, Opaque) and len(arguments) == 1:
         name = op_name(callee.value)
-        if isinstance(arguments[0], Set) or name in {"list", "sorted", "any", "all", "sum"}:
+        if isinstance(arguments[0], Set | Tuple) or name in {"list", "sorted", "any", "all", "sum"}:
             return sequence_call(name, arguments[0])
     match callee:
         case Method(name=name):
             return method_call(name, arguments)
         case Opaque(value=value):
-            nodes = [node_of(argument) for argument in arguments]
             name = op_name(value)
+            nodes = [node_of(argument) for argument in arguments]
             if name == "datetime.strptime":
                 return invoke(name, nodes, TypeError)
             if name in {"min", "max"} and len(nodes) > 2:
@@ -294,6 +334,16 @@ def call(
 
 
 def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
+    if name == "translate" and len(arguments) == 2:
+        table = arguments[1]
+        if not isinstance(table, Opaque):
+            raise Unsupported("translate requires a constant dict")
+        characters, replacements = translation_table(table.value)
+        return invoke(
+            ".translate",
+            [node_of(arguments[0]), lit(characters), Lit(replacements, list_of(STR))],
+            AttributeError,
+        )
     if name in {"startswith", "endswith"}:
         matched = tuple_affixes(name, arguments)
         if matched is not None:
@@ -314,6 +364,8 @@ def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]
 
 
 def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
+    if isinstance(item, Tuple) and name == "len":
+        return lit(len(item.items)), []
     if isinstance(item, Set):
         operation = {
             "len": "set_size",
@@ -347,6 +399,8 @@ def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
 
 def truth(item: Item) -> tuple[Node, list[Fault]]:
     match item:
+        case Tuple(items=items):
+            return lit(bool(items)), []
         case Match():
             return negate(none_test(item)), []
         case Set(node=node):

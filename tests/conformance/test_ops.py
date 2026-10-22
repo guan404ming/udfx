@@ -19,7 +19,7 @@ from udfx.testing.strategies import (
     STRING_TRAPS,
     regex_constants,
 )
-from udfx.types import Kind
+from udfx.types import STR, Kind, list_of
 
 CASES = [
     pytest.param(backend, op, id=f"{label}-{op}", marks=pytest.mark.xdist_group(backend.name))
@@ -47,6 +47,9 @@ def test_op_matches_python(backend: Backend[Any], op: Op, data: st.DataObject) -
     constants = {} if constant is None else {constant: data.draw(values(op.parameters[constant]))}
     if op.name.startswith("re."):
         constants.update(data.draw(regex_constants(op.name)))
+    if op.name == ".translate":
+        constants[1] = data.draw(values(STR))
+        constants[2] = data.draw(values(list_of(STR)))
     if op.name in {".strftime", "datetime.strptime", "datetime_parses"}:
         constants[1] = data.draw(st.sampled_from(DATETIME_FORMATS))
         traps = DATETIME_TRAPS if op.name == ".strftime" else DATETIME_TEXT_TRAPS

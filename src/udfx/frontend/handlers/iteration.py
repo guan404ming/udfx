@@ -11,8 +11,8 @@ from udfx.frontend.context import Context
 from udfx.frontend.logic import choose, disjunction
 from udfx.frontend.machine import emit, explore, handles, unsupported
 from udfx.frontend.state import Raise, State, Step
-from udfx.frontend.values import MAX_UNROLL, Iterator, Value
-from udfx.ir import FALSE, TRUE, Comprehension, Element, Lit, Node, lit
+from udfx.frontend.values import MAX_UNROLL, Iterator, Tuple, Value
+from udfx.ir import FALSE, TRUE, Comprehension, Element, ListValue, Lit, Node, lit
 from udfx.ops import Fault, apply
 from udfx.types import STR, Kind, list_of
 
@@ -23,6 +23,8 @@ def source_of(iterator: Iterator) -> Node:
     nodes = tuple(node_of(item) for item in iterator.items)
     if nodes and any(node.type != nodes[0].type for node in nodes):
         raise Unsupported("comprehension items must share one type")
+    if any(not isinstance(node, Lit) for node in nodes):
+        return ListValue(nodes, list_of(nodes[0].type))
     return Lit(
         tuple(constant_value(item) for item in iterator.items),
         list_of(nodes[0].type if nodes else STR),
@@ -32,6 +34,10 @@ def source_of(iterator: Iterator) -> Node:
 @handles("GET_ITER")
 def get_iter(context: Context, state: State, instruction: dis.Instruction) -> list[Step]:
     (item,), rest = state.pop()
+    if isinstance(item, Tuple):
+        if len(item.items) > MAX_UNROLL:
+            raise Unsupported(f"loops and comprehensions exceed {MAX_UNROLL} unrolled items")
+        return [rest.push(Iterator(item.items)).advance()]
     if isinstance(item, Value) and not isinstance(item.node, Lit):
         source = node_of(item)
         if source.type.kind is not Kind.LIST:

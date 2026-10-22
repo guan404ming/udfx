@@ -12,8 +12,10 @@ from udfx.backends.registration import (
     RuleResult,
     register_padding,
     register_string_predicates,
+    register_translation,
 )
 from udfx.backends.spark.backend import SparkBackend
+from udfx.backends.spark.conversions import TEXT as TRANSLATION
 from udfx.backends.spark.rules import RULES, when
 from udfx.ir import Col
 from udfx.semantics import text
@@ -396,3 +398,6 @@ register_padding(
         half=lambda value: functions.call_function("div", value, functions.lit(2)),
     ),
 )
+
+
+register_translation(RULES, TRANSLATION)

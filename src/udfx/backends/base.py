@@ -202,7 +202,8 @@ class Backend[E](ABC):
             Lowered(cast("Any", argument.value))
             if (
                 node.op.name.startswith("re.")
-                or node.op.name in {".strftime", "datetime.strptime", "datetime_parses"}
+                or node.op.name
+                in {".strftime", ".translate", "datetime.strptime", "datetime_parses"}
             )
             and index > 0
             and isinstance(argument, Lit)

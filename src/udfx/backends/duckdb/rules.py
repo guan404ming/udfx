@@ -7,6 +7,7 @@ import duckdb
 from duckdb import Expression
 
 from udfx.backends.registration import RuleSet
+from udfx.semantics.text import strip_pattern
 
 RULES: RuleSet[Expression] = RuleSet()
 
@@ -37,3 +38,13 @@ def null_safe_equal(left: Expression, right: Expression) -> Expression:
 
 def length(value: Expression) -> Expression:
     return function("len", value)
+
+
+def trim(text: Expression, characters: str, method: str) -> Expression:
+    return function(
+        "regexp_replace",
+        text,
+        constant(strip_pattern(characters, method)),
+        constant(""),
+        constant("g"),
+    )
