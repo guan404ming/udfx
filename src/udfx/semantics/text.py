@@ -25,7 +25,7 @@ CLUSTER_JOINERS = (
     "\\x{1100}-\\x{11FF}\\x{A960}-\\x{A97C}\\x{D7B0}-\\x{D7C6}\\x{D7CB}-\\x{D7FB}"
     "\\x{16D63}\\x{16D67}-\\x{16D6A}\\x{1ACF}-\\x{1ADD}\\x{1AE0}-\\x{1AEB}"
     "\\x{10EFA}-\\x{10EFB}\\x{11B60}-\\x{11B67}\\x{1E6E3}\\x{1E6E6}"
-    "\\x{1E6EE}-\\x{1E6EF}\\x{1E6F5}]|\\r\\n"
+    "\\x{1E6EE}-\\x{1E6EF}\\x{1E6F5}]|\\r\\n|\\n\\r"
 )
 PREDICATES = (
     "isascii",
