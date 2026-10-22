@@ -147,7 +147,7 @@ def replace(text: pl.Expr, old: pl.Expr, new: pl.Expr) -> pl.Expr:
 
 
 def join(separator: pl.Expr, words: pl.Expr) -> pl.Expr:
-    return broadcast(words).list.join(separator)
+    return broadcast(words).list.concat(pl.lit([], dtype=pl.List(pl.String))).list.join(separator)
 
 
 RULES(".join", Kind.STR, Kind.LIST)(join)
