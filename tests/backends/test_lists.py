@@ -62,7 +62,7 @@ def test_set_iteration_uses_python_order(backend: Backend[Any]) -> None:
     if isinstance(backend, SparkBackend):
         translation = compile(copied, schema, backend)
         assert translation.expr is not None
-        reference = functions.udf(copied, dtype(list_of(STR)))(
+        reference = functions.udf(copied, dtype(list_of(STR)), useArrow=False)(
             backend.column(Col("words", list_of(STR)))
         )
         actual, expected = backend.evaluate([translation.expr, reference], schema, rows)
