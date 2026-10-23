@@ -1,3 +1,4 @@
+import itertools
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -11,6 +12,7 @@ from udfx.frontend import trace
 from udfx.ir import FALSE, TRUE, Col, Guarded, If, lit
 from udfx.ops import apply
 from udfx.program import Program
+from udfx.testing import check_function
 from udfx.types import BOOL, DATETIME, FLOAT, INT, INT64_MAX, STR, Type
 
 
@@ -49,6 +51,25 @@ def test_static_guards_build_without_fallback(
         expr = backend.build(program)
     fallback.assert_not_called()
     assert backend.evaluate([expr], program.schema, rows) == [program.run(rows)]
+
+
+def larger(left: float, right: float) -> float:
+    return max(left, right)
+
+
+def smaller(left: float, right: float) -> float:
+    return min(left, right)
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("extremum", [larger, smaller], ids=["max", "min"])
+def test_float_extremum_keeps_argument_order(
+    backend: Backend[Any], extremum: Callable[[float, float], float]
+) -> None:
+    values = [0.0, -0.0, float("nan"), float("-nan"), float("inf"), float("-inf"), 1.0]
+    rows = list(itertools.product(values, repeat=2))
+    schema = {"left": FLOAT, "right": FLOAT}
+    assert check_function(extremum, schema, backend, rows) == []
 
 
 @pytest.mark.parametrize("backend", backend_params())
