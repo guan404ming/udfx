@@ -14,6 +14,8 @@ from udfx.program import Program
 from udfx.testing.outcome import Returned, run
 from udfx.types import Kind, Type
 
+BATCH_SIZE = 8192
+
 SAMPLE_DATES = ["2024-05-17", "1999-12-31", "", "20x4-01-01", " 123-1"]
 SAMPLE_WORDS = ["Hello World", "funder::class::id", "a::b", "", "  padded  ", "42", " -3 "]
 EXTRA_WORDS = [
@@ -162,4 +164,5 @@ def dataset(case: Case, program: Program, row_count: int) -> tuple[pyarrow.Table
         name: pyarrow.array([row[index] for row in rows], arrow.dtype(type))
         for index, (name, type) in enumerate(program.schema.items())
     }
-    return pyarrow.table(columns), expected
+    table = pyarrow.table(columns)
+    return pyarrow.Table.from_batches(table.to_batches(BATCH_SIZE), table.schema), expected
