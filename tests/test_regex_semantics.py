@@ -3,7 +3,8 @@ import re
 import pytest
 
 from udfx.errors import Unsupported
-from udfx.semantics.regex_translation import category, replacement, translate
+from udfx.semantics.regex_replacement import replacement
+from udfx.semantics.regex_translation import category, translate
 
 
 @pytest.mark.parametrize("dialect", ["rust", "re2", "java"])
@@ -57,3 +58,9 @@ def test_regex_comment_characters(pattern: str) -> None:
 )
 def test_regex_replacement(dialect: str, expected: str) -> None:
     assert replacement("(a)", 0, r"\1-${1}-\g<1>", dialect) == expected
+
+
+def test_regex_ascii_only_drops_wide_class_members() -> None:
+    assert "3000" not in translate("[^ \\u3000]+\\Z", 0, "java", True).source
+    assert translate("[\\u3000\\u2000]", 0, "java", True).source == "(?d)(?!)"
+    assert "212A" in translate("(?i)[\\u212Ax]", 0, "java", True).source

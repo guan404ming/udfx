@@ -34,7 +34,7 @@ register_regex(
         dialect="rust",
         literal=literal,
         contains=lambda text, pattern: text.str.contains(pattern),
-        extract=lambda text, pattern: text.str.extract(pattern, 0),
+        extract=lambda text, pattern, empty: text.str.extract(pattern, 0),
         replace=replace,
         split=lambda text, separator: text.str.split(separator),
         findall=findall,

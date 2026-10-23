@@ -29,7 +29,7 @@ register_regex(
         dialect="datafusion",
         literal=literal,
         contains=lambda text, pattern: functions.regexp_like(text, lit(pattern)),
-        extract=lambda text, pattern: functions.array_element(
+        extract=lambda text, pattern, empty: functions.array_element(
             functions.regexp_match(text, lit("(" + pattern + ")")), 1
         ),
         replace=lambda text, pattern, replacement, count: functions.regexp_replace(

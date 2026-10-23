@@ -15,7 +15,9 @@ def literal(value: object) -> Column | bool:
     return functions.lit(value).cast("string") if value is None else functions.lit(value)
 
 
-def extract(text: Column, pattern: str) -> Column:
+def extract(text: Column, pattern: str, empty: bool) -> Column:
+    if not empty:
+        return functions.nullif(functions.regexp_extract(text, pattern, 0), functions.lit(""))
     return functions.when(
         functions.regexp_like(text, functions.lit(pattern)),
         functions.regexp_extract(text, pattern, 0),

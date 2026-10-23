@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from udfx.errors import Unsupported
-from udfx.semantics.regex_translation import Pattern, escaped, replacement, translate
+from udfx.semantics.regex_replacement import replacement
+from udfx.semantics.regex_translation import Pattern, escaped, translate
 from udfx.semantics.text_predicates import AsciiPrimitives
 
 SEPARATOR = "\x00"
@@ -16,7 +17,7 @@ class RegexPrimitives:
     dialect: str
     literal: Callable[[Any], Any]
     contains: Callable[[Any, str], Any]
-    extract: Callable[[Any, str], Any]
+    extract: Callable[[Any, str, bool], Any]
     replace: Callable[[Any, str, str, int], Any]
     split: Callable[[Any, str], Any]
     findall: Callable[[Any, str, int], Any]
@@ -95,7 +96,7 @@ def regex_parts(
             source = r"\A(?:" + source + ")" + (r"\z" if name == "fullmatch" else "")
         exact = regex_exact(primitives, translated, text)
         if name in {"search", "match", "fullmatch"}:
-            return primitives.extract(text, source), exact
+            return primitives.extract(text, source, translated.empty), exact
         if name == "findall":
             return primitives.findall(
                 text, source, translated.groups

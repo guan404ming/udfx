@@ -15,7 +15,8 @@ from udfx.frontend.resolve.constants import constant, constant_value
 from udfx.frontend.resolve.functions import bind
 from udfx.ir import FALSE, Lit, Node, lit
 from udfx.ops import Fault
-from udfx.semantics.regex_translation import replacement, translate
+from udfx.semantics.regex_replacement import replacement
+from udfx.semantics.regex_translation import translate
 
 
 def literal(item: Item, name: str, kind: type | tuple[type, ...]) -> Any:

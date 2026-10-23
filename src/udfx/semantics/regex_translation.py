@@ -49,6 +49,14 @@ def category(name: str, ascii_only: bool = False) -> str:
     )
 
 
+def ascii_member(name: str, member: Any) -> Any:
+    if name == "LITERAL":
+        return member if member <= 127 else None
+    if name == "RANGE":
+        return (member[0], min(member[1], 127)) if member[0] <= 127 else None
+    return member
+
+
 @dataclass(frozen=True)
 class Pattern:
     source: str
@@ -86,14 +94,7 @@ class Translator:
             case "NOT_LITERAL":
                 return "[^" + self.token("LITERAL", value, repetitions) + "]"
             case "IN":
-                negate = bool(value and str(value[0][0]) == "NEGATE")
-                members = value[1:] if negate else value
-                return (
-                    "["
-                    + ("^" if negate else "")
-                    + "".join(self.character(str(name), member) for name, member in members)
-                    + "]"
-                )
+                return self.char_set(value)
             case "ANY":
                 return "(?s:.)" if self.flags & re.DOTALL else "[^\\x{A}]"
             case "BRANCH":
@@ -120,6 +121,24 @@ class Translator:
                 return self.anchor(str(value))
             case _:
                 raise Unsupported(f"regex {name.lower()} is unsupported")
+
+    def char_set(self, value: Any) -> str:
+        negate = bool(value and str(value[0][0]) == "NEGATE")
+        members = value[1:] if negate else value
+        if self.ascii_only and not self.flags & re.IGNORECASE:
+            members = [
+                (name, kept)
+                for name, member in members
+                if (kept := ascii_member(str(name), member)) is not None
+            ]
+            if not members:
+                return "(?s:.)" if negate else "(?!)"
+        return (
+            "["
+            + ("^" if negate else "")
+            + "".join(self.character(str(name), member) for name, member in members)
+            + "]"
+        )
 
     def character(self, name: str, value: Any) -> str:
         if name == "CATEGORY":
@@ -209,37 +228,3 @@ def reject_comments(pattern: str) -> None:
             class_start = index + 1 + pattern.startswith("^", index + 1)
         elif pattern.startswith("(?#", index):
             raise Unsupported("regex comments are unsupported")
-
-
-def replacement(pattern: str, flags: int, value: str, dialect: str) -> str:
-    if any(0xD800 <= ord(point) <= 0xDFFF for point in value):
-        raise Unsupported("regex replacement surrogates need fallback")
-    try:
-        parts = parser.parse_template(value, re.compile(pattern, flags))
-    except (re.error, IndexError) as error:
-        raise Unsupported(f"invalid regex replacement: {error}") from error
-    result: list[str] = []
-    for index, part in enumerate(parts):
-        if isinstance(part, int):
-            if dialect == "re2":
-                if part > 9:
-                    raise Unsupported("RE2 replacement supports groups 0 through 9")
-                result.append(f"\\{part}")
-            else:
-                result.append(f"${part}" if dialect == "java" else f"${{{part}}}")
-        elif dialect in {"rust", "datafusion"}:
-            if dialect == "datafusion" and "\\" in part:
-                raise Unsupported("DataFusion literal replacement backslashes need fallback")
-            result.append(part.replace("$", "$$"))
-        else:
-            escaped_part = part.replace("\\", "\\\\")
-            if (
-                dialect == "java"
-                and index
-                and isinstance(parts[index - 1], int)
-                and part
-                and part[0] in "0123456789"
-            ):
-                escaped_part = "\\" + escaped_part
-            result.append(escaped_part.replace("$", r"\$") if dialect == "java" else escaped_part)
-    return "".join(result)

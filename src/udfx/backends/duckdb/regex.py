@@ -14,7 +14,7 @@ register_regex(
             constant(value).cast("VARCHAR[]") if isinstance(value, list) else constant(value)
         ),
         contains=lambda text, pattern: function("regexp_matches", text, constant(pattern)),
-        extract=lambda text, pattern: when(
+        extract=lambda text, pattern, empty: when(
             function("regexp_matches", text, constant(pattern + r"[\s\S]*")),
             function("regexp_extract", text, constant(pattern), constant(0)),
             constant(None).cast("VARCHAR"),

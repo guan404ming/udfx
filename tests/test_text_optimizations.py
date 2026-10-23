@@ -5,6 +5,7 @@ from typing import Any
 import polars as pl
 import pytest
 from conftest import backend_params
+from corpus.cases_lists import unpack_ends
 
 from udfx.backends.base import Backend
 from udfx.backends.lowering import lower_program
@@ -112,3 +113,12 @@ def test_spark_regex_uses_ascii_classes_for_ascii() -> None:
     assert "octet_length(value)" in str(lowered.expr)
     rows = [("a,b!",), ("\xe9,\xfc_\u0663",), ("\u3000x.",), ("",), (None,)]
     assert check_function(symbols, schema, backend, rows) == []
+
+
+def test_spark_search_runs_one_regex() -> None:
+    schema = {"text": STR.or_none()}
+    backend = SparkBackend()
+    lowered = lower_program(backend, trace(unpack_ends, schema))
+    assert "regexp_like" not in str(lowered.expr)
+    rows = [("a b",), ("  x y z ",), ("\u20ac y",), ("\u3000z w",), ("x",), (None,)]
+    assert check_function(unpack_ends, schema, backend, rows) == []
