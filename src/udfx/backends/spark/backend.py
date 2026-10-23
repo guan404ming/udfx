@@ -38,6 +38,7 @@ class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
     indexes: ClassVar[bool] = True
+    rewrites_words: ClassVar[bool] = False
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session

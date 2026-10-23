@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from conftest import backend_params
 
-from tests.corpus.cases_lists import weighted_word_length
+from tests.corpus.cases_lists import unpack_ends, weighted_word_length
 from tests.corpus.cases_string_splitting import index_split_limit
 from tests.corpus.cases_strings import join_characters
 from tests.corpus.cases_structure import remove_stopwords
@@ -65,3 +65,9 @@ def test_fallback_on_chunked_frames(engine: Literal["in-memory", "streaming"]) -
     assert frame.n_chunks() == 2
     result = frame.lazy().select(translation.expr).collect(engine=engine).to_series().to_list()
     assert result == [weighted_word_length(text) for text in texts]
+
+
+def test_word_ends_match_without_split() -> None:
+    translation = compile(unpack_ends, {"text": STR.or_none()})
+    assert translation.expr is not None, translation.unsupported
+    assert "split" not in str(translation.expr)

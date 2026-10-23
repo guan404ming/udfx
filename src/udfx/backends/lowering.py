@@ -16,6 +16,7 @@ from udfx.backends.indexing import (
 from udfx.backends.registration import Lowered, RuleResult
 from udfx.backends.rules import fold_predicate
 from udfx.errors import Unsupported
+from udfx.frontend.core.sequences import rewrite_words
 from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
 from udfx.ops import OpKey
 from udfx.program import Program
@@ -69,6 +70,8 @@ def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Node, E]) -> Lo
 
 
 def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Node, E]) -> Lowered[E]:
+    if backend.rewrites_words and (words := rewrite_words(node)) is not None:
+        return backend.lower(words, elements)
     if node.type.kind is Kind.BOOL:
         folded = fold_predicate(node)
         if folded != node:

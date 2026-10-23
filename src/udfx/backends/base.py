@@ -57,6 +57,7 @@ class Backend[E](ABC):
     rules: ClassVar[RuleSet[Any]]
     binds: ClassVar[bool] = False
     indexes: ClassVar[bool] = False
+    rewrites_words: ClassVar[bool] = True
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:

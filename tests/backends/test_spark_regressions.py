@@ -47,13 +47,13 @@ def test_spark_unpack_ends_evaluates_one_whitespace_split(backend: Backend[Any])
     translation = compile(unpack_ends, {"text": STR.or_none()}, backend)
     assert translation.ok, translation.unsupported
     assert translation.expr is not None
-    assert str(translation.expr).count("regexp_extract_all") == 2
     frame = backend.session().createDataFrame([("one two three",)], ["text"])
     output = StringIO()
     with redirect_stdout(output):
         frame.select(translation.expr.alias("result")).explain()
     plan = output.getvalue()
-    assert plan.count("regexp_extract_all") == 2
+    assert "regexp_extract(" not in plan
+    assert "regexp_replace" not in plan
     assert "Python" not in plan
 
 

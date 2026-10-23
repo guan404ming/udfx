@@ -86,9 +86,6 @@ def simplify_sequence(node: Call) -> Node:
     total = sum_partition(node)
     if total is not None:
         return total
-    word = word_item(node)
-    if word is not None:
-        return word
     if node.op.name in {"len", "bool", "__getitem__"}:
         partition = limited_split(node.arguments[0])
         if partition is not None:
@@ -112,8 +109,12 @@ def simplify_sequence(node: Call) -> Node:
             if step < 0:
                 offset = apply("__sub__", apply("__sub__", apply("len", source), lit(1)), offset)
             return apply("__getitem__", source, offset)
-    words = join_words(node)
-    return join_prefix(node) if words is None else words
+    return join_prefix(node)
+
+
+def rewrite_words(node: Call) -> Node | None:
+    word = word_item(node)
+    return join_words(node) if word is None else word
 
 
 def join_prefix(node: Call) -> Node:
