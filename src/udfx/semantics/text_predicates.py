@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -38,3 +39,8 @@ def ascii_predicate(
         fast,
         string_predicate(matches, value, method),
     )
+
+
+def ascii_free(pattern: str) -> bool:
+    points = re.findall(r"\\x\{([0-9A-F]+)\}", pattern)
+    return bool(points) and min(int(point, 16) for point in points) >= 0x80

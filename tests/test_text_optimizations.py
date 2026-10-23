@@ -7,8 +7,11 @@ from conftest import backend_params
 
 from udfx.backends.base import Backend
 from udfx.backends.polars import PolarsBackend
+from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.ir import Guarded
+from udfx.semantics.text import ANY_CHAR, char_class
+from udfx.semantics.text_predicates import ascii_free
 from udfx.testing import check_function
 from udfx.types import STR
 
@@ -66,3 +69,21 @@ def test_polars_reverse_cluster_guard(cluster: str, exact: bool) -> None:
     assert lowered.exact is not None
     assert backend.evaluate([lowered.exact], schema, [(text,)]) == [[exact]]
     assert check_function(function, schema, backend, [(text,)]) == []
+
+
+def test_spark_case_guard_skips_regex_for_ascii() -> None:
+    schema = {"value": STR.or_none()}
+    backend = SparkBackend()
+    lowered = backend.native_program(trace(lambda value: value.upper(), schema))
+    assert lowered is not None
+    assert lowered.exact is not None
+    assert "octet_length(value)" in str(lowered.exact)
+    assert str(lowered.expr).startswith("Column<'CASE WHEN and(isNull(value), ")
+    rows = [("abc",), ("ƛ",), (None,), ("okɤ",)]
+    assert backend.evaluate([lowered.exact], schema, rows)[0] == [True, False, None, False]
+
+
+def test_ascii_free_classes() -> None:
+    assert ascii_free(char_class("Σİ"))
+    assert not ascii_free(char_class("aΣ"))
+    assert not ascii_free(ANY_CHAR)

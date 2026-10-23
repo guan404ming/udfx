@@ -33,7 +33,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
-from udfx.semantics.text_predicates import AsciiPrimitives
+from udfx.semantics.text_predicates import AsciiPrimitives, ascii_free
 from udfx.types import STR, Kind
 
 INT32_MAX = 2**31 - 1
@@ -53,9 +53,16 @@ def case_drift(method: str) -> CaseDrift:
     return text.case_drift(method, partial(native_recase, method), engine)
 
 
+def contains_class(value: Column, pattern: str) -> Column:
+    found = value.rlike(pattern)
+    if not ascii_free(pattern):
+        return found
+    return (functions.octet_length(value) != functions.char_length(value)) & found
+
+
 def recase(value: Column, method: str) -> RuleResult[Column]:
     expr = case_expression(CASE, value, method)
-    exact = case_guard(case_drift(method), value.rlike, value.contains(SIGMA))
+    exact = case_guard(case_drift(method), partial(contains_class, value), value.contains(SIGMA))
     return expr if exact is None else Lowered(expr, exact)
 
 

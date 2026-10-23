@@ -29,7 +29,7 @@ def lower_program[E](backend: Backend[E], program: Program) -> Lowered[E]:
         if raised is None:
             exact = backend.conjunction(exact, backend.negate(failure))
         else:
-            condition = failure if exact is None else backend.both(exact, failure)
+            condition = failure if exact is None else backend.both(failure, exact)
             expr = backend.select(condition, raised, expr)
     return Lowered(expr, exact)
 
