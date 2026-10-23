@@ -53,22 +53,22 @@ def test_static_guards_build_without_fallback(
     assert backend.evaluate([expr], program.schema, rows) == [program.run(rows)]
 
 
-def larger(left: float, right: float) -> float:
-    return max(left, right)
+def larger(first: float, second: float, third: float) -> float:
+    return max(first, second, third)
 
 
-def smaller(left: float, right: float) -> float:
-    return min(left, right)
+def smaller(first: float, second: float, third: float) -> float:
+    return min(first, second, third)
 
 
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("extremum", [larger, smaller], ids=["max", "min"])
 def test_float_extremum_keeps_argument_order(
-    backend: Backend[Any], extremum: Callable[[float, float], float]
+    backend: Backend[Any], extremum: Callable[[float, float, float], float]
 ) -> None:
-    values = [0.0, -0.0, float("nan"), float("-nan"), float("inf"), float("-inf"), 1.0]
-    rows = list(itertools.product(values, repeat=2))
-    schema = {"left": FLOAT, "right": FLOAT}
+    values = [0.0, -0.0, float("nan"), float("-nan"), float("-inf"), 1.0, 2.0]
+    rows = list(itertools.product(values, repeat=3))
+    schema = {"first": FLOAT, "second": FLOAT, "third": FLOAT}
     assert check_function(extremum, schema, backend, rows) == []
 
 
