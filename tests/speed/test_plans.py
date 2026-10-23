@@ -1,9 +1,10 @@
+import gc
 from typing import Any
 
 import pytest
 from conftest import backend_params
 
-from bench.speed.timing import fallback_in_plan, pending_share
+from bench.speed.timing import fallback_in_plan, pending_share, timed
 from udfx.backends.base import Backend
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.frontend import trace
@@ -52,3 +53,10 @@ def test_python_programs_are_fully_pending() -> None:
     program = trace(lambda left, right: len(set(left) & set(right)), {"left": STR, "right": STR})
     assert fallback_in_plan(backend.build(program), backend.name)
     assert pending_share(backend, program, lambda exact: []) == 1.0
+
+
+def test_timed_runs_without_collection() -> None:
+    states: list[bool] = []
+    timed(lambda: states.append(gc.isenabled()), 2)
+    assert states == [False, False]
+    assert gc.isenabled()

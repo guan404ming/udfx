@@ -1,3 +1,4 @@
+import gc
 import math
 import re
 import time
@@ -36,9 +37,14 @@ def measured(engine: str, measure: Callable[[], tuple[float, str]]) -> tuple[flo
 def timed(action: Callable[[], object], repeats: int) -> float:
     best = math.inf
     for _ in range(repeats):
-        start = time.perf_counter()
-        action()
-        best = min(best, time.perf_counter() - start)
+        gc.collect()
+        gc.disable()
+        try:
+            start = time.perf_counter()
+            action()
+            best = min(best, time.perf_counter() - start)
+        finally:
+            gc.enable()
     return best
 
 
