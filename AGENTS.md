@@ -27,7 +27,7 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
 | `src/udfx/backends/hoisting.py` | Finds a repeated list call in a comprehension body that does not read the element |
-| `src/udfx/backends/indexing.py` | Rewrites `range(len(items))` comprehensions that a backend cannot lower: unrolls a small literal bound, else maps them to an indexed list transform |
+| `src/udfx/backends/indexing.py` | Rewrites `range` comprehensions that a backend cannot lower: unrolls a small literal bound and maps `range(len(items))` to an indexed list transform |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
 | `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
 | `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Backends may also have `slicing.py` and `splitting.py`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |

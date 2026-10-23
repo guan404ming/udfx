@@ -165,12 +165,18 @@ def weighted_numbers(text: str) -> list[int]:
     return [int(word) * weight for word, weight in zip(text.split(), (1, 2), strict=False)]
 
 
+def keyed_values(text: str) -> list[str]:
+    return [key + str(value) for key, value in {"a": 1, "b": 2}.items() if key in text]
+
+
 @pytest.mark.parametrize("backend", backend_params())
-@pytest.mark.parametrize("function", [indexed_words, weighted_lengths, weighted_numbers])
+@pytest.mark.parametrize(
+    "function", [indexed_words, weighted_lengths, weighted_numbers, keyed_values]
+)
 def test_indexed_comprehension_native_rows(backend: Backend[Any], function: Any) -> None:
     schema = {"text": STR}
     rows = [("",), ("7",), ("12 3",), ("1 2 a",)]
     assert check_function(function, schema, backend, [*rows, ("x",)]) == []
     lowered = backend.lower(trace(function, schema).value)
     exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
-    assert backend.evaluate([exact], schema, rows)[0] == [True] * len(rows)
+    assert backend.evaluate([lowered.expr, exact], schema, rows)[1] == [True] * len(rows)

@@ -18,15 +18,14 @@ def range_stop(node: Comprehension) -> Node | None:
 
 
 def literal_range(node: Comprehension) -> Comprehension | None:
-    indexed = indexed_source(node)
-    if indexed is None:
-        return None
-    items, stop = indexed
+    stop, indexed = range_stop(node), indexed_source(node)
+    if indexed is not None:
+        items, stop = indexed
+        node = restrict(node, apply("__lt__", node.element, apply("len", items)))
     if not isinstance(stop, Lit) or stop.type != INT or not isinstance(stop.value, int):
         return None
     if stop.value > UNROLL_LIMIT:
         return None
-    node = restrict(node, apply("__lt__", node.element, apply("len", items)))
     return replace(node, source=Lit(tuple(range(stop.value)), node.source.type))
 
 
