@@ -102,8 +102,3 @@ def children(node: Node) -> tuple[Node, ...]:
             return node.source, node.value, node.condition, node.fault
         case _:
             return ()
-
-
-def op_names(node: Node) -> frozenset[str]:
-    names = frozenset({node.op.name}) if isinstance(node, Call) else frozenset[str]()
-    return names.union(*(op_names(child) for child in children(node)))

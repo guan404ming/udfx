@@ -6,6 +6,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from udfx.backends.lowering import lower_program
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
@@ -74,8 +75,7 @@ def test_polars_reverse_cluster_guard(cluster: str, exact: bool) -> None:
 def test_spark_case_guard_skips_regex_for_ascii() -> None:
     schema = {"value": STR.or_none()}
     backend = SparkBackend()
-    lowered = backend.native_program(trace(lambda value: value.upper(), schema))
-    assert lowered is not None
+    lowered = lower_program(backend, trace(lambda value: value.upper(), schema))
     assert lowered.exact is not None
     assert "octet_length(value)" in str(lowered.exact)
     assert str(lowered.expr).startswith("Column<'CASE WHEN and(isNull(value), ")

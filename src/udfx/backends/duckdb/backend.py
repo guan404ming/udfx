@@ -20,17 +20,14 @@ from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_r
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
-from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.registration import RuleSet
 from udfx.ir import Col, Lit
 from udfx.program import Program
-from udfx.semantics.lists import SET_OPERATIONS, SET_PREDICATES
 from udfx.types import Type
 
 EXACT = f"{RESERVED}exact"
 NATIVE = f"{RESERVED}native"
 ROW = f"{RESERVED}row"
-LAMBDA = " -> "
-LAMBDA_BUDGET = 8
 FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 CONNECTIONS = weakref.WeakKeyDictionary[duckdb.DuckDBPyConnection, int]()
@@ -40,27 +37,12 @@ LOCK = threading.Lock()
 DEFAULT_FAULTS = NativeFaults()
 
 
-def register(
-    connection: duckdb.DuckDBPyConnection,
-    name: str,
-    run: Callable[..., pa.Array],
-    parameters: Sequence[sqltypes.DuckDBPyType],
-    result: sqltypes.DuckDBPyType,
-) -> None:
-    with suppress(duckdb.NotImplementedException):
-        connection.create_function(
-            name, run, [*parameters], result, type=ARROW, null_handling=SPECIAL
-        )
-
-
 def connection_number(connection: duckdb.DuckDBPyConnection) -> int:
     with LOCK:
         return CONNECTIONS.setdefault(connection, next(NUMBERS))
 
 
-def fallback_name(
-    program: Program, connection: duckdb.DuckDBPyConnection, kind: str = "patch"
-) -> str:
+def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> str:
     code = program.function.__code__
     schema = [(name, str(type)) for name, type in program.schema.items()]
     parts = (
@@ -71,7 +53,6 @@ def fallback_name(
         schema,
         program.value,
         program.fault,
-        kind,
     )
     digest = hashlib.sha256(repr(parts).encode()).hexdigest()
     return f"{FALLBACK} {digest} {connection_number(connection)}"
@@ -81,9 +62,6 @@ class DuckDBBackend(Backend[Expression]):
     name: ClassVar[str] = "duckdb"
     rules: ClassVar[RuleSet[Expression]] = RULES
     binds: ClassVar[bool] = True
-    python_ops: ClassVar[frozenset[str]] = frozenset(
-        f"set_{name}" for name in (*SET_OPERATIONS, *SET_PREDICATES)
-    )
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self._connection = connection
@@ -103,10 +81,6 @@ class DuckDBBackend(Backend[Expression]):
 
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:
         return when(condition, then, orelse)
-
-    def too_costly(self, lowered: Lowered[Expression]) -> bool:
-        guard = 0 if lowered.exact is None else str(lowered.exact).count(LAMBDA)
-        return str(lowered.expr).count(LAMBDA) + 2 * guard >= LAMBDA_BUDGET
 
     def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
         return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")
@@ -163,7 +137,15 @@ class DuckDBBackend(Backend[Expression]):
                 DuckDBBackend(), program, batch.field(EXACT), batch.field(NATIVE), columns
             )
 
-        register(connection, name, patch, [duckdb.struct_type(fields)], dtype(program.result))
+        with suppress(duckdb.NotImplementedException):
+            connection.create_function(
+                name,
+                patch,
+                [duckdb.struct_type(fields)],
+                dtype(program.result),
+                type=ARROW,
+                null_handling=SPECIAL,
+            )
         packed = function(
             "struct_pack",
             exact.alias(EXACT),
@@ -171,22 +153,6 @@ class DuckDBBackend(Backend[Expression]):
             *(column(field).alias(field) for field in program.schema),
         )
         return when(exact, native, function(name, packed))
-
-    def python(self, program: Program) -> Expression:
-        if not program.schema:
-            return super().python(program)
-        name = fallback_name(program, self.connection, "python")
-
-        fields = {field: dtype(type) for field, type in program.schema.items()}
-
-        def run(packed: pa.ChunkedArray) -> pa.Array:
-            batch = cast(pa.StructArray, packed.combine_chunks())
-            columns = [batch.field(field) for field in program.schema]
-            return arrow.python_rows(DuckDBBackend(), program, columns)
-
-        register(self.connection, name, run, [duckdb.struct_type(fields)], dtype(program.result))
-        packed = function("struct_pack", *(column(field).alias(field) for field in program.schema))
-        return function(name, packed)
 
     def evaluate(
         self, exprs: Sequence[Expression], schema: Mapping[str, Type], rows: Sequence[Row]

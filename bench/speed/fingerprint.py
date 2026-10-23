@@ -5,8 +5,6 @@ from typing import Any
 
 from udfx.backends.base import Backend
 from udfx.backends.faults import NativeFaults
-from udfx.backends.lowering import lower_program
-from udfx.backends.rules import Lowered
 from udfx.ir import Col
 from udfx.program import Program
 
@@ -38,7 +36,6 @@ def expression_text(expr: Any, engine: str) -> str:
 def fingerprint(backend: Backend[Any], program: Program) -> str:
     names = {name: f"c{index}" for index, name in enumerate(program.schema)}
     guard = ""
-    route = ""
 
     def column(self: Backend[Any], node: Col) -> Any:
         return backend.column(Col(names[node.name], node.type))
@@ -47,14 +44,6 @@ def fingerprint(backend: Backend[Any], program: Program) -> str:
         nonlocal guard
         guard = f" fallback when not {expression_text(exact, backend.name)}"
         return native
-
-    def native_program(self: Backend[Any], program: Program) -> Lowered[Any]:
-        nonlocal route
-        value = type(backend).native_program(self, program)
-        if value is None:
-            route = " in python"
-            return lower_program(self, program)
-        return value
 
     def native_raise(self: Backend[Any], program: Program) -> Any:
         if backend.name == "duckdb":
@@ -70,9 +59,8 @@ def fingerprint(backend: Backend[Any], program: Program) -> str:
         {
             "column": column,
             "fallback": fallback,
-            "native_program": native_program,
             "native_raise": native_raise,
             "native_faults": property(lambda self: FingerprintFaults()),
         },
     )
-    return expression_text(normalized.build(program), backend.name) + guard + route
+    return expression_text(normalized.build(program), backend.name) + guard
