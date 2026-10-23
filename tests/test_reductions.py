@@ -13,7 +13,7 @@ from udfx.types import STR
 
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("reduction", [any, all])
-def test_generator_short_circuit_guards(
+def test_generator_short_circuit_faults(
     backend: Backend[Any], reduction: Callable[[Iterable[bool]], bool]
 ) -> None:
     def reduced(text: str) -> bool:
@@ -21,10 +21,10 @@ def test_generator_short_circuit_guards(
 
     schema = {"text": STR}
     rows = [("a",), ("z",)]
-    lowered = backend.lower(trace(reduced, schema).value)
-    assert lowered.exact is not None
-    expected = [True, False] if reduction is any else [False, True]
-    assert backend.evaluate([lowered.exact], schema, rows)[0] == expected
+    program = trace(reduced, schema)
+    assert backend.lower(program.value).exact is None
+    expected = [False, True] if reduction is any else [True, False]
+    assert backend.evaluate([backend.lower(program.fault).expr], schema, rows)[0] == expected
     assert check_function(reduced, schema, backend, rows) == []
 
 

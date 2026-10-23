@@ -110,6 +110,14 @@ def test_strptime_guard(backend: Backend[Any]) -> None:
     assert all(flag is not True for flag in flags[1:])
 
 
+@pytest.mark.xdist_group("spark")
+def test_spark_strptime_guard_skips_render() -> None:
+    backend = SparkBackend()
+    translation = compile(lambda text: datetime.strptime(text, "%Y-%m-%d"), {"text": STR}, backend)
+    assert translation.program is not None
+    assert "lpad" not in str(backend.lower(translation.program.value).exact)
+
+
 @pytest.mark.parametrize("backend", backend_params())
 def test_strptime_catches_value_error(backend: Backend[Any]) -> None:
     def year(text: str) -> int:

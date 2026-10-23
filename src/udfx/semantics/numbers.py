@@ -71,10 +71,14 @@ def widened_exact(primitives: OrderPrimitives, value: Any) -> Any:
 
 
 def float_extremum(
-    primitives: OrderPrimitives, pick: Binary, left: Any, right: Any
-) -> tuple[Any, Any]:
+    primitives: OrderPrimitives,
+    compare: Binary,
+    when: Callable[[Any, Any, Any], Any],
+    left: Any,
+    right: Any,
+) -> Any:
     zeros = (left == 0.0) & (right == 0.0)
-    return pick(left, right), ~primitives.either_nan(left, right) & ~zeros
+    return when(float_compare(primitives, compare, right, left) & ~zeros, right, left)
 
 
 @dataclass(frozen=True)

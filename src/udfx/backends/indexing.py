@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 UNROLL_LIMIT = 64
 
+type Parts[E] = tuple[Lowered[E], Lowered[E], E | None, E]
+
 
 def range_stop(node: Comprehension) -> Node | None:
     source = node.source
@@ -112,7 +114,7 @@ def lower_indexed[E](
     source = backend.lower(items, elements)
     guarded = False
 
-    def parts(element: E, index: E) -> tuple[Lowered[E], Lowered[E], E | None]:
+    def parts(element: E, index: E) -> Parts[E]:
         nonlocal guarded
         scope = {**elements, node.element: index, **dict.fromkeys(lookups, element)}
         for offset in offsets:
@@ -131,30 +133,47 @@ def lower_indexed[E](
         lambda element, index: parts(element, index)[1].expr,
         None if node.condition == TRUE else condition,
     )
-    if not guarded and node.fault == FALSE:
-        return Lowered(value, backend.exact(source))
-    flags = backend.list_indexed(
-        source.expr, lambda element, index: cast("E", parts(element, index)[2]), None
+    return comprehension_result(
+        backend,
+        node,
+        source,
+        value,
+        guarded=guarded,
+        flags=lambda pick: backend.list_indexed(
+            source.expr, lambda element, index: pick(parts(element, index)), None
+        ),
     )
-    return Lowered(value, backend.conjunction(backend.exact(source), every(backend, flags)))
 
 
 def comprehension_parts[E](
     backend: Backend[E], node: Comprehension, scope: Mapping[Node, E]
-) -> tuple[Lowered[E], Lowered[E], E | None]:
+) -> Parts[E]:
     condition = backend.lower(node.condition, scope)
     value = backend.lower(node.value, scope)
     fault = backend.lower(node.fault, scope)
     value_exact = backend.exact(value)
     if node.condition != TRUE and value_exact is not None:
         value_exact = backend.select(condition.expr, value_exact, backend.literal(TRUE))
-    exact = backend.conjunction(
-        backend.exact(condition),
-        value_exact,
-        backend.exact(fault),
-        backend.negate(fault.expr) if node.fault != FALSE else None,
-    )
-    return condition, value, exact
+    exact = backend.conjunction(backend.exact(condition), value_exact, backend.exact(fault))
+    return condition, value, exact, fault.expr
+
+
+def comprehension_result[E](
+    backend: Backend[E],
+    node: Comprehension,
+    source: Lowered[E],
+    value: E,
+    *,
+    guarded: bool,
+    flags: Callable[[Callable[[Parts[E]], E]], E],
+) -> Lowered[E]:
+    exact = backend.exact(source)
+    if guarded:
+        exact = backend.conjunction(exact, every(backend, flags(lambda found: cast("E", found[2]))))
+    if node.fault == FALSE:
+        return Lowered(value, exact)
+    safe = every(backend, flags(lambda found: backend.negate(found[3])))
+    return Lowered(value, exact, backend.negate(safe))
 
 
 def every[E](backend: Backend[E], flags: E) -> E:

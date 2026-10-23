@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from udfx.backends.hoisting import invariant
 from udfx.backends.indexing import (
+    Parts,
     comprehension_parts,
-    every,
+    comprehension_result,
     indexed_source,
     literal_range,
     lower_indexed,
@@ -113,7 +114,7 @@ def lower_comprehension[E](
 
     guarded = False
 
-    def parts(element: E) -> tuple[Lowered[E], Lowered[E], E | None]:
+    def parts(element: E) -> Parts[E]:
         nonlocal guarded
         found = comprehension_parts(backend, node, {**elements, node.element: element})
         guarded = guarded or found[2] is not None
@@ -123,9 +124,10 @@ def lower_comprehension[E](
         if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
             chunks: list[E] = []
             exacts: list[E | None] = []
+            faults: list[E | None] = []
             for item in node.source.value:
                 element = backend.lower(Lit(item, node.element.type), elements)
-                condition, value, exact = parts(element.expr)
+                condition, value, exact, fault = parts(element.expr)
                 chunks.append(
                     backend.select(
                         condition.expr,
@@ -134,23 +136,34 @@ def lower_comprehension[E](
                     )
                 )
                 exacts.append(exact)
+                faults.append(fault if node.fault != FALSE else None)
             result = backend.literal(Lit((), node.type))
             concatenate = backend.rules.get(OpKey("__add__", (Kind.LIST, Kind.LIST)))
             if concatenate is None:
                 raise Unsupported(f"{backend.name} has no list concatenation")
             for chunk in chunks:
                 result = cast("E", concatenate(result, chunk))
-            return Lowered(result, backend.conjunction(backend.exact(source), *exacts))
+            return Lowered(
+                result,
+                backend.conjunction(backend.exact(source), *exacts),
+                backend.disjunction(*faults),
+            )
         filtered = source.expr
         if node.condition != TRUE:
             filtered = backend.list_filter(filtered, lambda element: parts(element)[0].expr)
         value = filtered
         if node.value != node.element:
             value = backend.list_transform(filtered, lambda element: parts(element)[1].expr)
-        if not guarded and node.fault == FALSE:
-            return Lowered(value, backend.exact(source))
-        flags = backend.list_transform(source.expr, lambda element: cast("E", parts(element)[2]))
-        return Lowered(value, backend.conjunction(backend.exact(source), every(backend, flags)))
+        return comprehension_result(
+            backend,
+            node,
+            source,
+            value,
+            guarded=guarded,
+            flags=lambda pick: backend.list_transform(
+                source.expr, lambda element: pick(parts(element))
+            ),
+        )
     except Unsupported:
         if node.requires_native:
             raise
@@ -189,9 +202,9 @@ def hoist[E](
 
     def inner(reference: E, pick: bool) -> E:
         found.append(lower_comprehension(backend, node, {**elements, hoisted: reference}))
-        return cast("E", found[-1].exact if pick else found[-1].expr)
+        return cast("E", backend.exact(found[-1]) if pick else found[-1].expr)
 
     expr = backend.bind(definition, lambda reference: inner(reference, False))
-    if found[0].exact is None:
+    if backend.exact(found[0]) is None:
         return Lowered(expr)
     return Lowered(expr, backend.bind(definition, lambda reference: inner(reference, True)))

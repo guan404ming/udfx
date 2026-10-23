@@ -82,6 +82,7 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 - A rule must never raise or panic for any input, including literal arguments. Where the op faults, any value is fine.
 - If the rule matches Python only on some rows, return `Lowered(expr, exact)`. `exact` is true only on rows where `expr` equals Python. Other rows fall back to Python.
 - Use `Lowered(expr, overflow=predicate)` when a native check detects int64 overflow. Generic lowering converts an intermediate overflow to an exactness guard. It uses a native fault for a final result where the backend supports it.
+- A comprehension reports its element faults as `overflow` too, because Python raises on those rows.
 - Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
 - Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
 - For a Python policy, fill its `*Primitives` record from `semantics/` with engine calls and call the policy function.

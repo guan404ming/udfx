@@ -27,6 +27,7 @@ from udfx.semantics.lists import (
 )
 from udfx.semantics.math import transcendental
 from udfx.semantics.numbers import (
+    COMPARISONS,
     FLOAT_INT_MAX,
     Binary,
     OrderPrimitives,
@@ -190,10 +191,11 @@ def register_equality[E](
 
 
 def register_extremum[E](
-    rules: RuleSet[E], name: str, pick: Binary, order: OrderPrimitives
+    rules: RuleSet[E], name: str, pick: Binary, order: OrderPrimitives, when: Callable[[E, E, E], E]
 ) -> None:
+    compare = COMPARISONS["__gt__" if name == "max" else "__lt__"]
     rules(name, Kind.FLOAT, Kind.FLOAT)(
-        lambda left, right: Lowered(*float_extremum(order, pick, left, right))
+        lambda left, right: float_extremum(order, compare, when, left, right)
     )
     for kind in (Kind.INT, Kind.STR):
         rules(name, kind, kind)(pick)

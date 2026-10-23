@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from unittest.mock import patch
 
@@ -10,7 +11,7 @@ from udfx.frontend import trace
 from udfx.ir import FALSE, TRUE, Col, Guarded, If, lit
 from udfx.ops import apply
 from udfx.program import Program
-from udfx.types import BOOL, FLOAT, INT, INT64_MAX, STR, Type
+from udfx.types import BOOL, DATETIME, FLOAT, INT, INT64_MAX, STR, Type
 
 
 def inverse(value: float) -> float | None:
@@ -35,8 +36,10 @@ def constant_part(value: int) -> str | None:
         (lambda value: value == 0, FLOAT, [(0.0,), (-0.0,), (1.0,), (float("nan"),)]),
         (inverse, FLOAT, [(0.0,), (2.0,), (-1.0,)]),
         (constant_part, INT, [(0,), (1,), (INT64_MAX,)]),
+        (lambda value: min(max(value, 0.0), 1.0), FLOAT, [(-0.0,), (0.0,), (2.0,), (0.5,)]),
+        (lambda value: value.strftime("%Y-%m-%d"), DATETIME, [(datetime(2024, 2, 29),)]),
     ],
-    ids=["is_zero", "inverse", "constant_part"],
+    ids=["is_zero", "inverse", "constant_part", "clamp", "strftime"],
 )
 def test_static_guards_build_without_fallback(
     backend: Backend[Any], function: Callable[..., object], type: Type, rows: list[tuple[Any, ...]]

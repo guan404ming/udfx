@@ -6,7 +6,7 @@ import pytest
 
 from udfx.explain import render
 from udfx.frontend import trace
-from udfx.ir import Call, Comprehension, Guarded
+from udfx.ir import FALSE, Call, Comprehension, Guarded
 from udfx.types import INT, STR, list_of
 
 
@@ -45,7 +45,7 @@ def test_literal_generator_reduction_short_circuits(
 ) -> None:
     program = trace(lambda text: reduction(word[0] in text for word in ("a", "")), {"text": STR})
     assert not isinstance(program.value, Comprehension)
-    assert "if(" in render(program.value) or isinstance(program.value, Guarded)
+    assert program.fault != FALSE
 
 
 def test_list_reduction_keeps_the_comprehension() -> None:

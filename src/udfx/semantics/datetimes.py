@@ -106,7 +106,7 @@ def format_datetime(primitives: DatetimePrimitives, value: Any, format: Any) -> 
         if part == "y":
             number = number % primitives.literal(100)
         result.append(primitives.pad(number, width))
-    return primitives.concatenate(result or [primitives.literal("")]), primitives.literal(True)
+    return primitives.concatenate(result or [primitives.literal("")]), None
 
 
 def parse_datetime(primitives: DatetimePrimitives, text: Any, format: Any) -> tuple[Any, Any]:
@@ -165,6 +165,11 @@ def parse_datetime(primitives: DatetimePrimitives, text: Any, format: Any) -> tu
     year = primitives.part(parsed, "year")
     valid = (year >= primitives.literal(1)) & (year <= primitives.literal(9999))
     parsed = primitives.select(valid, parsed, fallback[0])
+    if directives:
+        exact = ~primitives.is_null(parsed)
+        if "S" in fields:
+            exact = exact & (fields["S"] < primitives.literal("60"))
+        return parsed, exact
     rendered, _ = format_datetime(primitives, parsed, format)
     return parsed, ~primitives.is_null(parsed) & (rendered == text)
 

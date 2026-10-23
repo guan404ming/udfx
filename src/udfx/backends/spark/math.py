@@ -34,8 +34,8 @@ def power(base: Column, exponent: Column) -> Lowered[Column]:
     return Lowered(functions.pow(base, exponent), functions.lit(False))
 
 
-register_extremum(RULES, "max", functions.greatest, ORDER)
-register_extremum(RULES, "min", functions.least, ORDER)
+register_extremum(RULES, "max", functions.greatest, ORDER, when)
+register_extremum(RULES, "min", functions.least, ORDER, when)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(functions.sqrt)

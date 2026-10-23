@@ -50,8 +50,8 @@ def root(value: Expression) -> Expression:
     return function("sqrt", when(value < constant(0.0), constant(0.0), value))
 
 
-register_extremum(RULES, "max", lambda left, right: function("greatest", left, right), ORDER)
-register_extremum(RULES, "min", lambda left, right: function("least", left, right), ORDER)
+register_extremum(RULES, "max", lambda left, right: function("greatest", left, right), ORDER, when)
+register_extremum(RULES, "min", lambda left, right: function("least", left, right), ORDER, when)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(root)

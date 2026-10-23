@@ -169,7 +169,7 @@ def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
     if name in {"any", "all"} and isinstance(item, Generator):
         reduced = reduce_generator(name, item.node)
         if reduced is not None:
-            return reduced, []
+            return reduced
     if isinstance(item, Tuple) and name == "len":
         return lit(len(item.items)), []
     if isinstance(item, Set):

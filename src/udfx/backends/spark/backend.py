@@ -44,7 +44,7 @@ class SparkBackend(Backend[Column]):
 
     def lower(self, node: Node, elements: Mapping[Node, Column] | None = None) -> Lowered[Column]:
         lowered = super().lower(node, elements)
-        if isinstance(node, Comprehension) and elements and lowered.exact is not None:
+        if isinstance(node, Comprehension) and elements and self.exact(lowered) is not None:
             raise Unsupported("Spark cannot pass guarded nested lambdas to a Python UDF")
         return lowered
 

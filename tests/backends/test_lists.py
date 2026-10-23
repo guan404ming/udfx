@@ -39,6 +39,46 @@ def test_comprehension_membership_fallback(backend: Backend[Any]) -> None:
     assert check_function(filtered, schema, backend, rows) == []
 
 
+def second_parts(words: list[str]) -> list[str]:
+    return [word.split("=")[1] for word in words]
+
+
+def indexed_parts(words: list[str]) -> list[str]:
+    return [words[index].split("=")[1] for index in range(len(words))]
+
+
+def present_keys(text: str) -> list[str]:
+    return [key for key in ("a", "b") if key in text]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    ("function", "schema", "rows"),
+    [
+        (second_parts, {"words": list_of(STR)}, [(["a=1", "b=2"],), (["a=1", "b"],), ([],)]),
+        (present_keys, {"text": STR.or_none()}, [("ab",), ("c",), (None,)]),
+    ],
+    ids=["column", "literal"],
+)
+def test_comprehension_faults_raise(
+    backend: Backend[Any], function: Any, schema: dict[str, Any], rows: list[tuple[Any, ...]]
+) -> None:
+    lowered = backend.lower(trace(function, schema).value)
+    assert lowered.exact is None
+    assert lowered.overflow is not None
+    assert check_function(function, schema, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_indexed_comprehension_faults_raise(backend: Backend[Any]) -> None:
+    if backend.name == "polars":
+        pytest.skip("Polars list expressions cannot capture columns")
+    schema = {"words": list_of(STR)}
+    assert backend.lower(trace(indexed_parts, schema).value).overflow is not None
+    rows = [(["a=1", "b=2"],), (["a=1", "b"],), ([],)]
+    assert check_function(indexed_parts, schema, backend, rows) == []
+
+
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("function", [any, all], ids=["any", "all"])
 def test_nullable_list_reductions(backend: Backend[Any], function: Any) -> None:

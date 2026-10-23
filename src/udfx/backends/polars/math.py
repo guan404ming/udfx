@@ -34,8 +34,8 @@ def power(base: pl.Expr, exponent: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(base.pow(exponent), (pl.len() > 1) & ~complex_result)
 
 
-register_extremum(RULES, "max", pl.max_horizontal, ORDER)
-register_extremum(RULES, "min", pl.min_horizontal, ORDER)
+register_extremum(RULES, "max", pl.max_horizontal, ORDER, when)
+register_extremum(RULES, "min", pl.min_horizontal, ORDER, when)
 
 register_float_variants(RULES, "__pow__", power, cast_float64)
 RULES("math.sqrt", Kind.FLOAT)(pl.Expr.sqrt)

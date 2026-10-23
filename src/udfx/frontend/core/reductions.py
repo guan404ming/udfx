@@ -1,9 +1,9 @@
 from dataclasses import replace
 
-from udfx.frontend.core.logic import fold, negate
+from udfx.frontend.core.logic import conjunction, fold, negate
 from udfx.frontend.core.values import MAX_UNROLL
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, ListValue, Lit, Node
-from udfx.ops.registry import apply
+from udfx.ops.registry import Fault, apply
 from udfx.types import BOOL
 
 
@@ -63,22 +63,29 @@ def substitute(node: Node, element: Element, value: Node) -> Node:
     return node
 
 
-def reduce_generator(name: str, node: Node) -> Node | None:
+def reduce_generator(name: str, node: Node) -> tuple[Node, list[Fault]] | None:
     if not isinstance(node, Comprehension) or not isinstance(node.source, Lit):
         return None
     items = node.source.value
     if not isinstance(items, tuple | list) or len(items) > MAX_UNROLL:
         return None
-    result: Node = TRUE if name == "all" else FALSE
-    for item in reversed(items):
+    identity = TRUE if name == "all" else FALSE
+    values: list[Node] = []
+    faults: list[Fault] = []
+    reached = TRUE
+    for item in items:
         element = Lit(item, node.element.type)
         condition = substitute(node.condition, node.element, element)
         fault = substitute(node.fault, node.element, element)
         value = substitute(node.value, node.element, element)
         if value.type != BOOL:
             value = fold(apply("bool", value))
-        value = select(condition, value, TRUE if name == "all" else FALSE)
-        result = short_circuit(name, value, result)
+        value = select(condition, value, identity)
         if fault != FALSE:
-            result = Guarded(result, negate(fault))
-    return result
+            faults.append(Fault(Exception, conjunction(reached, fault)))
+        reached = conjunction(reached, value if name == "all" else negate(value))
+        values.append(value)
+    result = identity
+    for value in reversed(values):
+        result = short_circuit(name, value, result)
+    return result, faults
