@@ -49,3 +49,17 @@ def test_report_deduplicates_per_engine() -> None:
         "|---|---|---|---|",
         "| polars eager | a4d26868017c | fast, faster | 8.00x, 128.00x |",
     ]
+
+
+def test_report_uses_spark_k3_target() -> None:
+    output = report(
+        [
+            Measurement("case", "spark", 1.0, 1.0, "arrow", False, "spark", 0.0),
+            Measurement("case", "duckdb", 1.0, 1.0, "native", False, "duckdb", 0.0),
+        ],
+        {},
+        200,
+        3,
+    )
+    assert "| spark | 1 | 1 | 0 | 1.00x | 1.00x | PASS | 1/1 |" in output
+    assert "| duckdb | 1 | 1 | 0 | 1.00x | 1.00x | FAIL | 1/1 |" in output

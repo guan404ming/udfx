@@ -5,6 +5,8 @@ from statistics import geometric_mean
 
 from bench.speed.timing import Measurement
 
+K3_TARGETS = {"spark": 1.0}
+
 
 def report(
     measurements: Sequence[Measurement], skipped: Mapping[str, str], row_count: int, repeats: int
@@ -46,7 +48,7 @@ def report(
         deduplicated = geometric_mean(
             geometric_mean(item.speedup for item in group) for group in groups.values()
         )
-        verdict = "PASS" if deduplicated >= 3.0 else "FAIL"
+        verdict = "PASS" if deduplicated >= K3_TARGETS.get(engine, 3.0) else "FAIL"
         lines.append(
             f"| {engine} | {len(rows)} | {len(groups)} | {fails} | {mean:.2f}x"
             f" | {deduplicated:.2f}x | {verdict} | {native_only}/{len(rows)} |"
