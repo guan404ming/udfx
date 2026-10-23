@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
+from typing import TYPE_CHECKING, cast
 
 from udfx.backends.hoisting import reads_input
+from udfx.backends.registration import Lowered
+from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Lit, Node, children
-from udfx.ops import apply
+from udfx.ops import OpKey, apply
 from udfx.types import INT, Kind
+
+if TYPE_CHECKING:
+    from udfx.backends.base import Backend
 
 UNROLL_LIMIT = 64
 
@@ -67,3 +74,64 @@ def item_lookups(node: Comprehension, items: Node) -> frozenset[Node]:
     for part in (node.value, node.condition, node.fault):
         visit(part)
     return frozenset(found)
+
+
+def lower_indexed[E](
+    backend: Backend[E],
+    node: Comprehension,
+    elements: Mapping[Node, E],
+    items: Node,
+    bound: Node | None,
+) -> Lowered[E]:
+    lookups = item_lookups(node, items)
+    if bound is not None:
+        node = restrict(node, apply("__lt__", node.element, bound))
+    source = backend.lower(items, elements)
+    guarded = False
+
+    def parts(element: E, index: E) -> tuple[Lowered[E], Lowered[E], E | None]:
+        nonlocal guarded
+        scope = {**elements, node.element: index, **dict.fromkeys(lookups, element)}
+        found = comprehension_parts(backend, node, scope)
+        guarded = guarded or found[2] is not None
+        return found
+
+    def condition(element: E, index: E) -> E:
+        return parts(element, index)[0].expr
+
+    value = backend.list_indexed(
+        source.expr,
+        lambda element, index: parts(element, index)[1].expr,
+        None if node.condition == TRUE else condition,
+    )
+    if not guarded and node.fault == FALSE:
+        return Lowered(value, backend.exact(source))
+    flags = backend.list_indexed(
+        source.expr, lambda element, index: cast("E", parts(element, index)[2]), None
+    )
+    return Lowered(value, backend.conjunction(backend.exact(source), every(backend, flags)))
+
+
+def comprehension_parts[E](
+    backend: Backend[E], node: Comprehension, scope: Mapping[Node, E]
+) -> tuple[Lowered[E], Lowered[E], E | None]:
+    condition = backend.lower(node.condition, scope)
+    value = backend.lower(node.value, scope)
+    fault = backend.lower(node.fault, scope)
+    value_exact = backend.exact(value)
+    if node.condition != TRUE and value_exact is not None:
+        value_exact = backend.select(condition.expr, value_exact, backend.literal(TRUE))
+    exact = backend.conjunction(
+        backend.exact(condition),
+        value_exact,
+        backend.exact(fault),
+        backend.negate(fault.expr) if node.fault != FALSE else None,
+    )
+    return condition, value, exact
+
+
+def every[E](backend: Backend[E], flags: E) -> E:
+    reduce = backend.rules.get(OpKey("all", (Kind.LIST,)))
+    if reduce is None:
+        raise Unsupported(f"{backend.name} has no list reduction")
+    return cast("E", reduce(flags))

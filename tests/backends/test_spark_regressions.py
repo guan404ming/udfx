@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from conftest import backend_params
-from corpus.cases_lists import unpack_ends
+from corpus.cases_lists import indexed_words, unpack_ends
 from pyspark.sql import functions
 
 from udfx import compile
@@ -55,3 +55,12 @@ def test_spark_unpack_ends_evaluates_one_whitespace_split(backend: Backend[Any])
     plan = output.getvalue()
     assert plan.count("regexp_extract_all") == 2
     assert "Python" not in plan
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_spark_indexed_comprehension_splits_once_per_use(backend: Backend[Any]) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark plan")
+    translation = compile(indexed_words, {"text": STR.or_none()}, backend)
+    assert translation.ok, translation.unsupported
+    assert str(translation.expr).count("regexp_extract_all") <= 8

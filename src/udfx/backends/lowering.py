@@ -5,12 +5,18 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
 from udfx.backends.hoisting import invariant
-from udfx.backends.indexing import indexed_source, item_lookups, literal_range, restrict
+from udfx.backends.indexing import (
+    comprehension_parts,
+    every,
+    indexed_source,
+    literal_range,
+    lower_indexed,
+)
 from udfx.backends.registration import Lowered, RuleResult
 from udfx.backends.rules import fold_predicate
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
-from udfx.ops import OpKey, apply
+from udfx.ops import OpKey
 from udfx.program import Program
 from udfx.types import Kind
 
@@ -101,6 +107,8 @@ def lower_comprehension[E](
     hoisted = invariant(node, elements) if backend.binds else None
     if hoisted is not None and exact_free(backend, hoisted, elements):
         return hoist(backend, node, elements, hoisted)
+    if backend.indexes and (rewritten := rewrite_range(backend, node, elements)) is not None:
+        return rewritten
     source = backend.lower(node.source, elements)
 
     guarded = False
@@ -146,75 +154,23 @@ def lower_comprehension[E](
     except Unsupported:
         if node.requires_native:
             raise
-    unrolled = literal_range(node)
-    if unrolled is not None:
-        return lower_comprehension(backend, unrolled, elements)
-    indexed = indexed_source(node)
-    if indexed is not None:
-        with suppress(Unsupported):
-            return lower_indexed(backend, node, elements, *indexed)
+    rewritten = rewrite_range(backend, node, elements)
+    if rewritten is not None:
+        return rewritten
     return Lowered(backend.literal(Lit((), node.type)), backend.literal(FALSE))
 
 
-def lower_indexed[E](
-    backend: Backend[E],
-    node: Comprehension,
-    elements: Mapping[Node, E],
-    items: Node,
-    bound: Node | None,
-) -> Lowered[E]:
-    lookups = item_lookups(node, items)
-    if bound is not None:
-        node = restrict(node, apply("__lt__", node.element, bound))
-    source = backend.lower(items, elements)
-    guarded = False
-
-    def parts(element: E, index: E) -> tuple[Lowered[E], Lowered[E], E | None]:
-        nonlocal guarded
-        scope = {**elements, node.element: index, **dict.fromkeys(lookups, element)}
-        found = comprehension_parts(backend, node, scope)
-        guarded = guarded or found[2] is not None
-        return found
-
-    def condition(element: E, index: E) -> E:
-        return parts(element, index)[0].expr
-
-    value = backend.list_indexed(
-        source.expr,
-        lambda element, index: parts(element, index)[1].expr,
-        None if node.condition == TRUE else condition,
-    )
-    if not guarded and node.fault == FALSE:
-        return Lowered(value, backend.exact(source))
-    flags = backend.list_indexed(
-        source.expr, lambda element, index: cast("E", parts(element, index)[2]), None
-    )
-    return Lowered(value, backend.conjunction(backend.exact(source), every(backend, flags)))
-
-
-def comprehension_parts[E](
-    backend: Backend[E], node: Comprehension, scope: Mapping[Node, E]
-) -> tuple[Lowered[E], Lowered[E], E | None]:
-    condition = backend.lower(node.condition, scope)
-    value = backend.lower(node.value, scope)
-    fault = backend.lower(node.fault, scope)
-    value_exact = backend.exact(value)
-    if node.condition != TRUE and value_exact is not None:
-        value_exact = backend.select(condition.expr, value_exact, backend.literal(TRUE))
-    exact = backend.conjunction(
-        backend.exact(condition),
-        value_exact,
-        backend.exact(fault),
-        backend.negate(fault.expr) if node.fault != FALSE else None,
-    )
-    return condition, value, exact
-
-
-def every[E](backend: Backend[E], flags: E) -> E:
-    reduce = backend.rules.get(OpKey("all", (Kind.LIST,)))
-    if reduce is None:
-        raise Unsupported(f"{backend.name} has no list reduction")
-    return cast("E", reduce(flags))
+def rewrite_range[E](
+    backend: Backend[E], node: Comprehension, elements: Mapping[Node, E]
+) -> Lowered[E] | None:
+    with suppress(Unsupported):
+        unrolled = literal_range(node)
+        if unrolled is not None:
+            return lower_comprehension(backend, unrolled, elements)
+        indexed = indexed_source(node)
+        if indexed is not None:
+            return lower_indexed(backend, node, elements, *indexed)
+    return None
 
 
 def exact_free[E](backend: Backend[E], node: Node, elements: Mapping[Node, E]) -> bool:

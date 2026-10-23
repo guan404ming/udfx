@@ -37,6 +37,7 @@ def fallback_patch(program: Program) -> Callable[[pa.Array], pa.Array]:
 class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
+    indexes: ClassVar[bool] = True
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
@@ -84,6 +85,22 @@ class SparkBackend(Backend[Column]):
 
     def list_filter(self, source: Column, predicate: Callable[[Column], Column]) -> Column:
         return functions.filter(source, predicate)
+
+    def list_indexed(
+        self,
+        source: Column,
+        value: Callable[[Column, Column], Column],
+        condition: Callable[[Column, Column], Column] | None,
+    ) -> Column:
+        pairs = functions.transform(
+            source,
+            lambda element, index: functions.struct(
+                element.alias("element"), index.cast("long").alias("index")
+            ),
+        )
+        if condition is not None:
+            pairs = functions.filter(pairs, lambda pair: condition(pair["element"], pair["index"]))
+        return functions.transform(pairs, lambda pair: value(pair["element"], pair["index"]))
 
     @property
     def native_faults(self) -> NativeFaults:
