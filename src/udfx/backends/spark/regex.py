@@ -3,7 +3,7 @@ from __future__ import annotations
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import register_regex
-from udfx.backends.spark.rules import RULES
+from udfx.backends.spark.rules import ASCII, RULES
 from udfx.semantics.regex import RegexPrimitives
 
 
@@ -38,4 +38,5 @@ register_regex(
         ),
         maximum_count=0,
     ),
+    ASCII,
 )

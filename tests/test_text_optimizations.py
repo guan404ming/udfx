@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -99,3 +100,15 @@ def test_spark_split_uses_ascii_pattern_for_ascii() -> None:
     assert "octet_length(value)" in str(lowered.expr)
     rows = [("a b\tc",), ("a\xa0b",), ("a\u3000b\x1cc",), ("x\x85y\u2007z",), ("",), (None,)]
     assert check_function(words, schema, backend, rows) == []
+
+
+def test_spark_regex_uses_ascii_classes_for_ascii() -> None:
+    def symbols(value: str) -> str:
+        return re.sub(r"[^\w\s]", "", value)
+
+    schema = {"value": STR.or_none()}
+    backend = SparkBackend()
+    lowered = lower_program(backend, trace(symbols, schema))
+    assert "octet_length(value)" in str(lowered.expr)
+    rows = [("a,b!",), ("\xe9,\xfc_\u0663",), ("\u3000x.",), ("",), (None,)]
+    assert check_function(symbols, schema, backend, rows) == []

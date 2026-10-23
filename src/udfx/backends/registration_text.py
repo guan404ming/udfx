@@ -14,22 +14,31 @@ from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
 
 
-def register_regex[E](rules: RuleSet[E], primitives: RegexPrimitives) -> None:
+def register_regex[E](
+    rules: RuleSet[E], primitives: RegexPrimitives, ascii: AsciiPrimitives | None = None
+) -> None:
     def rule(name: str) -> Rule[E]:
-        return lambda *arguments: Lowered(*lower_regex(primitives, name, *arguments))
+        return lambda *arguments: Lowered(*lower_regex(primitives, name, *arguments, ascii=ascii))
 
     for name in ("search", "match", "fullmatch", "findall"):
         rules(f"re.{name}", Kind.STR, Kind.STR, Kind.INT, literals=(1, 2))(rule(name))
     rules("re.sub", Kind.STR, Kind.STR, Kind.INT, Kind.STR, Kind.INT, literals=(1, 2, 3, 4))(
         lambda text, pattern, flags, substitute, count: Lowered(
             *lower_regex(
-                primitives, "sub", text, pattern, flags, substitute=substitute, count=count
+                primitives,
+                "sub",
+                text,
+                pattern,
+                flags,
+                substitute=substitute,
+                count=count,
+                ascii=ascii,
             )
         )
     )
     rules("re.split", Kind.STR, Kind.STR, Kind.INT, Kind.INT, literals=(1, 2, 3))(
         lambda text, pattern, flags, count: Lowered(
-            *lower_regex(primitives, "split", text, pattern, flags, count=count)
+            *lower_regex(primitives, "split", text, pattern, flags, count=count, ascii=ascii)
         )
     )
 

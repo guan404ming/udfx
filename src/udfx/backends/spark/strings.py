@@ -15,7 +15,7 @@ from udfx.backends.registration import (
 )
 from udfx.backends.spark.backend import SparkBackend
 from udfx.backends.spark.conversions import TEXT as TRANSLATION
-from udfx.backends.spark.rules import RULES, when
+from udfx.backends.spark.rules import ASCII, RULES, when
 from udfx.ir import Col
 from udfx.semantics import text
 from udfx.semantics.facts import pattern_is_empty
@@ -33,7 +33,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
-from udfx.semantics.text_predicates import AsciiPrimitives, ascii_free
+from udfx.semantics.text_predicates import ascii_free
 from udfx.types import STR, Kind
 
 INT32_MAX = 2**31 - 1
@@ -211,10 +211,7 @@ def list_len(container: Column) -> Column:
 register_string_predicates(
     RULES,
     lambda value, pattern: value.rlike(pattern),
-    AsciiPrimitives(
-        is_ascii=lambda value: functions.octet_length(value) == functions.char_length(value),
-        when=when,
-    ),
+    ASCII,
 )
 
 

@@ -6,6 +6,7 @@ from typing import Any
 
 from udfx.errors import Unsupported
 from udfx.semantics.regex_translation import Pattern, escaped, replacement, translate
+from udfx.semantics.text_predicates import AsciiPrimitives
 
 SEPARATOR = "\x00"
 
@@ -31,6 +32,43 @@ def lower_regex(
     *,
     substitute: Any = None,
     count: Any = 0,
+    ascii: AsciiPrimitives | None = None,
+) -> tuple[Any, Any]:
+    options = {"substitute": substitute, "count": count}
+    expr, exact = regex_parts(primitives, name, text, pattern, flags, **options, ascii_only=False)
+    if ascii is None or not ascii_differs(pattern, flags, primitives.dialect):
+        return expr, exact
+    fast, fast_exact = regex_parts(
+        primitives, name, text, pattern, flags, **options, ascii_only=True
+    )
+    is_ascii = ascii.is_ascii(text)
+    if fast_exact is not exact:
+        exact = ascii.when(is_ascii, fast_exact, exact)
+    return ascii.when(is_ascii, fast, expr), exact
+
+
+def ascii_differs(pattern: Any, flags: Any, dialect: str) -> bool:
+    if not isinstance(pattern, str) or not isinstance(flags, int):
+        return False
+    try:
+        return (
+            translate(pattern, flags, dialect).source
+            != translate(pattern, flags, dialect, True).source
+        )
+    except Unsupported:
+        return False
+
+
+def regex_parts(
+    primitives: RegexPrimitives,
+    name: str,
+    text: Any,
+    pattern: Any,
+    flags: Any,
+    *,
+    substitute: Any,
+    count: Any,
+    ascii_only: bool,
 ) -> tuple[Any, Any]:
     empty = (
         None
@@ -43,7 +81,7 @@ def lower_regex(
     if not isinstance(pattern, str) or not isinstance(flags, int) or not isinstance(count, int):
         return fallback
     try:
-        translated = translate(pattern, flags, primitives.dialect)
+        translated = translate(pattern, flags, primitives.dialect, ascii_only)
         if (
             not translated.native
             or (name in {"sub", "split", "findall"} and translated.empty)

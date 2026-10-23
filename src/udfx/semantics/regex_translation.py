@@ -34,7 +34,7 @@ def ranges(points: Iterable[int]) -> str:
 
 
 @cache
-def category(name: str) -> str:
+def category(name: str, ascii_only: bool = False) -> str:
     positive = name.replace("_NOT_", "_")
     predicate = {
         "CATEGORY_DIGIT": str.isdecimal,
@@ -42,7 +42,11 @@ def category(name: str) -> str:
         "CATEGORY_WORD": lambda point: point.isalnum() or point == "_",
     }[positive]
     negate = "_NOT_" in name
-    return ranges(ord(point) for point in code_points() if predicate(point) != negate)
+    return ranges(
+        ord(point)
+        for point in code_points()
+        if predicate(point) != negate and (point.isascii() or not ascii_only)
+    )
 
 
 @dataclass(frozen=True)
@@ -57,9 +61,10 @@ class Pattern:
 
 
 class Translator:
-    def __init__(self, flags: int, dialect: str) -> None:
+    def __init__(self, flags: int, dialect: str, ascii_only: bool) -> None:
         self.flags = flags
         self.dialect = dialect
+        self.ascii_only = ascii_only
         self.boundary = False
         self.dollar = False
         self.native = True
@@ -118,7 +123,7 @@ class Translator:
 
     def character(self, name: str, value: Any) -> str:
         if name == "CATEGORY":
-            return category(str(value))
+            return category(str(value), self.ascii_only)
         if name == "RANGE":
             if (value[0] <= 0xDFFF and value[1] >= 0xD800) or (
                 self.flags & re.IGNORECASE and value[1] > 127
@@ -147,7 +152,7 @@ class Translator:
             case "AT_BOUNDARY" | "AT_NON_BOUNDARY":
                 self.boundary = True
                 if self.dialect == "java":
-                    word = "[" + category("CATEGORY_WORD") + "]"
+                    word = "[" + category("CATEGORY_WORD", self.ascii_only) + "]"
                     following, opposite = ("!", "=") if name == "AT_BOUNDARY" else ("=", "!")
                     return f"(?:(?<={word})(?{following}{word})|(?<!{word})(?{opposite}{word}))"
                 return r"\b" if name == "AT_BOUNDARY" else r"\B"
@@ -156,7 +161,7 @@ class Translator:
 
 
 @cache
-def translate(pattern: str, flags: int, dialect: str) -> Pattern:
+def translate(pattern: str, flags: int, dialect: str, ascii_only: bool = False) -> Pattern:
     reject_comments(pattern)
     if flags & ~FLAGS:
         raise Unsupported("regex flags support only IGNORECASE, MULTILINE, and DOTALL")
@@ -169,7 +174,7 @@ def translate(pattern: str, flags: int, dialect: str) -> Pattern:
         raise Unsupported("regex named groups are unsupported")
     if parsed.state.flags & ~FLAGS:
         raise Unsupported("regex flags support only IGNORECASE, MULTILINE, and DOTALL")
-    translator = Translator(parsed.state.flags, dialect)
+    translator = Translator(parsed.state.flags, dialect, ascii_only)
     source = translator.sequence(parsed)
     ignorecase = bool(parsed.state.flags & re.IGNORECASE)
     if ignorecase:
