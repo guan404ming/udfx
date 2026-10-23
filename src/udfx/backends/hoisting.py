@@ -46,5 +46,4 @@ def invariant(node: Comprehension, elements: Mapping[Node, object]) -> Node | No
 
     for part in (node.value, node.condition, node.fault):
         visit(part)
-    best = max(found, key=lambda part: (found[part], size(part)), default=None)
-    return best if best is not None and found[best] > 1 else None
+    return max(found, key=lambda part: (found[part], size(part)), default=None)

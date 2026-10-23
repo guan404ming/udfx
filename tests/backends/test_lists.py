@@ -79,6 +79,21 @@ def test_indexed_comprehension_faults_raise(backend: Backend[Any]) -> None:
     assert check_function(indexed_parts, schema, backend, rows) == []
 
 
+def split_counts(text: str) -> list[int]:
+    words = text.split(",")
+    return [len(words) for _word in words]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_single_invariant_split_binds_once(backend: Backend[Any]) -> None:
+    if not backend.binds:
+        pytest.skip("only binding backends hoist")
+    translation = compile(split_counts, {"text": STR}, backend)
+    assert translation.expr is not None, translation.unsupported
+    assert str(translation.expr).count("string_split") == 1
+    assert check_function(split_counts, {"text": STR}, backend, [("a,b,c",), ("",)]) == []
+
+
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("function", [any, all], ids=["any", "all"])
 def test_nullable_list_reductions(backend: Backend[Any], function: Any) -> None:

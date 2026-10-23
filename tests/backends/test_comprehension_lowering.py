@@ -42,7 +42,7 @@ def test_nested_comprehension_lowering_evaluates(backend: Backend[Any]) -> None:
         ) == [[expected]]
 
 
-def test_invariant_picks_repeated_outer_list_calls() -> None:
+def test_invariant_picks_outer_list_calls() -> None:
     words = apply(".split", Col("text", STR))
     element = Element("index", INT)
     word = apply("__getitem__", words, element)
@@ -50,7 +50,7 @@ def test_invariant_picks_repeated_outer_list_calls() -> None:
     node = Comprehension(
         Col("indexes", list_of(INT)), element, word, apply("__eq__", word, Lit("a", STR)), FALSE
     )
-    assert invariant(once, {}) is None
+    assert invariant(once, {}) == words
     assert invariant(node, {}) == words
     assert invariant(node, {words: None}) is None
     assert invariant(nested(Col("values", list_of(list_of(STR))), 2), {}) is None

@@ -26,7 +26,7 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/frontend/operations/` | Evaluate Python operators, calls, containers, attributes, and formatting with explicit operands |
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
-| `src/udfx/backends/hoisting.py` | Finds a repeated list call in a comprehension body that does not read the element |
+| `src/udfx/backends/hoisting.py` | Finds a list call in a comprehension body that does not read the element |
 | `src/udfx/backends/indexing.py` | Rewrites `range` comprehensions that a backend cannot lower: unrolls a small literal bound and maps `range(len(items))` to an indexed list transform |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
 | `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
@@ -94,7 +94,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 
 - `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
 - `list_value` builds lists. `list_transform` and `list_filter` enable native comprehensions. `list_indexed` passes each element and its index, for engines that cannot lower `range`. Set `indexes = True` to try it before `range`. Only Spark sets it, because its lambdas repeat the source per element. Set `rewrites_words = False` to keep `split()[0]`, `split()[-1]`, and `" ".join(split()[a:b])` as list operations instead of regexes. Only Spark clears it, because it shares one split between those uses. `base.py` uses Python fallback when a comprehension needs an unsupported list operation.
-- `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower a repeated invariant list call once outside the comprehension lambdas. Only DuckDB binds. Spark cannot pass bound lambdas to a Python UDF.
+- `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower an invariant list call once outside the comprehension lambdas. Only DuckDB binds. Spark cannot pass bound lambdas to a Python UDF.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and calls `run_fallback_rows(program, rows)`.
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.
