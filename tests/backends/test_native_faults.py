@@ -177,3 +177,13 @@ def test_conditional_overflow_only_raises_in_the_active_branch(backend: Backend[
     ]
     with pytest.raises(OverflowError, match="does not fit int"):
         backend.evaluate([translation.expr], schema, [(INT64_MAX, True)])
+
+
+def test_fallback_rows_check_list_items() -> None:
+    for item, valid in ((STR, False), (STR.or_none(), True), (INT, False)):
+        program = Program(lambda text: [text, None], {"text": STR}, Lit((), list_of(item)))
+        if valid:
+            assert program.run([("a",)]) == [["a", None]]
+        else:
+            with pytest.raises(OverflowError, match="does not fit"):
+                program.run([("a",)])
