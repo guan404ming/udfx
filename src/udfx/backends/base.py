@@ -134,6 +134,11 @@ class Backend[E](ABC):
     def list_filter(self, source: E, predicate: Callable[[E], E]) -> E:
         raise Unsupported(f"{self.name} has no list filter")
 
+    def list_indexed(
+        self, source: E, value: Callable[[E, E], E], condition: Callable[[E, E], E] | None
+    ) -> E:
+        raise Unsupported(f"{self.name} has no indexed list transform")
+
     @abstractmethod
     def fallback(self, native: E, exact: E, program: Program) -> E: ...
 

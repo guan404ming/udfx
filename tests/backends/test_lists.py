@@ -151,3 +151,26 @@ def test_constant_paired_comprehension(backend: Backend[Any]) -> None:
         lowered = backend.lower(trace(selected, schema).value)
         assert lowered.exact is not None
         assert backend.evaluate([lowered.exact], schema, [("a",)])[0] == [True]
+
+
+def indexed_words(text: str) -> list[str]:
+    return [str(index) + word for index, word in enumerate(text.split()) if word != "a"]
+
+
+def weighted_lengths(text: str) -> list[int]:
+    return [len(word) * weight for word, weight in zip(text.split(), (1, 2), strict=False)]
+
+
+def weighted_numbers(text: str) -> list[int]:
+    return [int(word) * weight for word, weight in zip(text.split(), (1, 2), strict=False)]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("function", [indexed_words, weighted_lengths, weighted_numbers])
+def test_indexed_comprehension_native_rows(backend: Backend[Any], function: Any) -> None:
+    schema = {"text": STR}
+    rows = [("",), ("7",), ("12 3",), ("1 2 a",)]
+    assert check_function(function, schema, backend, [*rows, ("x",)]) == []
+    lowered = backend.lower(trace(function, schema).value)
+    exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
+    assert backend.evaluate([exact], schema, rows)[0] == [True] * len(rows)

@@ -5,6 +5,7 @@ from functools import reduce
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of, nullable_faults
+from udfx.frontend.core.logic import fold
 from udfx.frontend.core.values import (
     Generator,
     Item,
@@ -145,8 +146,11 @@ def combined(name: str, arguments: Sequence[Item]) -> tuple[Iterator, list[Fault
 
 def paired(name: str, iterators: Sequence[Iterator], start: Node) -> Iterator:
     sources = [source_of(iterator) for iterator in iterators]
-    length = reduce(
-        lambda left, right: apply("min", left, right), (apply("len", source) for source in sources)
+    length = fold(
+        reduce(
+            lambda left, right: apply("min", left, right),
+            (apply("len", source) for source in sources),
+        )
     )
     element = Element(f"{name}:index", INT)
     members = tuple(Value(apply("__getitem__", source, element)) for source in sources)

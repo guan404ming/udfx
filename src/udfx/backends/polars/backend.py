@@ -59,6 +59,18 @@ class PolarsBackend(Backend[pl.Expr]):
     def list_filter(self, source: pl.Expr, predicate: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
         return evaluate_list(source, pl.element().filter(predicate(pl.element())))
 
+    def list_indexed(
+        self,
+        source: pl.Expr,
+        value: Callable[[pl.Expr, pl.Expr], pl.Expr],
+        condition: Callable[[pl.Expr, pl.Expr], pl.Expr] | None,
+    ) -> pl.Expr:
+        element, index = pl.element(), pl.int_range(pl.len())
+        body = broadcast(value(element, index))
+        if condition is not None:
+            body = body.filter(broadcast(condition(element, index)))
+        return evaluate_list(source, body)
+
     def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
         result = dtype(program.result)
         flag_name, value_name = output_names(2)
