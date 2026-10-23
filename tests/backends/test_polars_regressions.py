@@ -5,6 +5,7 @@ import polars as pl
 import pytest
 from conftest import backend_params
 
+from tests.corpus.cases_lists import weighted_word_length
 from tests.corpus.cases_string_splitting import index_split_limit
 from tests.corpus.cases_strings import join_characters
 from tests.corpus.cases_structure import remove_stopwords
@@ -53,3 +54,14 @@ def test_joins_on_empty_frames(
     assert translation.expr is not None, translation.unsupported
     frame = pl.DataFrame(schema=dict.fromkeys(schema, pl.String))
     assert frame.lazy().select(translation.expr).collect(engine=engine).to_series().to_list() == []
+
+
+@pytest.mark.parametrize("engine", ["in-memory", "streaming"])
+def test_fallback_on_chunked_frames(engine: Literal["in-memory", "streaming"]) -> None:
+    translation = compile(weighted_word_length, {"text": STR.or_none()})
+    assert translation.expr is not None, translation.unsupported
+    texts = ["a bb"] + ["ccc"] * 2000
+    frame = pl.concat([pl.DataFrame({"text": texts[:1]}), pl.DataFrame({"text": texts[1:]})])
+    assert frame.n_chunks() == 2
+    result = frame.lazy().select(translation.expr).collect(engine=engine).to_series().to_list()
+    assert result == [weighted_word_length(text) for text in texts]

@@ -68,6 +68,7 @@ class PolarsBackend(Backend[pl.Expr]):
             length = len(series[0])
             outputs = (
                 pl.DataFrame(series)
+                .rechunk()
                 .lazy()
                 .select(expressions)
                 .collect(engine="in-memory")
