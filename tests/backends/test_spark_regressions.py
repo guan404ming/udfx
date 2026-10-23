@@ -27,7 +27,7 @@ def test_spark_fallback_returns_only_python_result(backend: Backend[Any]) -> Non
     )
     native = functions.size(split_words(backend.column(Col("text", STR))))
     expr = backend.fallback(native, functions.col("exact"), program)
-    assert str(expr).count("regexp_extract_all") == 1
+    assert str(expr).count("regexp_extract_all") == 2
     frame = backend.session().createDataFrame([("one two", True)], ["text", "exact"])
     output = StringIO()
     with redirect_stdout(output):
@@ -47,11 +47,11 @@ def test_spark_unpack_ends_evaluates_one_whitespace_split(backend: Backend[Any])
     translation = compile(unpack_ends, {"text": STR.or_none()}, backend)
     assert translation.ok, translation.unsupported
     assert translation.expr is not None
-    assert str(translation.expr).count("regexp_extract_all") == 1
+    assert str(translation.expr).count("regexp_extract_all") == 2
     frame = backend.session().createDataFrame([("one two three",)], ["text"])
     output = StringIO()
     with redirect_stdout(output):
         frame.select(translation.expr.alias("result")).explain()
     plan = output.getvalue()
-    assert plan.count("regexp_extract_all") == 1
+    assert plan.count("regexp_extract_all") == 2
     assert "Python" not in plan

@@ -99,8 +99,9 @@ def string_predicate(matches: Callable[[Any, str], Any], value: Any, method: str
 
 
 @cache
-def whitespace_pattern(negate: bool = False) -> str:
-    return f"[{'^' if negate else ''}{re.escape(whitespace())}]+"
+def whitespace_pattern(negate: bool = False, ascii_only: bool = False) -> str:
+    characters = "".join(char for char in whitespace() if char.isascii() or not ascii_only)
+    return f"[{'^' if negate else ''}{re.escape(characters)}]+"
 
 
 @cache

@@ -7,13 +7,20 @@ from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import INT32_MAX, array_join, join, length, lstrip
 from udfx.semantics.facts import separator_is_none, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
-from udfx.semantics.text import non_whitespace_pattern, word_prefix_pattern
+from udfx.semantics.text import non_whitespace_pattern, whitespace_pattern, word_prefix_pattern
 from udfx.types import STR, Kind, list_of
 
 
 def split_words(text: Column) -> Column:
-    return functions.regexp_extract_all(
-        text, functions.lit(non_whitespace_pattern()), functions.lit(0)
+    return functions.when(
+        functions.octet_length(text) == functions.char_length(text),
+        functions.regexp_extract_all(
+            text, functions.lit(whitespace_pattern(negate=True, ascii_only=True)), functions.lit(0)
+        ),
+    ).otherwise(
+        functions.regexp_extract_all(
+            text, functions.lit(non_whitespace_pattern()), functions.lit(0)
+        )
     )
 
 
