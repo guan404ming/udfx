@@ -180,3 +180,15 @@ def test_indexed_comprehension_native_rows(backend: Backend[Any], function: Any)
     lowered = backend.lower(trace(function, schema).value)
     exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
     assert backend.evaluate([lowered.expr, exact], schema, rows)[1] == [True] * len(rows)
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("start", [0, 1, -5, 2])
+def test_enumerate_offsets_skip_overflow_guards(backend: Backend[Any], start: int) -> None:
+    def numbered(text: str) -> list[str]:
+        return [str(index) + word for index, word in enumerate(text.split(), start)]
+
+    schema = {"text": STR}
+    assert check_function(numbered, schema, backend, [("",), ("a b",), ("x y z",)]) == []
+    if backend.name in {"polars", "spark"} and start <= 1:
+        assert backend.lower(trace(numbered, schema).value).exact is None

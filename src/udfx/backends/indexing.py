@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
@@ -57,15 +57,11 @@ def indexed_source(node: Comprehension) -> tuple[Node, Node | None] | None:
     return None
 
 
-def item_lookups(node: Comprehension, items: Node) -> frozenset[Node]:
+def matching(node: Comprehension, accept: Callable[[Node], bool]) -> frozenset[Node]:
     found: set[Node] = set()
 
     def visit(part: Node) -> None:
-        if (
-            isinstance(part, Call)
-            and part.op.name == "__getitem__"
-            and part.arguments == (items, node.element)
-        ):
+        if accept(part):
             found.add(part)
             return
         for child in children(part):
@@ -76,6 +72,33 @@ def item_lookups(node: Comprehension, items: Node) -> frozenset[Node]:
     return frozenset(found)
 
 
+def item_lookups(node: Comprehension, items: Node) -> frozenset[Node]:
+    return matching(
+        node,
+        lambda part: (
+            isinstance(part, Call)
+            and part.op.name == "__getitem__"
+            and part.arguments == (items, node.element)
+        ),
+    )
+
+
+def index_offsets(node: Comprehension) -> frozenset[Node]:
+    def offset(part: Node) -> bool:
+        if not isinstance(part, Call) or part.op.name != "__add__" or len(part.arguments) != 2:
+            return False
+        left, right = part.arguments
+        other = right if left == node.element else left if right == node.element else None
+        return (
+            isinstance(other, Lit)
+            and other.type == INT
+            and isinstance(other.value, int)
+            and other.value <= 1
+        )
+
+    return matching(node, offset)
+
+
 def lower_indexed[E](
     backend: Backend[E],
     node: Comprehension,
@@ -83,7 +106,7 @@ def lower_indexed[E](
     items: Node,
     bound: Node | None,
 ) -> Lowered[E]:
-    lookups = item_lookups(node, items)
+    lookups, offsets = item_lookups(node, items), index_offsets(node)
     if bound is not None:
         node = restrict(node, apply("__lt__", node.element, bound))
     source = backend.lower(items, elements)
@@ -92,6 +115,10 @@ def lower_indexed[E](
     def parts(element: E, index: E) -> tuple[Lowered[E], Lowered[E], E | None]:
         nonlocal guarded
         scope = {**elements, node.element: index, **dict.fromkeys(lookups, element)}
+        for offset in offsets:
+            lowered = backend.lower(offset, scope)
+            if lowered.exact is None:
+                scope[offset] = lowered.expr
         found = comprehension_parts(backend, node, scope)
         guarded = guarded or found[2] is not None
         return found
