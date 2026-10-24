@@ -9,6 +9,9 @@ uv sync
 From a checkout, `uv sync` installs the package, all four engines, and the test tools. Spark
 needs Java 21.
 
+For the documentation site, run `uv run --group docs zensical serve`. See the
+[documentation guide](docs/contributing.md) for build commands and page-length guidelines.
+
 ## Checks
 
 ```

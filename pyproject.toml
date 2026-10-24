@@ -22,6 +22,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/guan404ming/udfx"
+Documentation = "https://guan404ming.github.io/udfx/"
 Issues = "https://github.com/guan404ming/udfx/issues"
 
 [project.optional-dependencies]
@@ -45,6 +46,9 @@ dev = [
     "pyright>=1.1.390",
     "pyarrow-stubs>=20.0.0.20260819",
     "pytest-xdist>=3.8.0",
+]
+docs = [
+    "zensical>=0.0.72",
 ]
 
 [build-system]

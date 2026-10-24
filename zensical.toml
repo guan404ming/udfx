@@ -1,0 +1,50 @@
+[project]
+site_name = "udfx"
+site_url = "https://guan404ming.github.io/udfx/"
+site_description = "Compile Python UDFs into native dataframe expressions"
+repo_url = "https://github.com/guan404ming/udfx"
+repo_name = "guan404ming/udfx"
+edit_uri = "edit/main/docs/"
+exclude_docs = "benchmarks/*.md"
+extra_css = ["stylesheets/extra.css"]
+nav = [
+    { "Home" = [
+        { "Overview" = "index.md" },
+        { "How It Works" = "how-it-works.md" },
+        { "Performance" = "performance.md" },
+    ] },
+    { "User Guide" = [
+        { "Getting Started" = [
+            { "Installation" = "installation.md" },
+            { "Quick Start" = "quickstart.md" },
+        ] },
+        { "Backends" = [
+            { "Overview" = "backends.md" },
+            { "Polars" = "backends/polars.md" },
+            { "DuckDB" = "backends/duckdb.md" },
+            { "DataFusion" = "backends/datafusion.md" },
+            { "Spark" = [
+                { "Overview" = "backends/spark.md" },
+                { "Comet" = "comet.md" },
+            ] },
+        ] },
+        { "Python Support" = "python.md" },
+    ] },
+    { "API Reference" = [
+        { "Compile and Types" = "api.md" },
+        { "Explain" = "explain.md" },
+    ] },
+    { "Contributor Guide" = [
+        { "Development" = "contributing.md" },
+        { "Compiler Structure" = "architecture.md" },
+    ] },
+]
+
+[project.theme]
+language = "en"
+features = [
+    "navigation.tabs",
+    "navigation.path",
+    "navigation.footer",
+    "content.code.copy",
+]

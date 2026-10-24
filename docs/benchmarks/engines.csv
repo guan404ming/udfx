@@ -1,0 +1,661 @@
+engine,case,python_seconds,udfx_seconds,baseline,fallback,pending_share
+datafusion,all_words,0.286662,0.015700,arrow,true,0.00%
+datafusion,bare_except,0.146578,0.006861,arrow,false,0.00%
+datafusion,clamp,0.117743,0.003480,arrow,false,0.00%
+datafusion,compound,0.100471,0.010508,arrow,true,0.00%
+datafusion,concat,0.147357,0.005402,arrow,false,0.00%
+datafusion,conditional_expression,0.068041,0.001832,arrow,false,0.00%
+datafusion,constant_part,0.149439,0.010237,arrow,true,0.00%
+datafusion,constant_receiver,0.121409,0.003311,arrow,false,0.00%
+datafusion,constant_result,0.062906,0.001207,arrow,false,0.00%
+datafusion,constant_suffixes,0.137008,0.009412,arrow,true,0.00%
+datafusion,container_default_mapping,0.168882,0.001672,arrow,false,0.00%
+datafusion,container_default_stopwords,0.314730,0.024794,arrow,false,0.00%
+datafusion,contains_word,0.217304,0.009560,arrow,true,0.00%
+datafusion,datetime_age_days,1.088119,0.002208,arrow,false,0.00%
+datafusion,datetime_elapsed_seconds,1.101099,0.002713,arrow,false,0.00%
+datafusion,datetime_format,1.285216,0.010923,arrow,false,0.00%
+datafusion,datetime_month,0.560093,0.002133,arrow,false,0.00%
+datafusion,datetime_parse_slice,4.744075,0.019251,arrow,true,0.00%
+datafusion,datetime_row,0.725965,0.002402,arrow,false,0.00%
+datafusion,datetime_shift_backward,0.903042,0.009513,arrow,true,0.00%
+datafusion,datetime_shift_forward,0.985811,0.009594,arrow,true,0.00%
+datafusion,datetime_total_seconds,1.153024,0.009408,arrow,true,0.00%
+datafusion,datetime_weekday,0.560717,0.002404,arrow,false,0.00%
+datafusion,datetime_year,0.562552,0.002125,arrow,false,0.00%
+datafusion,day,0.125225,0.029525,arrow,true,0.00%
+datafusion,dictionary_default,0.119820,0.001544,arrow,false,0.00%
+datafusion,dictionary_guard,0.118842,0.008994,arrow,true,0.00%
+datafusion,dictionary_items,0.248835,0.031274,arrow,true,0.00%
+datafusion,dictionary_none,0.103689,0.002655,arrow,false,0.00%
+datafusion,euro,0.155272,0.004452,arrow,false,0.00%
+datafusion,f_string_float,0.476705,0.013084,arrow,true,0.00%
+datafusion,f_string_record,0.213717,0.010164,arrow,false,0.00%
+datafusion,f_string_specifiers,0.235574,0.007954,arrow,false,0.00%
+datafusion,filtered_words,0.268627,0.016081,arrow,true,0.00%
+datafusion,first_dash,0.092906,0.002266,arrow,false,0.00%
+datafusion,first_or_default,0.134889,0.007930,arrow,false,0.00%
+datafusion,float_arithmetic,0.087786,0.001745,arrow,false,0.00%
+datafusion,float_division,0.076683,0.009217,arrow,true,0.00%
+datafusion,float_text,0.248712,0.011584,arrow,true,0.00%
+datafusion,format_automatic,0.202923,0.006628,arrow,false,0.00%
+datafusion,format_indexed,0.275087,0.010302,arrow,false,0.00%
+datafusion,format_specifiers,0.242275,0.007398,arrow,false,0.00%
+datafusion,function_values,0.172460,0.020874,arrow,true,0.00%
+datafusion,global_helper,0.145453,0.011714,arrow,true,0.00%
+datafusion,has_separator,0.088477,0.003377,arrow,false,0.00%
+datafusion,head_slice,0.095025,0.002442,arrow,false,0.00%
+datafusion,helper_chain,0.155003,0.011764,arrow,true,0.00%
+datafusion,image_path_directory,0.182088,0.022578,arrow,true,0.00%
+datafusion,image_path_identifier,0.326209,0.161932,arrow,true,0.00%
+datafusion,image_path_parts,0.218470,0.025253,arrow,true,0.00%
+datafusion,index_rsplit_limit,0.174781,0.091567,arrow,true,0.00%
+datafusion,index_sliced_parts,0.182691,0.026690,arrow,true,0.00%
+datafusion,index_split_limit,0.172231,0.059103,arrow,true,0.00%
+datafusion,indexed_words,0.204274,0.061109,arrow,true,0.00%
+datafusion,instance_boolean,0.053673,0.001008,arrow,false,0.00%
+datafusion,instance_number,0.061826,0.001018,arrow,false,0.00%
+datafusion,instance_text,0.060175,0.001021,arrow,false,0.00%
+datafusion,int_above_one,0.092974,0.014112,arrow,true,0.00%
+datafusion,int_arithmetic,0.096353,0.010822,arrow,true,0.00%
+datafusion,int_floor_division,0.078062,0.010527,arrow,true,0.00%
+datafusion,int_modulo,0.092626,0.010593,arrow,true,0.00%
+datafusion,inverse,0.060132,0.008962,arrow,true,0.00%
+datafusion,is_none,0.050438,0.001074,arrow,false,0.00%
+datafusion,is_zero,0.048276,0.001613,arrow,false,0.00%
+datafusion,jaccard,0.306964,0.031648,arrow,true,0.00%
+datafusion,join_characters,0.221184,0.009345,arrow,false,0.00%
+datafusion,join_or_error,0.148524,0.011247,arrow,true,0.00%
+datafusion,join_parts,0.127329,0.012919,arrow,true,0.00%
+datafusion,keyword_helper,0.151839,0.012068,arrow,true,0.00%
+datafusion,keyword_round,0.227153,0.011388,arrow,true,0.00%
+datafusion,keyword_split,0.184587,0.005350,arrow,false,0.00%
+datafusion,known_code,0.069514,0.012053,arrow,false,0.00%
+datafusion,last_dash,0.096856,0.003926,arrow,false,0.00%
+datafusion,lazy_fault,0.260280,0.009081,arrow,true,0.00%
+datafusion,length,0.068953,0.001537,arrow,false,0.00%
+datafusion,library_helper,0.088431,0.004612,arrow,false,0.00%
+datafusion,log_ten,0.108851,0.002801,arrow,false,0.00%
+datafusion,lower_strip,0.106078,0.011297,arrow,true,0.00%
+datafusion,mapped_characters,0.225183,0.013975,arrow,true,0.00%
+datafusion,month,0.102615,0.008830,arrow,false,0.00%
+datafusion,nearest_whole,0.106973,0.011529,arrow,true,0.00%
+datafusion,nested_helper,0.130428,0.013280,arrow,true,0.00%
+datafusion,not_half,0.059735,0.008901,arrow,true,0.00%
+datafusion,numbered_words,0.256036,0.039555,arrow,true,0.00%
+datafusion,optional_code,0.065993,0.017522,arrow,false,0.00%
+datafusion,paired_words,0.313550,0.032905,arrow,true,0.00%
+datafusion,percent_integer,0.192586,0.008056,arrow,false,0.00%
+datafusion,percent_pair,0.172263,0.006348,arrow,false,0.00%
+datafusion,percent_string,0.281985,0.011451,arrow,true,0.00%
+datafusion,regex_collapse_whitespace,0.369346,0.012022,arrow,true,0.00%
+datafusion,regex_first_number,0.272581,0.013121,arrow,true,0.00%
+datafusion,regex_keep_digits,0.278518,0.012141,arrow,true,0.00%
+datafusion,regex_remove_punctuation,0.325685,0.013621,arrow,true,0.00%
+datafusion,regex_remove_urls,0.250764,0.011180,arrow,true,0.00%
+datafusion,remove_stopwords,0.166499,0.028986,arrow,true,0.00%
+datafusion,repeated_words,0.214844,0.018402,arrow,true,0.00%
+datafusion,replace_dashes,0.094455,0.002119,arrow,false,0.00%
+datafusion,reverse_stride_parts,0.182558,0.013739,arrow,false,0.00%
+datafusion,reverse_stride_text,0.138711,0.015930,arrow,false,0.00%
+datafusion,reverse_text,0.101695,0.002277,arrow,false,0.00%
+datafusion,row_day_helper,0.358679,0.011557,arrow,true,0.00%
+datafusion,row_helper,0.383432,0.011474,arrow,true,0.00%
+datafusion,row_image,0.274537,0.013216,arrow,true,0.00%
+datafusion,row_path_helper,0.529923,0.005240,arrow,false,0.00%
+datafusion,row_position_fallback,0.196181,0.012147,arrow,true,0.00%
+datafusion,row_position_helper_fallback,0.535661,0.012018,arrow,true,0.00%
+datafusion,row_positions,0.213962,0.005526,arrow,false,0.00%
+datafusion,row_total,0.248889,0.001684,arrow,false,0.00%
+datafusion,row_week_local_key,0.275476,0.001290,arrow,false,0.00%
+datafusion,row_year,0.586449,0.029595,arrow,true,0.00%
+datafusion,rsplit_by,0.182543,0.021821,arrow,true,0.00%
+datafusion,rsplit_limit,0.201046,0.059622,arrow,true,0.00%
+datafusion,rsplit_word_limit,0.184049,0.049655,arrow,false,0.00%
+datafusion,rsplit_words,0.155456,0.008215,arrow,false,0.00%
+datafusion,safe_division,0.088740,0.010870,arrow,true,0.00%
+datafusion,selected_suffixes,0.156737,0.011666,arrow,true,0.00%
+datafusion,set_chained,0.776693,0.107677,arrow,true,0.00%
+datafusion,set_iterable_methods,0.431815,0.221495,arrow,true,0.00%
+datafusion,set_membership,0.265534,0.025882,arrow,true,0.00%
+datafusion,slice_parts,0.184947,0.005719,arrow,false,0.00%
+datafusion,sliced_words,0.149713,0.019319,arrow,true,0.00%
+datafusion,small_boolean,0.065104,0.001070,arrow,false,0.00%
+datafusion,small_case_mapping,0.197659,0.011620,arrow,true,0.00%
+datafusion,small_extrema,0.153849,0.024603,arrow,false,0.00%
+datafusion,small_list_membership,0.077156,0.018098,arrow,false,0.00%
+datafusion,small_padding,0.151321,0.051662,arrow,true,0.00%
+datafusion,small_predicates,0.114383,0.024719,arrow,false,0.00%
+datafusion,small_strip,0.157791,0.006509,arrow,false,0.00%
+datafusion,small_tuple_affixes,0.134706,0.003362,arrow,false,0.00%
+datafusion,sorted_unique_words,0.241283,0.015169,arrow,true,0.00%
+datafusion,sorted_words,0.170983,0.014151,arrow,true,0.00%
+datafusion,split_by,0.169832,0.015407,arrow,true,0.00%
+datafusion,split_limit,0.192400,0.048707,arrow,true,0.00%
+datafusion,split_on_none,0.141514,0.007373,arrow,false,0.00%
+datafusion,split_part,0.129784,0.005715,arrow,false,0.00%
+datafusion,split_word_limit,0.169009,0.039160,arrow,false,0.00%
+datafusion,starts_with,0.078785,0.001380,arrow,false,0.00%
+datafusion,stride_parts,0.153271,0.005469,arrow,false,0.00%
+datafusion,stride_text,0.127059,0.011586,arrow,false,0.00%
+datafusion,text_or_empty,0.092293,0.004446,arrow,false,0.00%
+datafusion,total_numbers,0.197132,0.117163,arrow,true,0.00%
+datafusion,total_word_length,0.187162,0.064169,arrow,true,0.00%
+datafusion,training_image_path,0.501426,0.010986,arrow,false,0.00%
+datafusion,translate_expansion,0.345241,0.016857,arrow,true,0.00%
+datafusion,translate_punctuation,0.557721,0.009906,arrow,true,0.00%
+datafusion,translate_swap,0.283939,0.002873,arrow,false,0.00%
+datafusion,truthy_guard,0.089229,0.011067,arrow,true,0.00%
+datafusion,truthy_int_guard,0.066431,0.010593,arrow,true,0.00%
+datafusion,try_default,0.336734,0.021602,arrow,true,0.00%
+datafusion,type_equality,0.061355,0.001016,arrow,false,0.00%
+datafusion,type_identity,0.060340,0.001014,arrow,false,0.00%
+datafusion,unique_characters,0.139092,0.016864,arrow,true,0.00%
+datafusion,unique_words,0.139343,0.014591,arrow,true,0.00%
+datafusion,unpack_caught,0.317096,0.012801,arrow,true,0.00%
+datafusion,unpack_constant,0.110503,0.009162,arrow,true,0.00%
+datafusion,unpack_ends,0.206620,0.043295,arrow,true,0.00%
+datafusion,unpack_fields,0.134974,0.014951,arrow,true,0.00%
+datafusion,unpack_numbers,0.192127,0.048757,arrow,true,0.00%
+datafusion,unpack_pair,0.160332,0.019905,arrow,true,0.00%
+datafusion,unpack_tuple,0.111399,0.008875,arrow,true,0.00%
+datafusion,unpack_words,0.184675,0.029850,arrow,true,0.00%
+datafusion,upper,0.090530,0.010155,arrow,true,0.00%
+datafusion,weighted_word_length,0.251822,0.204043,arrow,true,0.00%
+datafusion,year,0.177486,0.007810,arrow,false,0.00%
+datafusion,zero_slice_step,0.144366,0.001301,arrow,false,0.00%
+duckdb,all_words,0.389769,0.010438,native,false,0.00%
+duckdb,bare_except,0.202432,0.004871,native,false,0.00%
+duckdb,clamp,0.118416,0.003614,native,false,0.00%
+duckdb,compound,0.105989,0.004098,native,true,0.00%
+duckdb,concat,0.239539,0.006874,native,false,0.00%
+duckdb,conditional_expression,0.124986,0.003963,native,false,0.00%
+duckdb,constant_part,0.192941,0.004037,native,true,0.00%
+duckdb,constant_receiver,0.211103,0.005638,native,false,0.00%
+duckdb,constant_result,0.136407,0.003615,native,false,0.00%
+duckdb,constant_suffixes,0.205910,0.005921,native,false,0.00%
+duckdb,container_default_mapping,0.274503,0.004639,arrow,false,0.00%
+duckdb,container_default_stopwords,0.450112,0.015278,arrow,false,0.00%
+duckdb,contains_word,0.296275,0.003546,native,false,0.00%
+duckdb,datetime_age_days,0.150632,0.003807,native,false,0.00%
+duckdb,datetime_elapsed_seconds,0.148372,0.004145,native,false,0.00%
+duckdb,datetime_format,0.915336,0.009606,native,false,0.00%
+duckdb,datetime_month,0.074006,0.002823,native,false,0.00%
+duckdb,datetime_parse_slice,1.992611,0.024392,arrow,true,0.00%
+duckdb,datetime_row,0.360258,0.003205,native,false,0.00%
+duckdb,datetime_shift_backward,0.507701,0.003639,native,false,0.00%
+duckdb,datetime_shift_forward,0.623522,0.003719,native,false,0.00%
+duckdb,datetime_total_seconds,0.208350,0.003716,native,true,0.00%
+duckdb,datetime_weekday,0.078313,0.003248,native,false,0.00%
+duckdb,datetime_year,0.079365,0.003067,native,false,0.00%
+duckdb,day,0.152764,0.029427,native,false,0.00%
+duckdb,dictionary_default,0.188313,0.004614,native,false,0.00%
+duckdb,dictionary_guard,0.197780,0.005069,native,false,0.00%
+duckdb,dictionary_items,0.361244,0.012916,native,true,0.00%
+duckdb,dictionary_none,0.151055,0.003708,native,false,0.00%
+duckdb,euro,0.199495,0.004575,native,false,0.00%
+duckdb,f_string_float,0.594357,0.016119,arrow,true,0.00%
+duckdb,f_string_record,0.367389,0.010431,native,false,0.00%
+duckdb,f_string_specifiers,0.372521,0.006688,arrow,false,0.00%
+duckdb,filtered_words,0.408948,0.012409,native,false,0.00%
+duckdb,first_dash,0.116033,0.003312,native,false,0.00%
+duckdb,first_or_default,0.271182,0.005268,arrow,false,0.00%
+duckdb,float_arithmetic,0.074397,0.003368,native,false,0.00%
+duckdb,float_division,0.074327,0.003795,native,false,0.00%
+duckdb,float_text,0.325503,0.008469,native,true,0.00%
+duckdb,format_automatic,0.325382,0.007007,native,false,0.00%
+duckdb,format_indexed,0.430324,0.010196,arrow,false,0.00%
+duckdb,format_specifiers,0.369213,0.006559,arrow,false,0.00%
+duckdb,function_values,0.264512,0.008607,native,false,0.00%
+duckdb,global_helper,0.217787,0.013400,native,true,0.00%
+duckdb,has_separator,0.128028,0.004332,native,false,0.00%
+duckdb,head_slice,0.178691,0.004375,native,false,0.00%
+duckdb,helper_chain,0.251907,0.013684,native,true,0.00%
+duckdb,image_path_directory,0.284851,0.059482,arrow,true,0.00%
+duckdb,image_path_identifier,0.430707,0.104819,arrow,true,0.00%
+duckdb,image_path_parts,0.339931,0.064306,arrow,true,0.00%
+duckdb,index_rsplit_limit,0.300208,0.142798,arrow,true,0.00%
+duckdb,index_sliced_parts,0.285893,0.073046,native,true,0.00%
+duckdb,index_split_limit,0.292815,0.178932,native,true,0.00%
+duckdb,indexed_words,0.335101,0.079293,arrow,true,0.00%
+duckdb,instance_boolean,0.061208,0.002770,native,false,0.00%
+duckdb,instance_number,0.065233,0.002661,native,false,0.00%
+duckdb,instance_text,0.082458,0.002788,native,false,0.00%
+duckdb,int_above_one,0.117268,0.027529,native,true,0.00%
+duckdb,int_arithmetic,0.102973,0.012307,native,true,0.00%
+duckdb,int_floor_division,0.087453,0.004167,native,false,0.00%
+duckdb,int_modulo,0.091612,0.004375,native,false,0.00%
+duckdb,inverse,0.061854,0.003551,native,true,0.00%
+duckdb,is_none,0.051408,0.002361,native,false,0.00%
+duckdb,is_zero,0.049076,0.002902,native,false,0.00%
+duckdb,jaccard,0.397497,0.100408,native,false,0.00%
+duckdb,join_characters,0.332955,0.026565,arrow,false,0.00%
+duckdb,join_or_error,0.307775,0.010748,arrow,false,0.00%
+duckdb,join_parts,0.226400,0.009147,arrow,true,0.00%
+duckdb,keyword_helper,0.226293,0.014097,native,true,0.00%
+duckdb,keyword_round,0.261294,0.004167,native,true,0.00%
+duckdb,keyword_split,0.300764,0.005836,native,false,0.00%
+duckdb,known_code,0.094543,0.002846,native,false,0.00%
+duckdb,last_dash,0.117036,0.008320,native,true,0.00%
+duckdb,lazy_fault,0.362489,0.003507,arrow,false,0.00%
+duckdb,length,0.090294,0.003175,native,false,0.00%
+duckdb,library_helper,0.093259,0.005643,native,false,0.00%
+duckdb,log_ten,0.130771,0.003793,native,false,0.00%
+duckdb,lower_strip,0.185698,0.012375,native,true,0.00%
+duckdb,mapped_characters,0.333884,0.004584,arrow,false,0.00%
+duckdb,month,0.129503,0.009929,native,false,0.00%
+duckdb,nearest_whole,0.096130,0.007985,native,false,0.00%
+duckdb,nested_helper,0.208099,0.012183,native,true,0.00%
+duckdb,not_half,0.061108,0.003223,native,true,0.00%
+duckdb,numbered_words,0.427860,0.041264,arrow,true,0.00%
+duckdb,optional_code,0.086049,0.002988,native,false,0.00%
+duckdb,paired_words,0.513467,0.029886,arrow,true,0.00%
+duckdb,percent_integer,0.317866,0.007545,native,false,0.00%
+duckdb,percent_pair,0.272932,0.006791,native,false,0.00%
+duckdb,percent_string,0.384687,0.008433,native,true,0.00%
+duckdb,regex_collapse_whitespace,0.502170,0.015522,arrow,true,0.00%
+duckdb,regex_first_number,0.386186,0.008515,arrow,true,0.00%
+duckdb,regex_keep_digits,0.396423,0.010613,arrow,true,0.00%
+duckdb,regex_remove_punctuation,0.453875,0.012092,arrow,true,0.00%
+duckdb,regex_remove_urls,0.353420,0.008115,arrow,true,0.00%
+duckdb,remove_stopwords,0.277411,0.024341,native,false,0.00%
+duckdb,repeated_words,0.355033,0.023500,arrow,true,0.00%
+duckdb,replace_dashes,0.167596,0.005291,native,false,0.00%
+duckdb,reverse_stride_parts,0.316806,0.009405,native,false,0.00%
+duckdb,reverse_stride_text,0.260339,0.023967,native,false,0.00%
+duckdb,reverse_text,0.195111,0.011952,native,false,0.00%
+duckdb,row_day_helper,0.501211,0.012863,arrow,true,0.00%
+duckdb,row_helper,0.507632,0.012973,arrow,true,0.00%
+duckdb,row_image,0.412983,0.012197,arrow,true,0.00%
+duckdb,row_path_helper,0.694853,0.007803,arrow,false,0.00%
+duckdb,row_position_fallback,0.314048,0.007410,native,true,0.00%
+duckdb,row_position_helper_fallback,0.694468,0.007801,arrow,true,0.00%
+duckdb,row_positions,0.308281,0.006923,native,false,0.00%
+duckdb,row_total,0.342739,0.003518,native,false,0.00%
+duckdb,row_week_local_key,0.342652,0.002756,native,false,0.00%
+duckdb,row_year,0.679861,0.023231,native,false,0.00%
+duckdb,rsplit_by,0.336750,0.019668,native,true,0.00%
+duckdb,rsplit_limit,0.363728,0.043215,native,true,0.00%
+duckdb,rsplit_word_limit,0.301771,0.035724,native,true,0.00%
+duckdb,rsplit_words,0.262609,0.011516,native,false,0.00%
+duckdb,safe_division,0.090997,0.004299,native,false,0.00%
+duckdb,selected_suffixes,0.247981,0.005778,native,false,0.00%
+duckdb,set_chained,1.035146,0.417441,arrow,false,0.00%
+duckdb,set_iterable_methods,0.554550,0.495969,native,false,0.00%
+duckdb,set_membership,0.352026,0.052847,native,false,0.00%
+duckdb,slice_parts,0.269009,0.005429,native,false,0.00%
+duckdb,sliced_words,0.255962,0.013230,native,true,0.00%
+duckdb,small_boolean,0.107287,0.003124,native,false,0.00%
+duckdb,small_case_mapping,0.266339,0.008964,native,true,0.00%
+duckdb,small_extrema,0.187641,0.017308,native,false,0.00%
+duckdb,small_list_membership,0.082272,0.002939,native,false,0.00%
+duckdb,small_padding,0.266113,0.093400,arrow,true,0.00%
+duckdb,small_predicates,0.199739,0.029711,native,false,0.00%
+duckdb,small_strip,0.258171,0.022169,native,false,0.00%
+duckdb,small_tuple_affixes,0.163230,0.009172,native,false,0.00%
+duckdb,sorted_unique_words,0.394497,0.020104,arrow,false,0.00%
+duckdb,sorted_words,0.333824,0.015333,arrow,false,0.00%
+duckdb,split_by,0.268235,0.008112,arrow,false,0.00%
+duckdb,split_limit,0.366071,0.028437,native,false,0.00%
+duckdb,split_on_none,0.269678,0.011039,native,false,0.00%
+duckdb,split_part,0.173848,0.004746,native,false,0.00%
+duckdb,split_word_limit,0.308715,0.026587,native,false,0.00%
+duckdb,starts_with,0.106900,0.002901,native,false,0.00%
+duckdb,stride_parts,0.283051,0.005828,arrow,false,0.00%
+duckdb,stride_text,0.260480,0.013440,native,false,0.00%
+duckdb,text_or_empty,0.140766,0.003815,native,false,0.00%
+duckdb,total_numbers,0.221931,0.081724,native,true,0.00%
+duckdb,total_word_length,0.210810,0.011481,native,false,0.00%
+duckdb,training_image_path,0.638371,0.013306,arrow,false,0.00%
+duckdb,translate_expansion,0.485706,0.017969,arrow,true,0.00%
+duckdb,translate_punctuation,0.729113,0.042797,arrow,false,0.00%
+duckdb,translate_swap,0.406343,0.008534,native,false,0.00%
+duckdb,truthy_guard,0.164617,0.007369,native,true,0.00%
+duckdb,truthy_int_guard,0.062593,0.004574,native,false,0.00%
+duckdb,try_default,0.397851,0.019886,native,false,0.00%
+duckdb,type_equality,0.083623,0.002640,native,false,0.00%
+duckdb,type_identity,0.079121,0.002855,native,false,0.00%
+duckdb,unique_characters,0.157368,0.021087,native,false,0.00%
+duckdb,unique_words,0.162701,0.014047,native,false,0.00%
+duckdb,unpack_caught,0.424514,0.005269,arrow,false,0.00%
+duckdb,unpack_constant,0.201684,0.004343,native,false,0.00%
+duckdb,unpack_ends,0.318312,0.067989,arrow,true,0.00%
+duckdb,unpack_fields,0.227078,0.008065,native,false,0.00%
+duckdb,unpack_numbers,0.344569,0.006241,arrow,true,0.00%
+duckdb,unpack_pair,0.330158,0.007177,arrow,false,0.00%
+duckdb,unpack_tuple,0.190871,0.004132,native,false,0.00%
+duckdb,unpack_words,0.311267,0.033893,native,true,0.00%
+duckdb,upper,0.167111,0.007058,native,true,0.00%
+duckdb,weighted_word_length,0.300655,0.152430,native,true,0.00%
+duckdb,year,0.212210,0.009650,native,false,0.00%
+duckdb,zero_slice_step,0.226053,0.003643,arrow,false,0.00%
+polars eager,all_words,0.281326,0.017008,map_elements,true,0.00%
+polars eager,bare_except,0.134228,0.003833,map_elements,false,0.00%
+polars eager,clamp,0.105991,0.001637,map_elements,false,0.00%
+polars eager,compound,0.387779,0.018320,map_elements,true,0.00%
+polars eager,concat,0.397764,0.003409,map_elements,false,0.00%
+polars eager,conditional_expression,0.065107,0.001205,map_elements,false,0.00%
+polars eager,constant_part,0.139702,0.017063,map_elements,true,0.00%
+polars eager,constant_receiver,0.101653,0.069240,map_elements,false,0.00%
+polars eager,constant_result,0.062304,0.004517,map_elements,false,0.00%
+polars eager,constant_suffixes,0.108391,0.015877,map_elements,true,0.00%
+polars eager,container_default_mapping,0.147306,0.000967,map_elements,false,0.00%
+polars eager,container_default_stopwords,0.330625,0.102402,map_elements,false,0.00%
+polars eager,contains_word,0.210203,0.015904,map_elements,true,0.00%
+polars eager,datetime_age_days,0.681806,0.001080,map_elements,false,0.00%
+polars eager,datetime_elapsed_seconds,0.692109,0.001260,map_elements,false,0.00%
+polars eager,datetime_format,0.960502,0.007285,map_elements,false,0.00%
+polars eager,datetime_month,0.178812,0.001418,map_elements,false,0.00%
+polars eager,datetime_parse_slice,4.766904,0.077966,map_elements,true,0.00%
+polars eager,datetime_row,0.357321,0.001654,map_elements,false,0.00%
+polars eager,datetime_shift_backward,0.649002,0.017094,map_elements,true,0.00%
+polars eager,datetime_shift_forward,0.752854,0.016574,map_elements,true,0.00%
+polars eager,datetime_total_seconds,0.780143,0.017391,map_elements,true,0.00%
+polars eager,datetime_weekday,0.182925,0.001279,map_elements,false,0.00%
+polars eager,datetime_year,0.182309,0.001552,map_elements,false,0.00%
+polars eager,day,0.123894,0.030776,map_elements,true,0.00%
+polars eager,dictionary_default,0.107123,0.000804,map_elements,false,0.00%
+polars eager,dictionary_guard,0.105817,0.015060,map_elements,true,0.00%
+polars eager,dictionary_items,1.174834,0.033957,map_elements,true,0.00%
+polars eager,dictionary_none,0.095094,0.001419,map_elements,false,0.00%
+polars eager,euro,0.486730,0.001348,map_elements,false,0.00%
+polars eager,f_string_float,0.490609,0.017669,map_elements,true,0.00%
+polars eager,f_string_record,0.595193,0.005234,map_elements,false,0.00%
+polars eager,f_string_specifiers,0.571905,0.004411,map_elements,false,0.00%
+polars eager,filtered_words,2.167122,0.018634,map_elements,true,0.00%
+polars eager,first_dash,0.080237,0.002281,map_elements,false,0.00%
+polars eager,first_or_default,0.503661,0.002846,map_elements,false,0.00%
+polars eager,float_arithmetic,0.288212,0.003310,map_elements,false,0.00%
+polars eager,float_division,0.287588,0.016394,map_elements,true,0.00%
+polars eager,float_text,0.244419,0.017067,map_elements,true,0.00%
+polars eager,format_automatic,0.536911,0.003735,map_elements,false,0.00%
+polars eager,format_indexed,0.620127,0.005559,map_elements,false,0.00%
+polars eager,format_specifiers,0.587218,0.004732,map_elements,false,0.00%
+polars eager,function_values,0.417260,0.020210,map_elements,true,0.00%
+polars eager,global_helper,0.118155,0.017120,map_elements,true,0.00%
+polars eager,has_separator,0.077722,0.002902,map_elements,false,0.00%
+polars eager,head_slice,0.087326,0.001535,map_elements,false,0.00%
+polars eager,helper_chain,0.138423,0.017174,map_elements,true,0.00%
+polars eager,image_path_directory,0.176091,0.025420,map_elements,true,0.00%
+polars eager,image_path_identifier,0.322288,0.109827,map_elements,true,0.00%
+polars eager,image_path_parts,0.213481,0.028944,map_elements,true,0.00%
+polars eager,index_rsplit_limit,0.572353,0.062096,map_elements,true,0.00%
+polars eager,index_sliced_parts,0.550217,0.023664,map_elements,true,0.00%
+polars eager,index_split_limit,0.586362,0.056852,map_elements,true,0.00%
+polars eager,indexed_words,0.213131,0.039068,map_elements,true,0.00%
+polars eager,instance_boolean,0.054092,0.000561,map_elements,false,0.00%
+polars eager,instance_number,0.060201,0.000555,map_elements,false,0.00%
+polars eager,instance_text,0.055797,0.000653,map_elements,false,0.00%
+polars eager,int_above_one,0.083460,0.020347,map_elements,true,0.00%
+polars eager,int_arithmetic,0.323050,0.017201,map_elements,true,0.00%
+polars eager,int_floor_division,0.310417,0.015576,map_elements,true,0.00%
+polars eager,int_modulo,0.309938,0.015605,map_elements,true,0.00%
+polars eager,inverse,0.050488,0.014914,map_elements,true,0.00%
+polars eager,is_none,0.044977,0.000702,map_elements,false,0.00%
+polars eager,is_zero,0.042972,0.000809,map_elements,false,0.00%
+polars eager,jaccard,0.664025,0.116378,map_elements,true,0.00%
+polars eager,join_characters,0.568833,0.009315,map_elements,false,0.00%
+polars eager,join_or_error,0.523033,0.016997,map_elements,true,0.00%
+polars eager,join_parts,0.114874,0.016211,map_elements,true,0.00%
+polars eager,keyword_helper,0.120975,0.016539,map_elements,true,0.00%
+polars eager,keyword_round,0.221083,0.017851,map_elements,true,0.00%
+polars eager,keyword_split,2.243765,0.003056,map_elements,false,0.00%
+polars eager,known_code,0.059055,0.000960,map_elements,false,0.00%
+polars eager,last_dash,0.083912,0.002511,map_elements,false,0.00%
+polars eager,lazy_fault,0.272931,0.016517,map_elements,true,0.00%
+polars eager,length,0.056648,0.001184,map_elements,false,0.00%
+polars eager,library_helper,0.083892,0.001941,map_elements,false,0.00%
+polars eager,log_ten,0.105595,0.096037,map_elements,true,44.96%
+polars eager,lower_strip,0.086619,0.016596,map_elements,true,0.00%
+polars eager,mapped_characters,0.354554,0.017177,map_elements,true,0.00%
+polars eager,month,0.101191,0.008338,map_elements,false,0.00%
+polars eager,nearest_whole,0.086016,0.016464,map_elements,true,0.00%
+polars eager,nested_helper,0.122804,0.017311,map_elements,true,0.00%
+polars eager,not_half,0.050038,0.016112,map_elements,true,0.00%
+polars eager,numbered_words,2.147965,0.032023,map_elements,true,0.00%
+polars eager,optional_code,0.056854,0.001103,map_elements,false,0.00%
+polars eager,paired_words,2.229820,0.042418,map_elements,true,0.00%
+polars eager,percent_integer,0.516333,0.004537,map_elements,false,0.00%
+polars eager,percent_pair,0.473445,0.003600,map_elements,false,0.00%
+polars eager,percent_string,0.257782,0.016708,map_elements,true,0.00%
+polars eager,regex_collapse_whitespace,0.365274,0.016959,map_elements,true,0.00%
+polars eager,regex_first_number,0.285901,0.016812,map_elements,true,0.00%
+polars eager,regex_keep_digits,0.283885,0.016429,map_elements,true,0.00%
+polars eager,regex_remove_punctuation,0.332523,0.016827,map_elements,true,0.00%
+polars eager,regex_remove_urls,0.257260,0.016040,map_elements,true,0.00%
+polars eager,remove_stopwords,0.139874,0.021016,map_elements,true,0.00%
+polars eager,repeated_words,2.155742,0.118395,map_elements,true,0.00%
+polars eager,replace_dashes,0.081699,0.001933,map_elements,false,0.00%
+polars eager,reverse_stride_parts,1.354970,0.033933,map_elements,false,0.00%
+polars eager,reverse_stride_text,0.506305,0.025539,map_elements,true,0.00%
+polars eager,reverse_text,0.093080,0.016954,map_elements,true,0.00%
+polars eager,row_day_helper,0.306175,0.016203,map_elements,true,0.00%
+polars eager,row_helper,0.301402,0.016727,map_elements,true,0.00%
+polars eager,row_image,0.173432,0.017619,map_elements,true,0.00%
+polars eager,row_path_helper,0.467967,0.003533,map_elements,false,0.00%
+polars eager,row_position_fallback,0.166827,0.017459,map_rows,true,0.00%
+polars eager,row_position_helper_fallback,0.495998,0.017649,map_elements,true,0.00%
+polars eager,row_positions,0.165765,0.003052,map_rows,false,0.00%
+polars eager,row_total,0.169527,0.001012,map_elements,false,0.00%
+polars eager,row_week_local_key,0.237631,0.000716,map_elements,false,0.00%
+polars eager,row_year,0.526802,0.021902,map_elements,true,0.00%
+polars eager,rsplit_by,2.693152,0.036940,map_elements,true,0.00%
+polars eager,rsplit_limit,2.790994,0.107119,map_elements,true,0.00%
+polars eager,rsplit_word_limit,2.442991,0.077653,map_elements,true,0.00%
+polars eager,rsplit_words,2.040904,0.004759,map_elements,false,0.00%
+polars eager,safe_division,0.316804,0.017088,map_elements,true,0.00%
+polars eager,selected_suffixes,0.139381,0.018572,map_elements,true,0.00%
+polars eager,set_chained,3.270956,0.185587,map_elements,true,0.00%
+polars eager,set_iterable_methods,0.833953,0.183961,map_elements,true,0.00%
+polars eager,set_membership,0.626622,0.043850,map_elements,true,0.00%
+polars eager,slice_parts,2.358287,0.011581,map_elements,false,0.00%
+polars eager,sliced_words,0.540596,0.029818,map_elements,true,0.00%
+polars eager,small_boolean,0.414882,0.000816,map_elements,false,0.00%
+polars eager,small_case_mapping,0.165928,0.016712,map_elements,true,0.00%
+polars eager,small_extrema,0.531976,0.016512,map_elements,false,0.00%
+polars eager,small_list_membership,0.070500,0.000917,map_elements,false,0.00%
+polars eager,small_padding,0.460328,0.062562,map_elements,true,0.00%
+polars eager,small_predicates,0.097309,0.006046,map_elements,false,0.00%
+polars eager,small_strip,0.462877,0.005574,map_elements,false,0.00%
+polars eager,small_tuple_affixes,0.114110,0.004073,map_elements,false,0.00%
+polars eager,sorted_unique_words,2.129227,0.029941,map_elements,true,0.00%
+polars eager,sorted_words,2.063592,0.027380,map_elements,true,0.00%
+polars eager,split_by,2.705492,0.018963,map_elements,true,0.00%
+polars eager,split_limit,2.799068,0.080638,map_elements,true,0.00%
+polars eager,split_on_none,2.044230,0.004357,map_elements,false,0.00%
+polars eager,split_part,0.120404,0.003543,map_elements,false,0.00%
+polars eager,split_word_limit,2.454919,0.044310,map_elements,false,0.00%
+polars eager,starts_with,0.074844,0.001090,map_elements,false,0.00%
+polars eager,stride_parts,2.384705,0.020625,map_elements,false,0.00%
+polars eager,stride_text,0.506681,0.011834,map_elements,false,0.00%
+polars eager,text_or_empty,0.072151,0.001606,map_elements,false,0.00%
+polars eager,total_numbers,0.183030,0.045033,map_elements,true,0.00%
+polars eager,total_word_length,0.164597,0.019338,map_elements,true,0.00%
+polars eager,training_image_path,0.528393,0.009462,map_elements,false,0.00%
+polars eager,translate_expansion,0.343783,0.018393,map_elements,true,0.00%
+polars eager,translate_punctuation,0.561812,0.016556,map_elements,true,0.00%
+polars eager,translate_swap,0.285426,0.003558,map_elements,false,0.00%
+polars eager,truthy_guard,0.081628,0.017400,map_elements,true,0.00%
+polars eager,truthy_int_guard,0.063691,0.016050,map_elements,true,0.00%
+polars eager,try_default,0.326815,0.022675,map_elements,true,0.00%
+polars eager,type_equality,0.056196,0.000640,map_elements,false,0.00%
+polars eager,type_identity,0.054602,0.000639,map_elements,false,0.00%
+polars eager,unique_characters,0.112506,0.020998,map_elements,true,0.00%
+polars eager,unique_words,0.120777,0.018142,map_elements,true,0.00%
+polars eager,unpack_caught,0.317852,0.017061,map_elements,true,0.00%
+polars eager,unpack_constant,0.103678,0.016051,map_elements,true,0.00%
+polars eager,unpack_ends,0.195889,0.029815,map_elements,true,0.00%
+polars eager,unpack_fields,0.131843,0.017657,map_elements,true,0.00%
+polars eager,unpack_numbers,0.567354,0.017187,map_elements,true,0.00%
+polars eager,unpack_pair,0.516762,0.017756,map_elements,true,0.00%
+polars eager,unpack_tuple,0.098430,0.015407,map_elements,true,0.00%
+polars eager,unpack_words,0.160645,0.021277,map_elements,true,0.00%
+polars eager,upper,0.078044,0.016071,map_elements,true,0.00%
+polars eager,weighted_word_length,0.244305,0.081884,map_elements,true,0.00%
+polars eager,year,0.167754,0.008260,map_elements,false,0.00%
+polars eager,zero_slice_step,0.148864,0.004502,map_elements,false,0.00%
+polars lazy,all_words,0.280280,0.007834,map_elements,true,0.00%
+polars lazy,bare_except,0.137745,0.003261,map_elements,false,0.00%
+polars lazy,clamp,0.104563,0.001199,map_elements,false,0.00%
+polars lazy,compound,0.413272,0.007136,map_elements,true,0.00%
+polars lazy,concat,0.408147,0.003018,map_elements,false,0.00%
+polars lazy,conditional_expression,0.063297,0.001206,map_elements,false,0.00%
+polars lazy,constant_part,0.141465,0.005893,map_elements,true,0.00%
+polars lazy,constant_receiver,0.103156,0.006605,map_elements,false,0.00%
+polars lazy,constant_result,0.061247,0.001929,map_elements,false,0.00%
+polars lazy,constant_suffixes,0.104846,0.005204,map_elements,true,0.00%
+polars lazy,container_default_mapping,0.142670,0.000702,map_elements,false,0.00%
+polars lazy,container_default_stopwords,0.335820,0.012062,map_elements,false,0.00%
+polars lazy,contains_word,0.214023,0.005250,map_elements,true,0.00%
+polars lazy,datetime_age_days,0.697665,0.001059,map_elements,false,0.00%
+polars lazy,datetime_elapsed_seconds,0.708878,0.001263,map_elements,false,0.00%
+polars lazy,datetime_format,0.972205,0.007170,map_elements,false,0.00%
+polars lazy,datetime_month,0.175074,0.001468,map_elements,false,0.00%
+polars lazy,datetime_parse_slice,4.945249,0.097303,map_elements,true,0.00%
+polars lazy,datetime_row,0.362152,0.001587,map_elements,false,0.00%
+polars lazy,datetime_shift_backward,0.665012,0.005458,map_elements,true,0.00%
+polars lazy,datetime_shift_forward,0.763707,0.005620,map_elements,true,0.00%
+polars lazy,datetime_total_seconds,0.785200,0.005930,map_elements,true,0.00%
+polars lazy,datetime_weekday,0.183304,0.001226,map_elements,false,0.00%
+polars lazy,datetime_year,0.179571,0.001588,map_elements,false,0.00%
+polars lazy,day,0.122307,0.027376,map_elements,true,0.00%
+polars lazy,dictionary_default,0.104170,0.000690,map_elements,false,0.00%
+polars lazy,dictionary_guard,0.102676,0.005263,map_elements,true,0.00%
+polars lazy,dictionary_items,1.239154,0.071295,map_elements,true,0.00%
+polars lazy,dictionary_none,0.094466,0.001624,map_elements,false,0.00%
+polars lazy,euro,0.500980,0.002322,map_elements,false,0.00%
+polars lazy,f_string_float,0.488793,0.009124,map_elements,true,0.00%
+polars lazy,f_string_record,0.611810,0.006072,map_elements,false,0.00%
+polars lazy,f_string_specifiers,0.586377,0.005999,map_elements,false,0.00%
+polars lazy,filtered_words,2.248555,0.008256,map_elements,true,0.00%
+polars lazy,first_dash,0.082199,0.002842,map_elements,false,0.00%
+polars lazy,first_or_default,0.504109,0.003808,map_elements,false,0.00%
+polars lazy,float_arithmetic,0.298484,0.002132,map_elements,false,0.00%
+polars lazy,float_division,0.297431,0.005182,map_elements,true,0.00%
+polars lazy,float_text,0.246190,0.006972,map_elements,true,0.00%
+polars lazy,format_automatic,0.543328,0.004665,map_elements,false,0.00%
+polars lazy,format_indexed,0.638012,0.005383,map_elements,false,0.00%
+polars lazy,format_specifiers,0.591530,0.005393,map_elements,false,0.00%
+polars lazy,function_values,0.430662,0.015965,map_elements,true,0.00%
+polars lazy,global_helper,0.114741,0.007443,map_elements,true,0.00%
+polars lazy,has_separator,0.077972,0.003159,map_elements,false,0.00%
+polars lazy,head_slice,0.082935,0.001383,map_elements,false,0.00%
+polars lazy,helper_chain,0.135206,0.007595,map_elements,true,0.00%
+polars lazy,image_path_directory,0.169128,0.017691,map_elements,true,0.00%
+polars lazy,image_path_identifier,0.318816,0.109703,map_elements,true,0.00%
+polars lazy,image_path_parts,0.213720,0.022284,map_elements,true,0.00%
+polars lazy,index_rsplit_limit,0.592812,0.083209,map_elements,true,0.00%
+polars lazy,index_sliced_parts,0.555400,0.020714,map_elements,true,0.00%
+polars lazy,index_split_limit,0.595052,0.080211,map_elements,true,0.00%
+polars lazy,indexed_words,0.212294,0.055546,map_elements,true,0.00%
+polars lazy,instance_boolean,0.056075,0.000354,map_elements,false,0.00%
+polars lazy,instance_number,0.060149,0.000346,map_elements,false,0.00%
+polars lazy,instance_text,0.056822,0.000404,map_elements,false,0.00%
+polars lazy,int_above_one,0.082451,0.011683,map_elements,true,0.00%
+polars lazy,int_arithmetic,0.324802,0.008302,map_elements,true,0.00%
+polars lazy,int_floor_division,0.314279,0.004829,map_elements,true,0.00%
+polars lazy,int_modulo,0.316615,0.004842,map_elements,true,0.00%
+polars lazy,inverse,0.051068,0.005583,map_elements,true,0.00%
+polars lazy,is_none,0.045475,0.000393,map_elements,false,0.00%
+polars lazy,is_zero,0.044617,0.000550,map_elements,false,0.00%
+polars lazy,jaccard,0.678185,0.225255,map_elements,true,0.00%
+polars lazy,join_characters,0.585794,0.014116,map_elements,false,0.00%
+polars lazy,join_or_error,0.520244,0.008899,map_elements,true,0.00%
+polars lazy,join_parts,0.114687,0.006180,map_elements,true,0.00%
+polars lazy,keyword_helper,0.122163,0.007677,map_elements,true,0.00%
+polars lazy,keyword_round,0.214531,0.005687,map_elements,true,0.00%
+polars lazy,keyword_split,2.319715,0.002971,map_elements,false,0.00%
+polars lazy,known_code,0.061460,0.000793,map_elements,false,0.00%
+polars lazy,last_dash,0.083259,0.003900,map_elements,false,0.00%
+polars lazy,lazy_fault,0.274334,0.004851,map_elements,true,0.00%
+polars lazy,length,0.056239,0.001181,map_elements,false,0.00%
+polars lazy,library_helper,0.081628,0.001650,map_elements,false,0.00%
+polars lazy,log_ten,0.103849,0.078000,map_elements,true,44.96%
+polars lazy,lower_strip,0.088543,0.006751,map_elements,true,0.00%
+polars lazy,mapped_characters,0.380315,0.006381,map_elements,true,0.00%
+polars lazy,month,0.097533,0.006571,map_elements,false,0.00%
+polars lazy,nearest_whole,0.086651,0.005384,map_elements,true,0.00%
+polars lazy,nested_helper,0.119053,0.007387,map_elements,true,0.00%
+polars lazy,not_half,0.053062,0.004799,map_elements,true,0.00%
+polars lazy,numbered_words,2.264840,0.034798,map_elements,true,0.00%
+polars lazy,optional_code,0.060277,0.000851,map_elements,false,0.00%
+polars lazy,paired_words,2.309494,0.065945,map_elements,true,0.00%
+polars lazy,percent_integer,0.522058,0.005120,map_elements,false,0.00%
+polars lazy,percent_pair,0.476298,0.004523,map_elements,false,0.00%
+polars lazy,percent_string,0.252730,0.007093,map_elements,true,0.00%
+polars lazy,regex_collapse_whitespace,0.375811,0.007986,map_elements,true,0.00%
+polars lazy,regex_first_number,0.288784,0.007289,map_elements,true,0.00%
+polars lazy,regex_keep_digits,0.278297,0.007069,map_elements,true,0.00%
+polars lazy,regex_remove_punctuation,0.324971,0.007513,map_elements,true,0.00%
+polars lazy,regex_remove_urls,0.254588,0.006170,map_elements,true,0.00%
+polars lazy,remove_stopwords,0.140509,0.016310,map_elements,true,0.00%
+polars lazy,repeated_words,2.260790,0.205311,map_elements,true,0.00%
+polars lazy,replace_dashes,0.078721,0.002291,map_elements,false,0.00%
+polars lazy,reverse_stride_parts,1.389942,0.042659,map_elements,false,0.00%
+polars lazy,reverse_stride_text,0.515248,0.024450,map_elements,true,0.00%
+polars lazy,reverse_text,0.093007,0.010805,map_elements,true,0.00%
+polars lazy,row_day_helper,0.311816,0.006959,map_elements,true,0.00%
+polars lazy,row_helper,0.312674,0.006322,map_elements,true,0.00%
+polars lazy,row_image,0.173596,0.007087,map_elements,true,0.00%
+polars lazy,row_path_helper,0.470234,0.003546,map_elements,false,0.00%
+polars lazy,row_position_fallback,0.169024,0.007524,map_rows,true,0.00%
+polars lazy,row_position_helper_fallback,0.501024,0.007512,map_elements,true,0.00%
+polars lazy,row_positions,0.171802,0.003643,map_rows,false,0.00%
+polars lazy,row_total,0.170075,0.001070,map_elements,false,0.00%
+polars lazy,row_week_local_key,0.245404,0.000431,map_elements,false,0.00%
+polars lazy,row_year,0.532437,0.015891,map_elements,true,0.00%
+polars lazy,rsplit_by,2.789386,0.043057,map_elements,true,0.00%
+polars lazy,rsplit_limit,2.860822,0.247710,map_elements,true,0.00%
+polars lazy,rsplit_word_limit,2.530919,0.088476,map_elements,true,0.00%
+polars lazy,rsplit_words,2.120967,0.003957,map_elements,false,0.00%
+polars lazy,safe_division,0.315583,0.005223,map_elements,true,0.00%
+polars lazy,selected_suffixes,0.143018,0.009324,map_elements,true,0.00%
+polars lazy,set_chained,3.355055,0.315832,map_elements,true,0.00%
+polars lazy,set_iterable_methods,0.845535,0.276285,map_elements,true,0.00%
+polars lazy,set_membership,0.631286,0.065861,map_elements,true,0.00%
+polars lazy,slice_parts,2.439258,0.025387,map_elements,false,0.00%
+polars lazy,sliced_words,0.566563,0.049247,map_elements,true,0.00%
+polars lazy,small_boolean,0.425568,0.000426,map_elements,false,0.00%
+polars lazy,small_case_mapping,0.166714,0.006311,map_elements,true,0.00%
+polars lazy,small_extrema,0.546803,0.006063,map_elements,false,0.00%
+polars lazy,small_list_membership,0.069888,0.000533,map_elements,false,0.00%
+polars lazy,small_padding,0.461502,0.094741,map_elements,true,0.00%
+polars lazy,small_predicates,0.098250,0.007573,map_elements,false,0.00%
+polars lazy,small_strip,0.466395,0.006101,map_elements,false,0.00%
+polars lazy,small_tuple_affixes,0.114958,0.002946,map_elements,false,0.00%
+polars lazy,sorted_unique_words,2.237894,0.044677,map_elements,true,0.00%
+polars lazy,sorted_words,2.161017,0.038760,map_elements,true,0.00%
+polars lazy,split_by,2.775288,0.009787,map_elements,true,0.00%
+polars lazy,split_limit,2.872374,0.260776,map_elements,true,0.00%
+polars lazy,split_on_none,2.114931,0.004865,map_elements,false,0.00%
+polars lazy,split_part,0.119949,0.003660,map_elements,false,0.00%
+polars lazy,split_word_limit,2.524882,0.065612,map_elements,false,0.00%
+polars lazy,starts_with,0.076646,0.000961,map_elements,false,0.00%
+polars lazy,stride_parts,2.442268,0.035830,map_elements,false,0.00%
+polars lazy,stride_text,0.514531,0.010807,map_elements,false,0.00%
+polars lazy,text_or_empty,0.072530,0.001727,map_elements,false,0.00%
+polars lazy,total_numbers,0.187457,0.047344,map_elements,true,0.00%
+polars lazy,total_word_length,0.165105,0.013271,map_elements,true,0.00%
+polars lazy,training_image_path,0.523398,0.012335,map_elements,false,0.00%
+polars lazy,translate_expansion,0.343159,0.014520,map_elements,true,0.00%
+polars lazy,translate_punctuation,0.584065,0.006315,map_elements,true,0.00%
+polars lazy,translate_swap,0.277039,0.003457,map_elements,false,0.00%
+polars lazy,truthy_guard,0.078761,0.005834,map_elements,true,0.00%
+polars lazy,truthy_int_guard,0.065346,0.005089,map_elements,true,0.00%
+polars lazy,try_default,0.333159,0.016002,map_elements,true,0.00%
+polars lazy,type_equality,0.056954,0.000371,map_elements,false,0.00%
+polars lazy,type_identity,0.057544,0.000316,map_elements,false,0.00%
+polars lazy,unique_characters,0.113967,0.024757,map_elements,true,0.00%
+polars lazy,unique_words,0.119029,0.012574,map_elements,true,0.00%
+polars lazy,unpack_caught,0.320961,0.005839,map_elements,true,0.00%
+polars lazy,unpack_constant,0.102660,0.005149,map_elements,true,0.00%
+polars lazy,unpack_ends,0.191824,0.032392,map_elements,true,0.00%
+polars lazy,unpack_fields,0.130354,0.010369,map_elements,true,0.00%
+polars lazy,unpack_numbers,0.580950,0.007493,map_elements,true,0.00%
+polars lazy,unpack_pair,0.524986,0.010136,map_elements,true,0.00%
+polars lazy,unpack_tuple,0.095412,0.004353,map_elements,true,0.00%
+polars lazy,unpack_words,0.154875,0.021245,map_elements,true,0.00%
+polars lazy,upper,0.076997,0.005438,map_elements,true,0.00%
+polars lazy,weighted_word_length,0.245408,0.082790,map_elements,true,0.00%
+polars lazy,year,0.164676,0.007281,map_elements,false,0.00%
+polars lazy,zero_slice_step,0.145393,0.002030,map_elements,false,0.00%
