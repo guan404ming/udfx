@@ -6,8 +6,8 @@
 
 **An optimizing compiler for Python UDFs**
 
-Write your logic in Python. udfx compiles supported UDFs into native expressions for
-**Polars, DuckDB, DataFusion, and Spark**, with Python fallback where needed.
+Run your Python UDFs as native expressions in **Polars, DuckDB, DataFusion, and Spark**,
+without rewriting your logic.
 
 ## Install
 
