@@ -6,14 +6,15 @@ from collections.abc import Callable
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import (
-    BinaryRule,
     Lowered,
     register_comparison,
     register_equality,
     register_float_variants,
     register_int_truediv,
 )
-from udfx.backends.spark.rules import RULES, when
+from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
+from udfx.frontend.core.sets import empty_union
+from udfx.semantics.arithmetic import IntegerRegionPrimitives
 from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
     ARITHMETIC,
@@ -32,6 +33,14 @@ CHECKED: dict[str, Callable[[Column, Column], Column]] = {
     "__sub__": functions.try_subtract,
     "__mul__": functions.try_multiply,
 }
+WIDE_INTEGERS = IntegerRegionPrimitives(
+    maximum=10**38 - 1,
+    size_limit=2**31 - 1,
+    widen=lambda value: value.cast("decimal(38,0)"),
+    narrow=lambda value: value.try_cast("long"),
+    not_null=Column.isNotNull,
+    operations=CHECKED,
+)
 
 INFINITY = float("inf")
 
@@ -44,10 +53,13 @@ def within_exact_float_range(value: Column) -> Column:
     return value.between(-FLOAT_INT_MAX, FLOAT_INT_MAX)
 
 
-def overflow_checked(operation: Callable[[Column, Column], Column]) -> BinaryRule[Column]:
-    def rule(left: Column, right: Column) -> Lowered[Column]:
+def overflow_checked(
+    operation: Callable[[Column, Column], Column],
+) -> Callable[..., Lowered[Column]]:
+    def rule(left: Column, right: Column, *, bounded: bool = False) -> Lowered[Column]:
         result = operation(left, right)
-        return Lowered(result, overflow=result.isNull() & left.isNotNull() & right.isNotNull())
+        overflow = None if bounded else result.isNull() & left.isNotNull() & right.isNotNull()
+        return Lowered(result, overflow=overflow)
 
     return rule
 
@@ -96,7 +108,9 @@ ORDER = OrderPrimitives(either_nan, Column.isNull, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(CHECKED[_name]))
+    RULES(_name, Kind.INT, Kind.INT, facts={"bounded": INTEGER_FITS})(
+        overflow_checked(CHECKED[_name])
+    )
     register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
@@ -146,3 +160,7 @@ RULES("math.log10", Kind.FLOAT)(log10)
 @RULES("math.log10", Kind.INT)
 def int_log10(value: Column) -> Lowered[Column]:
     return log10(cast_float64(value))
+
+
+for name in ("__eq__", "__ne__"):
+    RULES.rewrite(name, Kind.INT, Kind.INT)(empty_union)

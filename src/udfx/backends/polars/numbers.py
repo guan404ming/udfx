@@ -13,6 +13,7 @@ from udfx.backends.registration import (
     register_float_variants,
     register_int_truediv,
 )
+from udfx.frontend.core.sets import empty_union
 from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
     ARITHMETIC,
@@ -133,3 +134,7 @@ RULES("math.log10", Kind.FLOAT)(log10)
 @RULES("math.log10", Kind.INT)
 def int_log10(value: pl.Expr) -> Lowered[pl.Expr]:
     return log10(cast_float64(value))
+
+
+for name in ("__eq__", "__ne__"):
+    RULES.rewrite(name, Kind.INT, Kind.INT)(empty_union)

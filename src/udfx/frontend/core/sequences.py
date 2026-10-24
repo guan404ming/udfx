@@ -112,11 +112,6 @@ def simplify_sequence(node: Call) -> Node:
     return join_prefix(node)
 
 
-def rewrite_words(node: Call) -> Node | None:
-    word = word_item(node)
-    return join_words(node) if word is None else word
-
-
 def join_prefix(node: Call) -> Node:
     if node.op.name != ".join":
         return node

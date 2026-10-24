@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from graphlib import CycleError, TopologicalSorter
 from typing import Any
 
 from udfx.errors import Unsupported
@@ -48,6 +49,18 @@ def lower_translation(
         return primitives.translate(
             text, "".join(ordered), "".join(mapping[character] for character in ordered)
         ), None
+    dependencies = {
+        character: (set(replacement) & mapping.keys()) - {character}
+        for character, replacement in mapping.items()
+    }
+    try:
+        ordered = tuple(TopologicalSorter(dependencies).static_order())
+    except CycleError:
+        ordered = ()
+    if ordered:
+        for character in ordered:
+            text = primitives.replace(text, character, mapping[character])
+        return text, None
     used = set(mapping) | set("".join(mapping.values()))
     markers = [chr(point) for point in range(0xE000, 0xF900) if chr(point) not in used][
         : len(mapping)

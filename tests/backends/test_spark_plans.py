@@ -15,7 +15,7 @@ from udfx.backends.spark import SparkBackend
 from udfx.ir import Col, Guarded, lit
 from udfx.ops import apply
 from udfx.program import Program
-from udfx.types import BOOL, INT, STR, list_of
+from udfx.types import BOOL, DATETIME, INT, STR, list_of
 
 
 def test_spark_uses_public_apis() -> None:
@@ -23,6 +23,25 @@ def test_spark_uses_public_apis() -> None:
         source = path.read_text()
         for name in ("_jvm", "_jc", "_jsparkSession", "py4j", "catalyst"):
             assert name not in source, f"{path.name}: {name}"
+
+
+def test_character_split_skips_array_scan() -> None:
+    def characters(value: str) -> list[str]:
+        return list(value)
+
+    translation = compile(characters, {"value": STR}, SparkBackend())
+    assert translation.ok
+    assert translation.expr is not None
+    assert "array_remove" not in str(translation.expr)
+
+
+def test_datetime_difference_skips_epoch_conversion() -> None:
+    backend = SparkBackend()
+    difference = apply("datetime_difference", Col("left", DATETIME), Col("right", DATETIME))
+    expr = str(backend.lower(difference).expr).lower()
+    assert "1970" not in expr
+    assert "timestampdiff" not in expr
+    assert "timestamp_diff" not in expr
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -107,6 +126,22 @@ def test_literal_split_uses_codegen(backend: Backend[Any]) -> None:
     with redirect_stdout(output):
         selected.explain("codegen")
     assert "Project [" in output.getvalue()
+
+
+@pytest.mark.parametrize("separator", [",", ".", "[", "\\", "😀"])
+def test_single_character_split_keeps_compact_patterns(separator: str) -> None:
+    backend = SparkBackend()
+    translation = compile(lambda text: text.split(separator), {"text": STR}, backend)
+    assert translation.ok
+    assert translation.expr is not None
+    frame = backend.session().createDataFrame([("a,b",)], ["text"])
+    output = StringIO()
+    with redirect_stdout(output):
+        frame.select(translation.expr.alias("result")).explain("extended")
+    optimized = output.getvalue().split("== Optimized Logical Plan ==", 1)[1]
+    optimized = optimized.split("== Physical Plan ==", 1)[0]
+    assert r"\Q" not in optimized
+    assert "regexp_replace" not in optimized
 
 
 @pytest.mark.parametrize("backend", backend_params())

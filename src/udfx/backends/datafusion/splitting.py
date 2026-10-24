@@ -56,6 +56,7 @@ SPLIT = SplitPrimitives(
         list_of(STR),
     ),
     split=split,
+    words=split_words,
     join=join,
     append=functions.array_append,
     length=length,

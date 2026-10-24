@@ -1,14 +1,39 @@
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 from conftest import backend_params
 
+from bench.speed.timing import fallback_in_plan
+from udfx import compile
 from udfx.backends.base import Backend
 from udfx.explain import render
 from udfx.frontend import trace
 from udfx.ir import Guarded
 from udfx.testing import check_function
 from udfx.types import INT, STR, list_of
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("function", [lambda items: items * 3, lambda items: 3 * items])
+def test_constant_list_repeat_uses_concatenation(
+    backend: Backend[Any], function: Callable[..., object]
+) -> None:
+    schema = {"items": list_of(STR)}
+    translation = compile(function, schema, backend)
+    assert translation.ok, translation.unsupported
+    assert not fallback_in_plan(translation.expr, backend.name)
+    rows = [([],), (["a", "😀"],), (["word"] * 10001,)]
+    assert check_function(function, schema, backend, rows) == []
+    assert check_function(function, {"items": list_of(STR).or_none()}, backend, [(None,)]) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_empty_repeat_keeps_operand_faults(backend: Backend[Any]) -> None:
+    def empty(text: str) -> list[int]:
+        return [int(text)] * 0
+
+    assert check_function(empty, {"text": STR}, backend, [("1",), ("invalid",)]) == []
 
 
 @pytest.mark.parametrize("backend", backend_params())

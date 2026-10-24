@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from contextlib import redirect_stdout
 from io import StringIO
 from typing import Any
@@ -11,9 +12,11 @@ from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
 from udfx.backends.spark.splitting import split_words
-from udfx.ir import Col
+from udfx.frontend import trace
+from udfx.ir import Col, Node
 from udfx.program import Program
-from udfx.types import BOOL, INT, STR
+from udfx.testing import check_function
+from udfx.types import BOOL, INT, STR, list_of
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -64,3 +67,79 @@ def test_spark_indexed_comprehension_splits_once_per_use(backend: Backend[Any]) 
     translation = compile(indexed_words, {"text": STR.or_none()}, backend)
     assert translation.ok, translation.unsupported
     assert str(translation.expr).count("regexp_extract_all") <= 8
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_spark_membership_uses_search(backend: Backend[Any]) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark plan")
+
+    def contains(items: list[str | None], needle: str | None) -> bool:
+        return needle in items
+
+    schema = {"items": list_of(STR.or_none()), "needle": STR.or_none()}
+    expression = str(backend.lower(trace(contains, schema).value).expr)
+    assert "array_intersect" not in expression
+    assert "array_contains" in expression
+    rows = [(["a", None], "x"), ([None], None), ([], None), (["x"], "x")]
+    assert check_function(contains, schema, backend, rows) == []
+
+
+def guarded_counts(text: str) -> list[str]:
+    words = text.split(",")
+    return [word.title() + str(len(words)) for word in words]
+
+
+def faulted_counts(text: str) -> list[str]:
+    words = text.split(",")
+    return [word[1] + str(len(words)) for word in words]
+
+
+def guarded_outer_counts(text: str) -> list[int]:
+    words = text.split(",")
+    return [len(words) for _ in words] if text.title() == text else [0]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("function", [guarded_counts, faulted_counts, guarded_outer_counts])
+def test_spark_guarded_comprehension_keeps_fallback(backend: Backend[Any], function: Any) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark plan")
+    schema = {"text": STR}
+    lowered = backend.lower(trace(function, schema).value)
+    assert backend.exact(lowered) is not None
+    rows = [("AB,CD",), ("ab,cd",), ("ɤ,ß",), ("",)]
+    assert check_function(function, schema, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_spark_fallback_skips_inexact_native_values(backend: Backend[Any]) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark plan")
+    schema = {"value": INT, "exact": BOOL.or_none()}
+    program = Program(lambda value, exact: value, schema, Col("value", INT))
+    native = functions.when(functions.col("exact"), functions.col("value")).otherwise(
+        functions.raise_error("inexact native value")
+    )
+    expression = backend.fallback(native, functions.col("exact"), program)
+    assert backend.evaluate([expression], schema, [(1, True), (2, False), (3, None)]) == [[1, 2, 3]]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_spark_lowers_unbound_fallback_once(
+    backend: Backend[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark lowering")
+    program = trace(lambda text: text.title(), {"text": STR})
+    lower = backend.lower_node
+    calls = 0
+
+    def record(node: Node, elements: Mapping[Node, Any]) -> Any:
+        nonlocal calls
+        calls += int(node is program.value and not elements)
+        return lower(node, elements)
+
+    monkeypatch.setattr(backend, "lower_node", record)
+    backend.build(program)
+    assert calls == 1

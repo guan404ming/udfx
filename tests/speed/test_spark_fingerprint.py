@@ -1,0 +1,38 @@
+import pytest
+
+from bench.speed.fingerprint import fingerprint, normalize_lambdas
+from udfx.backends.spark import SparkBackend
+from udfx.frontend import trace
+from udfx.types import STR
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("transform(c0, x_17 -> x_17)", "transform(c0, element0 -> element0)"),
+        (
+            "aggregate(c0, 0, (x_4, y_5) -> x_4 + y_5)",
+            "aggregate(c0, 0, (element0, element1) -> element0 + element1)",
+        ),
+        (
+            "transform(c0, x_1 -> transform(c1, x_2 -> x_1 + x_2))",
+            "transform(c0, element0 -> transform(c1, element1 -> element0 + element1))",
+        ),
+        (
+            "transform(c0, x_1 -> concat(x_1, 'x_1 -> x_1', `x_1`))",
+            "transform(c0, element0 -> concat(element0, 'x_1 -> x_1', `x_1`))",
+        ),
+        ("concat(x_1, 'x_1 -> x_1')", "concat(x_1, 'x_1 -> x_1')"),
+        (r"concat('a\'x_1 -> x_1', x_1)", r"concat('a\'x_1 -> x_1', x_1)"),
+        ("concat('a''x_1 -> x_1', x_1)", "concat('a''x_1 -> x_1', x_1)"),
+    ],
+)
+def test_spark_fingerprint_keeps_literals(text: str, expected: str) -> None:
+    assert normalize_lambdas(text) == expected
+
+
+def test_spark_casefold_fingerprint_is_stable() -> None:
+    backend = SparkBackend()
+    first = trace(lambda value: value.casefold(), {"value": STR})
+    second = trace(lambda text: text.casefold(), {"text": STR})
+    assert fingerprint(backend, first) == fingerprint(backend, second)

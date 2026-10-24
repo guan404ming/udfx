@@ -9,10 +9,15 @@ from pyspark.sql import Column, SparkSession, functions
 from pyspark.sql.types import StructField, StructType
 
 from udfx.backends import arrow
-from udfx.backends.base import RESERVED, Backend, Row, output_names
+from udfx.backends.arithmetic import lower_integer_region
+from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.faults import NativeFaults, faults_for
+from udfx.backends.indexing import literal_range
+from udfx.backends.lowering import lower_program
+from udfx.backends.lowering_context import lowering_context
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.spark.dtypes import dtype
+from udfx.backends.spark.numbers import WIDE_INTEGERS
 from udfx.backends.spark.rules import RULES
 from udfx.errors import Unsupported
 from udfx.ir import Col, Comprehension, Lit, Node
@@ -38,10 +43,16 @@ class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
     indexes: ClassVar[bool] = True
-    rewrites_words: ClassVar[bool] = False
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
+
+    def lower_program(self, program: Program) -> Lowered[Column]:
+        with lowering_context(binds=True) as context:
+            lowered = lower_program(self, program)
+        if lowered.exact is not None and context.has_bindings:
+            return lower_program(self, program)
+        return lowered
 
     def lower(self, node: Node, elements: Mapping[Node, Column] | None = None) -> Lowered[Column]:
         lowered = super().lower(node, elements)
@@ -56,6 +67,18 @@ class SparkBackend(Backend[Column]):
             return SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
         except Exception as error:
             raise RuntimeError("udfx needs a SparkSession to build Spark columns") from error
+
+    def lower_node(self, node: Node, elements: Mapping[Node, Column]) -> Lowered[Column]:
+        if isinstance(node, Comprehension) and (
+            isinstance(node.source, Lit) or literal_range(node) is not None
+        ):
+            with lowering_context(binds=False):
+                return super().lower_node(node, elements)
+        if not elements or node not in elements:
+            widened = lower_integer_region(self, node, elements, WIDE_INTEGERS)
+            if widened is not None:
+                return widened
+        return super().lower_node(node, elements)
 
     def fold_name(self, name: str) -> str:
         if self.session().conf.get("spark.sql.caseSensitive") == "true":
@@ -87,12 +110,22 @@ class SparkBackend(Backend[Column]):
     def list_filter(self, source: Column, predicate: Callable[[Column], Column]) -> Column:
         return functions.filter(source, predicate)
 
+    def bind(self, value: Column, body: Callable[[Column], Column]) -> Column:
+        expr = functions.transform(functions.array(value), body)[0]
+        with lowering_context() as context:
+            context.has_bindings = True
+        return expr
+
     def list_indexed(
         self,
         source: Column,
         value: Callable[[Column, Column], Column],
         condition: Callable[[Column, Column], Column] | None,
     ) -> Column:
+        if condition is None:
+            return functions.transform(
+                source, lambda element, index: value(element, index.cast("long"))
+            )
         pairs = functions.transform(
             source,
             lambda element, index: functions.struct(
@@ -128,7 +161,7 @@ class SparkBackend(Backend[Column]):
         flag = functions.coalesce(exact, functions.lit(False))
         packed = functions.struct(
             flag.alias(EXACT),
-            native.cast(result).alias(NATIVE),
+            functions.when(flag, native.cast(result)).alias(NATIVE),
             *(
                 functions.when(~flag, self.column(Col(name, type))).alias(name)
                 for name, type in program.schema.items()
@@ -141,7 +174,18 @@ class SparkBackend(Backend[Column]):
     ) -> list[list[object]]:
         self.check_names(schema)
         struct = StructType([StructField(name, dtype(type)) for name, type in schema.items()])
-        frame = self.session().createDataFrame(list(rows), struct)
+        columns = transpose_rows(rows, len(schema))
+        table = pa.table(
+            {
+                name: pa.array(values, type=arrow.dtype(type))
+                for (name, type), values in zip(schema.items(), columns, strict=True)
+            }
+        )
+        frame = (
+            self.session().createDataFrame(table, struct)
+            if schema
+            else self.session().range(len(rows)).drop("id")
+        )
         names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         collected = self.execute(lambda: frame.select(*aliased).collect())

@@ -24,6 +24,8 @@ from udfx.backends.registration import (
     register_string_predicates,
     register_translation,
 )
+from udfx.frontend.core.sequences import join_words, word_item
+from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import text
 from udfx.semantics.facts import pattern_is_empty
 from udfx.semantics.sequences import SearchPrimitives, count_occurrences, reverse_find
@@ -167,9 +169,7 @@ def str_add(left: Expr, right: Expr) -> Expr:
     return functions.concat(left, right)
 
 
-@RULES("__eq__", Kind.STR, Kind.STR)
-def str_eq(left: Expr, right: Expr) -> Expr:
-    return null_safe_equal(left, right)
+RULES("__eq__", Kind.STR, Kind.STR)(null_safe_equal)
 
 
 @RULES("__ne__", Kind.STR, Kind.STR)
@@ -196,9 +196,7 @@ def list_contains(container: Expr, item: Expr) -> Expr:
 RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
 
 
-@RULES("len", Kind.STR)
-def str_len(text: Expr) -> Expr:
-    return length(text)
+RULES("len", Kind.STR)(length)
 
 
 def list_len(container: Expr) -> Expr:
@@ -225,6 +223,9 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
 
 
 register_string_predicates(RULES, lambda value, pattern: functions.regexp_like(value, lit(pattern)))
+RULES.rewrite(".join", Kind.STR, Kind.LIST)(join_words)
+RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(word_item)
+RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 
 
 for method in CASE_METHODS:

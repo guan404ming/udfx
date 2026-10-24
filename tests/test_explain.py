@@ -37,6 +37,7 @@ def test_unsupported_report() -> None:
 
     assert "Function: loop" in report
     assert "Schema: {value: int}" in report
+    assert "Status: unsupported" in report
     assert "Unsupported: loops and comprehensions at loop+" in report
     assert "JUMP_BACKWARD" not in report
 
@@ -63,12 +64,13 @@ def test_render() -> None:
 def test_report_escapes_control_characters() -> None:
     report = explain(lambda: "line\n\v", {})
     assert "Value: 'line\\n\\x0b'" in report
-    assert len(report.splitlines()) == 5
+    assert "Status: native" in report
+    assert "Python fallback: no" in report
     assert "\\n" in report.splitlines()[-1]
     assert "\\x0b" in report.splitlines()[-1]
     unsupported = explain(lambda column: column, {"column\n\v": STR})
     assert "Schema: {'column\\n\\x0b': str}" in unsupported
-    assert len(unsupported.splitlines()) == 3
+    assert len(unsupported.splitlines()) == 6
 
 
 @pytest.mark.parametrize("name", ["first name", "line\n\v", "a'b", 'a"b', "a\\b"])
@@ -76,4 +78,4 @@ def test_column_names_are_escaped(name: str) -> None:
     assert render(Col(name, STR)) == f"col {name!r}"
     report = explain(lambda column: column, {name: STR})
     assert f"Schema: {{{name!r}: str}}" in report
-    assert len(report.splitlines()) == 3
+    assert len(report.splitlines()) == 6

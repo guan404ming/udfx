@@ -21,16 +21,23 @@ ASCII_PREDICATES = {
 class AsciiPrimitives:
     is_ascii: Callable[[Any], Any]
     when: Callable[[Any, Any, Any], Any]
+    literal: Callable[[object], Any]
 
 
 def ascii_predicate(
-    primitives: AsciiPrimitives, matches: Callable[[Any, str], Any], value: Any, method: str
+    primitives: AsciiPrimitives,
+    matches: Callable[[Any, str], Any],
+    value: Any,
+    method: str,
+    known: bool | None = None,
 ) -> Any:
     ascii = primitives.is_ascii(value)
     if method == "isascii":
         return ascii
     fast = (
-        matches(value, "[A-Z]") & ~matches(value, r"(?:\A|[^A-Za-z])[a-z]|[A-Za-z][A-Z]")
+        primitives.literal(known)
+        if known is not None
+        else matches(value, "[A-Z]") & ~matches(value, r"(?:\A|[^A-Za-z])[a-z]|[A-Za-z][A-Z]")
         if method == "istitle"
         else matches(value, rf"\A{ASCII_PREDICATES[method]}\z")
     )

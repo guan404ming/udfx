@@ -208,6 +208,12 @@ def register_lists[E](rules: RuleSet[E], primitives: ListPrimitives, sets: SetPr
                 sets, left, right, operation
             )
         )
+    for operation in SET_OPERATIONS:
+        rules(f"set_{operation}_size", Kind.LIST, Kind.LIST)(
+            lambda left, right, operation=operation: native_set_operation(
+                sets, left, right, operation, size=True
+            )
+        )
     rules("__mul__", Kind.LIST, Kind.INT)(
         lambda value, count: Lowered(*repeat_list(primitives, value, count))
     )

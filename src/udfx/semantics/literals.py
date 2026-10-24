@@ -8,6 +8,7 @@ from functools import cache
 from typing import Any
 
 from udfx.semantics.text import char_class, code_points, whitespace
+from udfx.types import INT64_MAX, INT64_MIN
 
 ASCII_SPACE = "\t\n\x0b\x0c\r "
 DIGITS = "[0-9]([0-9_]*[0-9])?"
@@ -66,7 +67,8 @@ def integer_pattern() -> str:
     )
     padding = char_class(spaces)
     middle = digits[:-1] + "_]"
-    return rf"\A{padding}*[+-]?{digits}({middle}*{digits})?{padding}*\z"
+    unicode = rf"\A{padding}*[+-]?{digits}({middle}*{digits})?{padding}*\z"
+    return f"(?:{INT_LITERAL}|{unicode})"
 
 
 def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
@@ -111,6 +113,19 @@ def parse_int(
     if maximum_length is not None and maximum_length <= 18:
         return value, None
     return value, primitives.not_null(value) | ~integer_matches(primitives, text)
+
+
+def saturated_integer(text: str) -> int:
+    return max(INT64_MIN, min(INT64_MAX, int(text)))
+
+
+def parse_saturated_int(primitives: TextPrimitives, text: Any) -> Any:
+    value, _ = parse_int(primitives, text)
+    negative = primitives.matches(primitives.strip(text, whitespace()), "^-")
+    boundary = primitives.when(
+        negative, primitives.literal(INT64_MIN), primitives.literal(INT64_MAX)
+    )
+    return primitives.coalesce(value, boundary)
 
 
 def parse_float(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:

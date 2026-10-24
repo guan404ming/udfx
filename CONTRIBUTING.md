@@ -25,6 +25,11 @@ The default run is the fast tier: Spark runs with ANSI on only, and frontend and
 use Polars only. Set `UDFX_TESTS=full` to run every engine configuration, as CI does; run the full
 tier before you open a pull request.
 
+CI also builds the sdist and then the wheel. It installs the wheel with one extra per clean
+environment and checks native, fallback, and error paths. It uses the lowest declared direct
+dependencies on Python 3.12 and the highest on Python 3.14. The release workflow publishes the
+same artifacts only after these checks pass.
+
 `uv run pytest` runs the tests in parallel with `-n auto` and prints the five slowest with
 `--durations=5`. Pass `-n 0` to run in one process.
 

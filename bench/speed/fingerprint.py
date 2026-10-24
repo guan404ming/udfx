@@ -14,6 +14,30 @@ class FingerprintFaults(NativeFaults):
         return "udfx fault fingerprint:"
 
 
+def normalize_lambdas(text: str) -> str:
+    parts = re.split(r"('(?:\\.|''|[^'\\])*'|`(?:``|[^`])*`)", text)
+    variable = r"\b[xyz]_\d+\b"
+    parameters = rf"(?:{variable}|\({variable}(?:,\s*{variable}){{1,2}}\))\s*->"
+    names = {
+        name
+        for part in parts[::2]
+        for match in re.finditer(parameters, part)
+        for name in re.findall(variable, match[0])
+    }
+    renamed: dict[str, str] = {}
+    for index in range(0, len(parts), 2):
+        parts[index] = re.sub(
+            variable,
+            lambda match: (
+                renamed.setdefault(match[0], f"element{len(renamed)}")
+                if match[0] in names
+                else match[0]
+            ),
+            parts[index],
+        )
+    return "".join(parts)
+
+
 def expression_text(expr: Any, engine: str) -> str:
     if engine == "polars":
         return expr.meta.serialize(format="json")
@@ -29,7 +53,7 @@ def expression_text(expr: Any, engine: str) -> str:
     if engine == "datafusion":
         return text.removeprefix("Expr(").removesuffix(")")
     if engine == "spark":
-        return text.removeprefix("Column<'").removesuffix("'>")
+        return normalize_lambdas(text.removeprefix("Column<'").removesuffix("'>"))
     return text
 
 

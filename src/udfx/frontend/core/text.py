@@ -1,18 +1,49 @@
 from udfx.frontend.core.sequences import unit_stride
-from udfx.ir import Call, Guarded, Lit, Node
+from udfx.ir import Call, Guarded, Lit, Node, lit
 from udfx.ops.registry import apply
+from udfx.semantics.casing import folded_case
 from udfx.semantics.text import CASE_METHODS
 
 
+def case_chain(node: Call) -> tuple[Node, list[str]]:
+    source = node.arguments[0]
+    methods = [node.op.name.removeprefix(".")]
+    while isinstance(source, Call) and source.op.name in {f".{method}" for method in CASE_METHODS}:
+        methods.append(source.op.name.removeprefix("."))
+        source = source.arguments[0]
+    return source, methods
+
+
+def guarded_case_chain(node: Call) -> Node:
+    source, methods = case_chain(node)
+    if source == node.arguments[0] or isinstance(source, Lit):
+        return node
+    if folded_case(methods) == ():
+        return apply(".casefold", source)
+    return Guarded(apply(".lower", source), apply(".isascii", source))
+
+
+def folded_case_chain(node: Call) -> Node:
+    source, methods = case_chain(node)
+    if source == node.arguments[0] or isinstance(source, Lit):
+        return node
+    replacements = folded_case(methods)
+    if replacements is None:
+        return guarded_case_chain(node)
+    for original, replacement in replacements:
+        source = apply(".replace", source, lit(original), lit(replacement))
+    return apply(".casefold", source)
+
+
 def simplify_text(node: Call) -> Node:
-    if node.op.name in {".lower", ".casefold"}:
-        source = node.arguments[0]
-        while isinstance(source, Call) and source.op.name in {
-            f".{method}" for method in CASE_METHODS
-        }:
-            source = source.arguments[0]
-        if source != node.arguments[0] and not isinstance(source, Lit):
-            return Guarded(apply(".lower", source), apply(".isascii", source))
+    if node.op.name == ".casefold":
+        source, methods = case_chain(node)
+        if source != node.arguments[0] and folded_case(methods) == ():
+            return apply(".casefold", source)
+    if node.op.name == ".lower":
+        guarded = guarded_case_chain(node)
+        if guarded != node:
+            return guarded
     if node.op.name in {".lower", ".upper"}:
         argument = node.arguments[0]
         if (

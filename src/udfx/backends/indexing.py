@@ -9,6 +9,7 @@ from udfx.backends.registration import Lowered
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Lit, Node, children
 from udfx.ops import OpKey, apply
+from udfx.semantics.assumptions import assuming
 from udfx.types import INT, Kind
 
 if TYPE_CHECKING:
@@ -120,7 +121,7 @@ def lower_indexed[E](
         for offset in offsets:
             lowered = backend.lower(offset, scope)
             if lowered.exact is None:
-                scope[offset] = lowered.expr
+                scope = {**scope, offset: lowered.expr}
         found = comprehension_parts(backend, node, scope)
         guarded = guarded or found[2] is not None
         return found
@@ -149,7 +150,8 @@ def comprehension_parts[E](
     backend: Backend[E], node: Comprehension, scope: Mapping[Node, E]
 ) -> Parts[E]:
     condition = backend.lower(node.condition, scope)
-    value = backend.lower(node.value, scope)
+    with assuming(node.condition, True):
+        value = backend.lower(node.value, scope)
     fault = backend.lower(node.fault, scope)
     value_exact = backend.exact(value)
     if node.condition != TRUE and value_exact is not None:

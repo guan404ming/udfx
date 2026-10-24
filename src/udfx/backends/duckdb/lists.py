@@ -21,9 +21,11 @@ def copy(value: Expression) -> Expression:
     return value
 
 
-@RULES("__add__", Kind.LIST, Kind.LIST)
 def concatenate(left: Expression, right: Expression) -> Expression:
     return function("list_concat", left, right)
+
+
+RULES("__add__", Kind.LIST, Kind.LIST)(concatenate)
 
 
 @RULES("any", Kind.LIST)
@@ -118,12 +120,13 @@ register_lists(
         contains=list_contains,
         intersection=lambda left, right: function("list_intersect", left, right),
         union=union,
+        concatenate=concatenate,
         difference=lambda left, right: bind_sets(left, right, difference),
         size=lambda value: function("list_unique", value).cast("BIGINT"),
         symmetric_difference=lambda left, right: bind_sets(
             left,
             right,
-            lambda first, second: union(difference(first, second), difference(second, first)),
+            lambda first, second: concatenate(difference(first, second), difference(second, first)),
         ),
     ),
 )

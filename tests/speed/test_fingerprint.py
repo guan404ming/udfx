@@ -68,9 +68,9 @@ def test_fingerprint_normalizes_quoted_columns(backend: Backend[Any]) -> None:
 @pytest.mark.parametrize("backend", backend_params())
 def test_fingerprint_exposes_fallback_native(backend: Backend[Any]) -> None:
     programs = [
-        trace(lambda value: value.lower(), {"value": STR}),
-        trace(lambda text: text.lower(), {"text": STR}),
-        trace(lambda value: value.upper(), {"value": STR}),
+        trace(lambda value: value.title(), {"value": STR}),
+        trace(lambda text: text.title(), {"text": STR}),
+        trace(lambda value: value.capitalize(), {"value": STR}),
     ]
     original = expression_text(backend.column(Col("value", STR)), backend.name)
     fingerprints = [fingerprint(backend, program) for program in programs]

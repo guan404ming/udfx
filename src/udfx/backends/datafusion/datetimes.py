@@ -5,7 +5,11 @@ from datafusion import Expr, functions, lit
 
 from udfx.backends.datafusion.rules import RULES, null_safe_equal, when
 from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
-from udfx.semantics.datetimes import DatetimeArithmeticPrimitives, DatetimePrimitives
+from udfx.semantics.datetimes import (
+    TIMESTAMP_LITERAL,
+    DatetimeArithmeticPrimitives,
+    DatetimePrimitives,
+)
 
 
 def part(value: Expr, name: str) -> Expr:
@@ -29,7 +33,11 @@ register_datetimes(
         extract=lambda text, pattern, group: functions.array_element(
             functions.regexp_match(text, lit(pattern)), group
         ),
-        parse=lambda text: text.try_cast(pa.timestamp("us")),
+        parse=lambda text: when(
+            functions.regexp_like(text, lit(TIMESTAMP_LITERAL)),
+            text.try_cast(pa.timestamp("us")),
+            lit(None),
+        ),
         to_integer=lambda value: value.try_cast(pa.int64()),
         select=when,
         is_null=Expr.is_null,
@@ -42,6 +50,7 @@ register_datetime_arithmetic(
     RULES,
     DatetimeArithmeticPrimitives(
         literal=lit,
+        difference=lambda left, right: left.cast(pa.int64()) - right.cast(pa.int64()),
         to_microseconds=lambda value: value.cast(pa.int64()),
         from_microseconds=lambda value: value.cast(pa.timestamp("us")),
         select=when,

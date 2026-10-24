@@ -4,7 +4,8 @@ from collections.abc import Mapping
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
-from udfx.backends.hoisting import invariant
+from udfx.backends.diagnostics import record_lowering
+from udfx.backends.hoisting import exact_free, hoist, invariant, size
 from udfx.backends.indexing import (
     Parts,
     comprehension_parts,
@@ -13,43 +14,69 @@ from udfx.backends.indexing import (
     literal_range,
     lower_indexed,
 )
+from udfx.backends.lowering_context import bindings_enabled
+from udfx.backends.reductions import lower_reduction
 from udfx.backends.registration import Lowered, RuleResult
 from udfx.backends.rules import fold_predicate
 from udfx.errors import Unsupported
-from udfx.frontend.core.sequences import rewrite_words
 from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
 from udfx.ops import OpKey
 from udfx.program import Program
+from udfx.semantics.assumptions import assuming
 from udfx.types import Kind
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
 
 
+EXPANDED_LIMIT = 10_000
+
+
 def lower_program[E](backend: Backend[E], program: Program) -> Lowered[E]:
-    value = backend.lower(program.value)
+    expanded = size(program.value) + size(program.fault)
+    if expanded > EXPANDED_LIMIT:
+        raise Unsupported(
+            f"the expression has {expanded} nodes once shared values are expanded; "
+            f"the limit is {EXPANDED_LIMIT}"
+        )
+    predicate = fold_predicate(program.fault, backend.rules.rewrite_call)
+    with assuming(predicate, False):
+        value = backend.lower(program.value)
     expr, exact, failure = value.expr, value.exact, value.overflow
-    predicate = fold_predicate(program.fault)
+    fault_guard = False
+    native_errors = False
     if predicate != FALSE:
         fault = backend.lower(predicate)
+        fault_guard = fault.exact is not None or fault.overflow is not None
         exact = backend.conjunction(exact, backend.exact(fault))
         failure = backend.disjunction(failure, fault.expr)
     if failure is not None:
         raised = backend.native_raise(program)
+        native_errors = raised is not None
         if raised is None:
             exact = backend.conjunction(exact, backend.negate(failure))
         else:
             condition = failure if exact is None else backend.both(failure, exact)
             expr = backend.select(condition, raised, expr)
+    record_lowering(
+        exact,
+        value_guard=value.exact is not None,
+        fault_guard=fault_guard,
+        failure=failure is not None,
+        native_errors=native_errors,
+    )
     return Lowered(expr, exact)
 
 
 def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Node, E]) -> Lowered[E]:
-    predicate = fold_predicate(node.condition)
+    predicate = fold_predicate(node.condition, backend.rules.rewrite_call)
     if predicate in (TRUE, FALSE):
         return backend.lower(node.then if predicate == TRUE else node.orelse, elements)
     condition = backend.lower(predicate, elements)
-    then, orelse = backend.lower(node.then, elements), backend.lower(node.orelse, elements)
+    with assuming(predicate, True):
+        then = backend.lower(node.then, elements)
+    with assuming(predicate, False):
+        orelse = backend.lower(node.orelse, elements)
     expr = backend.select(condition.expr, then.expr, orelse.expr)
     exact = backend.exact(condition)
     if then.exact is not None or orelse.exact is not None:
@@ -70,12 +97,16 @@ def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Node, E]) -> Lo
 
 
 def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Node, E]) -> Lowered[E]:
-    if backend.rewrites_words and (words := rewrite_words(node)) is not None:
-        return backend.lower(words, elements)
+    reduced = lower_reduction(backend, node, elements)
+    if reduced is not None:
+        return reduced
     if node.type.kind is Kind.BOOL:
-        folded = fold_predicate(node)
+        folded = fold_predicate(node, backend.rules.rewrite_call)
         if folded != node:
             return backend.lower(folded, elements)
+    rewritten = backend.rules.rewrite_call(node)
+    if rewritten is not None and rewritten != node:
+        return backend.lower(rewritten, elements)
     rule = backend.rules.get(node.op.key)
     if rule is None:
         raise Unsupported(f"{backend.name} has no rule for {node.op.key}")
@@ -108,9 +139,10 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Node, E]) -
 def lower_comprehension[E](
     backend: Backend[E], node: Comprehension, elements: Mapping[Node, E]
 ) -> Lowered[E]:
-    hoisted = invariant(node, elements) if backend.binds else None
+    hoisted = invariant(node, elements) if bindings_enabled(backend.binds) else None
     if hoisted is not None and exact_free(backend, hoisted, elements):
-        return hoist(backend, node, elements, hoisted)
+        with suppress(Unsupported):
+            return hoist(backend, node, elements, hoisted)
     if backend.indexes and (rewritten := rewrite_range(backend, node, elements)) is not None:
         return rewritten
     source = backend.lower(node.source, elements)
@@ -187,27 +219,3 @@ def rewrite_range[E](
         if indexed is not None:
             return lower_indexed(backend, node, elements, *indexed)
     return None
-
-
-def exact_free[E](backend: Backend[E], node: Node, elements: Mapping[Node, E]) -> bool:
-    try:
-        lowered = backend.lower(node, elements)
-    except Unsupported:
-        return False
-    return lowered.exact is None and lowered.overflow is None
-
-
-def hoist[E](
-    backend: Backend[E], node: Comprehension, elements: Mapping[Node, E], hoisted: Node
-) -> Lowered[E]:
-    definition = backend.lower(hoisted, elements).expr
-    found: list[Lowered[E]] = []
-
-    def inner(reference: E, pick: bool) -> E:
-        found.append(lower_comprehension(backend, node, {**elements, hoisted: reference}))
-        return cast("E", backend.exact(found[-1]) if pick else found[-1].expr)
-
-    expr = backend.bind(definition, lambda reference: inner(reference, False))
-    if backend.exact(found[0]) is None:
-        return Lowered(expr)
-    return Lowered(expr, backend.bind(definition, lambda reference: inner(reference, True)))

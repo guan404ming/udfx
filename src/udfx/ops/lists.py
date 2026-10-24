@@ -56,6 +56,16 @@ for operation in (*SET_OPERATIONS, *SET_PREDICATES):
         )
     )
 
+for operation in SET_OPERATIONS:
+    register(
+        Op(
+            f"set_{operation}_size",
+            (list_of(STR), list_of(STR)),
+            INT,
+            partial(set_operation, operation=operation, size=True),
+        )
+    )
+
 
 def range_faults(start: Node, stop: Node, step: Node) -> tuple[Fault, ...]:
     return (Fault(ValueError, apply("__eq__", step, lit(0))),)

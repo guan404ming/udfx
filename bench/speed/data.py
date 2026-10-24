@@ -2,6 +2,8 @@ import inspect
 import random
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from functools import lru_cache
+from math import prod
 from types import CodeType
 
 import pyarrow
@@ -143,21 +145,44 @@ def sampled(
     function = caller(program)
     rows: list[tuple[object, ...]] = []
     expected: list[object] = []
+    space = finite_space(program, words)
+    cached = (
+        lru_cache(maxsize=8192)(lambda row: run(function, row, program.result))
+        if 0 < space <= 8192
+        else None
+    )
     for _ in range(row_count * 20):
         if len(rows) == row_count:
             break
         row = tuple(generate(name, type, seed, words) for name, type in program.schema.items())
-        outcome = run(function, row, program.result)
+        outcome = run(function, row, program.result) if cached is None else cached(row)
         if isinstance(outcome, Returned):
             rows.append(row)
             expected.append(outcome.value)
+        if cached is not None and not rows and cached.cache_info().currsize == space:
+            break
     return rows, expected
 
 
+def finite_space(program: Program, words: list[str]) -> int:
+    sizes = []
+    for name, type in program.schema.items():
+        if type.kind is Kind.STR:
+            size = len(set(SAMPLE_DATES if "date" in name else words))
+        elif type.kind is Kind.BOOL:
+            size = 2
+        else:
+            return 0
+        sizes.append(size + type.nullable)
+    return prod(sizes)
+
+
 def dataset(case: Case, program: Program, row_count: int) -> tuple[pyarrow.Table, list[object]]:
-    rows, expected = sampled(program, row_count, SAMPLE_WORDS)
-    if len(rows) < row_count or case.name in MIXED_CASES:
-        rows, expected = sampled(program, row_count, SAMPLE_WORDS + EXTRA_WORDS)
+    extended = SAMPLE_WORDS + EXTRA_WORDS
+    words = extended if case.name in MIXED_CASES else SAMPLE_WORDS
+    rows, expected = sampled(program, row_count, words)
+    if len(rows) < row_count and case.name not in MIXED_CASES:
+        rows, expected = sampled(program, row_count, extended)
     if len(rows) < row_count:
         raise ValueError(f"only {len(rows)} generated rows run without an exception")
     columns = {

@@ -106,6 +106,7 @@ register_lists(
         ),
         intersection=functions.array_intersect,
         union=functions.array_union,
+        concatenate=concatenate,
         difference=functions.array_except,
     ),
 )

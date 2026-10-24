@@ -78,6 +78,7 @@ register_lists(
         contains=lambda value, item: value.list.contains(item),
         intersection=lambda left, right: left.list.set_intersection(right),
         union=lambda left, right: left.list.set_union(right),
+        concatenate=concatenate,
         difference=lambda left, right: left.list.set_difference(right),
     ),
 )

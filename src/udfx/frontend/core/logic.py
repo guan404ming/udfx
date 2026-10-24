@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
+from udfx.frontend.core.lists import simplify_list
+from udfx.frontend.core.numbers import simplify_number
 from udfx.frontend.core.sequences import simplify_sequence
+from udfx.frontend.core.sets import simplify_set
 from udfx.frontend.core.text import simplify_text
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, ListValue, Lit, Node
 from udfx.ops import apply
@@ -13,16 +16,39 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 
 
 def fold(node: Node) -> Node:
+    return fold_shared(node, {})
+
+
+def fold_shared(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
+    found = seen.get(id(node))
+    if found is None:
+        found = node, fold_node(node, seen)
+        seen[id(node)] = found
+    return found[1]
+
+
+def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
     if isinstance(node, If):
-        condition = fold(node.condition)
+        condition = fold_shared(node.condition, seen)
         if isinstance(condition, Lit):
-            return retype(fold(node.then if condition.value else node.orelse), node.type)
-        return If(condition, fold(node.then), fold(node.orelse), node.type)
+            return retype(
+                fold_shared(node.then if condition.value else node.orelse, seen), node.type
+            )
+        return If(
+            condition, fold_shared(node.then, seen), fold_shared(node.orelse, seen), node.type
+        )
     if not isinstance(node, Call):
         return node
-    folded = simplify_sequence(Call(node.op, tuple(fold(argument) for argument in node.arguments)))
+    arguments = tuple(fold_shared(argument, seen) for argument in node.arguments)
+    folded = simplify_sequence(Call(node.op, arguments))
+    if isinstance(folded, Call):
+        folded = simplify_list(folded)
     if isinstance(folded, Call):
         folded = simplify_text(folded)
+    if isinstance(folded, Call):
+        folded = simplify_set(folded)
+    if isinstance(folded, Call):
+        folded = simplify_number(folded)
     if not isinstance(folded, Call):
         return folded
     values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]

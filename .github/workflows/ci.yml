@@ -10,6 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 45

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from udfx.errors import Unsupported
+from udfx.semantics.calendar import CalendarPrimitives, parse_calendar
 
 ATTRIBUTES = ("year", "month", "day", "hour", "minute", "second", "microsecond")
 DIRECTIVES = {
@@ -20,6 +21,8 @@ DIRECTIVES = {
     "y": ("year", 2),
 }
 TIMESTAMP_LITERAL = r"\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}\z"
+TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
+DEFAULT_TIMESTAMP = "1900-01-01 00:00:00.000000"
 EPOCH_ORDINAL = datetime(1970, 1, 1).toordinal()
 
 
@@ -77,6 +80,7 @@ class DatetimePrimitives:
     to_integer: Callable[[Any], Any]
     select: Callable[[Any, Any, Any], Any]
     is_null: Callable[[Any], Any]
+    calendar: CalendarPrimitives | None = None
 
 
 def datetime_field(primitives: DatetimePrimitives, value: Any, name: str) -> Any:
@@ -113,6 +117,10 @@ def parse_datetime(primitives: DatetimePrimitives, text: Any, format: Any) -> tu
     fallback = primitives.parse(primitives.literal("")), primitives.literal(False)
     if not isinstance(format, str):
         return fallback
+    if primitives.calendar is not None:
+        parsed = parse_calendar(primitives.calendar, text, format)
+        if parsed is not None:
+            return parsed, None
     try:
         parts = parse_parts(format)
     except Unsupported:
@@ -161,6 +169,12 @@ def parse_datetime(primitives: DatetimePrimitives, text: Any, format: Any) -> tu
             fields.get("f", primitives.literal("000000")),
         ]
     )
+    if TIMESTAMP_FORMAT.startswith(format):
+        width = sum(
+            (4 if part == "Y" else DIRECTIVES[part][1]) if directive else len(part)
+            for part, directive in parts
+        )
+        source = primitives.concatenate([text, primitives.literal(DEFAULT_TIMESTAMP[width:])])
     parsed = primitives.parse(source)
     year = primitives.part(parsed, "year")
     valid = (year >= primitives.literal(1)) & (year <= primitives.literal(9999))
@@ -205,6 +219,7 @@ def datetime_shift_overflows(value: datetime, microseconds: int) -> bool:
 @dataclass(frozen=True)
 class DatetimeArithmeticPrimitives:
     literal: Callable[[Any], Any]
+    difference: Callable[[Any, Any], Any]
     to_microseconds: Callable[[Any], Any]
     from_microseconds: Callable[[Any], Any]
     select: Callable[[Any, Any, Any], Any]

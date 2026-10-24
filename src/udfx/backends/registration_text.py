@@ -4,8 +4,15 @@ from collections.abc import Callable
 from typing import Any
 
 from udfx.backends.rules import Lowered, Rule, RuleSet
-from udfx.semantics.facts import argument_length
-from udfx.semantics.literals import TextPrimitives, float_parses, int_parses, parse_float, parse_int
+from udfx.semantics.facts import argument_length, argument_maximum, ascii_predicate_result
+from udfx.semantics.literals import (
+    TextPrimitives,
+    float_parses,
+    int_parses,
+    parse_float,
+    parse_int,
+    parse_saturated_int,
+)
 from udfx.semantics.padding import PaddingPrimitives, pad_text
 from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.text import PADDING_METHODS, PREDICATES, string_predicate
@@ -47,11 +54,11 @@ def register_string_predicates[E](
     rules: RuleSet[E], matches: Callable[[E, str], E], ascii: AsciiPrimitives | None = None
 ) -> None:
     for method in PREDICATES:
-        rules(f".{method}", Kind.STR)(
-            lambda value, method=method: (
+        rules(f".{method}", Kind.STR, facts={"known": ascii_predicate_result} if ascii else None)(
+            lambda value, method=method, known=None: (
                 string_predicate(matches, value, method)
                 if ascii is None
-                else ascii_predicate(ascii, matches, value, method)
+                else ascii_predicate(ascii, matches, value, method, known)
             )
         )
 
@@ -66,15 +73,17 @@ def register_translation[E](rules: RuleSet[E], primitives: TextPrimitives) -> No
 
 def register_padding[E](rules: RuleSet[E], primitives: PaddingPrimitives) -> None:
     for method in PADDING_METHODS:
-        rules(f".{method}", Kind.STR, Kind.INT)(
-            lambda value, width, method=method: Lowered(
-                *pad_text(primitives, value, width, primitives.literal(" "), method)
+        rules(f".{method}", Kind.STR, Kind.INT, facts={"maximum": argument_maximum})(
+            lambda value, width, method=method, maximum=None: Lowered(
+                *pad_text(
+                    primitives, value, width, primitives.literal(" "), method, maximum=maximum
+                )
             )
         )
         if method != "zfill":
-            rules(f".{method}", Kind.STR, Kind.INT, Kind.STR)(
-                lambda value, width, fill, method=method: Lowered(
-                    *pad_text(primitives, value, width, fill, method)
+            rules(f".{method}", Kind.STR, Kind.INT, Kind.STR, facts={"maximum": argument_maximum})(
+                lambda value, width, fill, method=method, maximum=None: Lowered(
+                    *pad_text(primitives, value, width, fill, method, maximum=maximum)
                 )
             )
 
@@ -92,5 +101,6 @@ def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> Non
         return Lowered(parsed, overflow=None if exact is None else ~exact)
 
     rules("int", Kind.STR, facts={"maximum_length": argument_length})(integer)
+    rules("int_saturated", Kind.STR)(lambda value: parse_saturated_int(text, value))
     register("float_parses", float_parses)
     register("float", parse_float)

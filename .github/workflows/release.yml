@@ -5,7 +5,11 @@ on:
     tags: ["v*"]
 
 jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+
   publish:
+    needs: package
     runs-on: ubuntu-latest
     timeout-minutes: 120
     environment: pypi
@@ -35,5 +39,8 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
           UDFX_TESTS: full
-      - run: uv build --no-sources
+      - uses: actions/download-artifact@v8
+        with:
+          name: udfx-dist
+          path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1

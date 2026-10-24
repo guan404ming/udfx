@@ -86,11 +86,12 @@ def split_counts(text: str) -> list[int]:
 
 @pytest.mark.parametrize("backend", backend_params())
 def test_single_invariant_split_binds_once(backend: Backend[Any]) -> None:
-    if not backend.binds:
+    if not backend.binds and not isinstance(backend, SparkBackend):
         pytest.skip("only binding backends hoist")
-    translation = compile(split_counts, {"text": STR}, backend)
-    assert translation.expr is not None, translation.unsupported
-    assert str(translation.expr).count("string_split") == 1
+    program = trace(split_counts, {"text": STR})
+    assert isinstance(program.value, Comprehension)
+    source = backend.lower(program.value.source).expr
+    assert str(backend.build(program)).count("text") == str(source).count("text")
     assert check_function(split_counts, {"text": STR}, backend, [("a,b,c",), ("",)]) == []
 
 

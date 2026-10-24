@@ -44,9 +44,7 @@ def register_datetimes[E](rules: RuleSet[E], primitives: DatetimePrimitives, equ
 def register_datetime_arithmetic[E](
     rules: RuleSet[E], primitives: DatetimeArithmeticPrimitives
 ) -> None:
-    rules("datetime_difference", Kind.DATETIME, Kind.DATETIME)(
-        lambda left, right: primitives.to_microseconds(left) - primitives.to_microseconds(right)
-    )
+    rules("datetime_difference", Kind.DATETIME, Kind.DATETIME)(primitives.difference)
     rules("datetime_shift", Kind.DATETIME, Kind.INT)(
         lambda value, offset: shift_datetime(primitives, value, offset)
     )

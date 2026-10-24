@@ -8,6 +8,9 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Added
 
+- Report execution status, native guards, fallback reasons, fault handling, and compilation time in `udfx.explain`.
+- Verify built wheels with isolated backend extras before publication.
+
 - Compile Python UDF bytecode into Polars, DuckDB, DataFusion, and Spark expressions.
 - Keep Python semantics: truthiness, exceptions as faults, int64 overflow, Unicode case drift, literal parsing.
 - Fall back to the Python function on rows that are not provably identical.
@@ -19,6 +22,9 @@ All notable changes to this project are documented in this file. The format foll
 - Unicode case mapping differences are computed once per engine version and cached on disk.
 
 ### Fixed
+
+- Exclude versioned virtual environments from source distributions.
+- Require DuckDB 1.4.1 and DataFusion 55 for the APIs in use; declare DataFusion's Arrow dependency.
 
 - Cache DuckDB fallback registrations per connection object; use a separate connection or cursor per thread.
 - Reduce operand repetition in int64 clamps, integer division, slicing, rounding, and min/max; document the remaining nested-chain growth limits.

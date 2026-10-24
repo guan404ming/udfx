@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
-from udfx.ir import Call, Node
+from udfx.ir import FALSE, TRUE, Call, Node
 from udfx.ops.registry import OpKey
+from udfx.semantics.ranges import proven
 from udfx.types import Kind
 
 
@@ -21,6 +22,7 @@ class Lowered[E]:
 type RuleResult[E] = E | Lowered[E]
 type Rule[E] = Callable[..., RuleResult[E]]
 type BinaryRule[E] = Callable[[E, E], RuleResult[E]]
+type Rewrite = Callable[[Call], Node | None]
 
 
 BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
@@ -30,10 +32,17 @@ BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
 }
 
 
-def fold_predicate(node: Node) -> Node:
+def fold_predicate(node: Node, rewrite: Rewrite) -> Node:
+    if isinstance(node, Call):
+        rewritten = rewrite(node)
+        if rewritten is not None and rewritten != node:
+            return fold_predicate(rewritten, rewrite)
+    known = proven(node)
+    if known is not None:
+        return TRUE if known else FALSE
     if not isinstance(node, Call) or node.op.key not in BOOLEAN_RULES:
         return fold(node)
-    arguments = tuple(fold_predicate(argument) for argument in node.arguments)
+    arguments = tuple(fold_predicate(argument, rewrite) for argument in node.arguments)
     builders = {"not": negate, "and": conjunction, "or": disjunction}
     return builders[node.op.name](*arguments)
 
@@ -49,6 +58,22 @@ class RuleSet[E]:
     def __init__(self) -> None:
         self._rules: dict[OpKey, Rule[E]] = dict(BOOLEAN_RULES)
         self._options: dict[OpKey, RuleOptions] = {}
+        self._rewrites: dict[OpKey, Rewrite] = {}
+
+    def rewrite(self, name: str, *kinds: Kind) -> Callable[[Rewrite], Rewrite]:
+        key = OpKey(name, kinds)
+
+        def decorate(rewrite: Rewrite) -> Rewrite:
+            if key in self._rewrites:
+                raise ValueError(f"duplicate rewrite {key}")
+            self._rewrites[key] = rewrite
+            return rewrite
+
+        return decorate
+
+    def rewrite_call(self, node: Call) -> Node | None:
+        rewrite = self._rewrites.get(node.op.key)
+        return None if rewrite is None else rewrite(node)
 
     def __call__[**P](
         self,

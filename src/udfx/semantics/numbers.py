@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import operator
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -29,6 +30,13 @@ COMPARISONS: dict[str, Binary] = {
     "__gt__": operator.gt,
     "__ge__": operator.ge,
 }
+
+
+def integer_comparison(operation: str, value: float) -> tuple[str, int] | bool:
+    if not math.isfinite(value) or (operation in {"__eq__", "__ne__"} and not value.is_integer()):
+        return getattr(operator, operation)(0, value)
+    round = math.ceil if operation in {"__lt__", "__ge__"} else math.floor
+    return operation, round(value)
 
 
 @dataclass(frozen=True)

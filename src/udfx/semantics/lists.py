@@ -29,9 +29,11 @@ def sorted_set(values: list[Any]) -> list[Any]:
     return sorted(set(values))
 
 
-def set_operation(left: list[str], right: list[str], operation: str) -> list[str] | bool:
+def set_operation(
+    left: list[str], right: list[str], operation: str, *, size: bool = False
+) -> list[str] | bool | int:
     result = getattr(set(left), operation)(set(right))
-    return sorted(result) if isinstance(result, set) else result
+    return (len(result) if size else sorted(result)) if isinstance(result, set) else result
 
 
 def range_list(*arguments: int) -> list[int]:
@@ -106,12 +108,15 @@ class SetPrimitives:
     contains: Callable[[Any, Any], Any]
     intersection: Callable[[Any, Any], Any]
     union: Callable[[Any, Any], Any]
+    concatenate: Callable[[Any, Any], Any]
     difference: Callable[[Any, Any], Any]
     size: Callable[[Any], Any] | None = None
     symmetric_difference: Callable[[Any, Any], Any] | None = None
 
 
-def native_set_operation(primitives: SetPrimitives, left: Any, right: Any, operation: str) -> Any:
+def native_set_operation(
+    primitives: SetPrimitives, left: Any, right: Any, operation: str, *, size: bool = False
+) -> Any:
     match operation:
         case "intersection" | "isdisjoint":
             result = primitives.intersection(left, right)
@@ -124,12 +129,12 @@ def native_set_operation(primitives: SetPrimitives, left: Any, right: Any, opera
         case "symmetric_difference" if primitives.symmetric_difference is not None:
             result = primitives.symmetric_difference(left, right)
         case _:
-            result = primitives.union(
+            result = primitives.concatenate(
                 primitives.difference(left, right), primitives.difference(right, left)
             )
     if operation in SET_PREDICATES:
         return primitives.length(result) == primitives.literal(0)
-    return primitives.sort(result)
+    return primitives.length(result) if size else primitives.sort(result)
 
 
 def native_set(

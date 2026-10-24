@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from contextlib import redirect_stdout
+from io import StringIO
 from typing import Any
 
 import pytest
@@ -8,6 +10,7 @@ from udfx.backends.base import Backend
 from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.polars import PolarsBackend
+from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops import apply
@@ -45,7 +48,14 @@ def test_literal_text_branches_disappear(
     backend: Backend[Any], function: Callable[[str], object]
 ) -> None:
     schema = {"text": STR}
-    expression = str(backend.lower(trace(function, schema).value).expr).lower()
+    lowered = backend.lower(trace(function, schema).value)
+    expression = str(lowered.expr).lower()
+    if isinstance(backend, SparkBackend):
+        frame = backend.session().createDataFrame([("one_two",)], ["text"])
+        output = StringIO()
+        with redirect_stdout(output):
+            frame.select(lowered.expr.alias("result")).explain()
+        expression = output.getvalue().lower()
     assert "regexp_extract_all" not in expression
     assert "str.extract_all" not in expression
     assert "is_null" not in expression

@@ -29,7 +29,7 @@ def test_set_algebra_traces(function: Callable[..., object], operation: str) -> 
     schema = {"left": list_of(STR), "right": list_of(STR)}
     program = trace(function, schema)
     operands = [apply("list", Col(name, type)) for name, type in schema.items()]
-    assert program.value == apply("set_size", apply(f"set_{operation}", *operands))
+    assert program.value == apply(f"set_{operation}_size", *operands)
     assert program.fault == FALSE
 
 
@@ -72,3 +72,13 @@ def test_set_mutation_stays_unsupported() -> None:
 
     with pytest.raises(Unsupported, match="in-place set mutation"):
         trace(mutate, {"text": STR})
+
+
+def test_sorted_set_difference_combines_union_and_intersection() -> None:
+    def difference(left: list[str], right: list[str]) -> list[str]:
+        return sorted((set(left) | set(right)) - (set(right) & set(left)))
+
+    schema = {"left": list_of(STR), "right": list_of(STR)}
+    program = trace(difference, schema)
+    operands = [apply("list", Col(name, type)) for name, type in schema.items()]
+    assert program.value == apply("set_symmetric_difference", *operands)

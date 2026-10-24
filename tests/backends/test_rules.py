@@ -7,10 +7,11 @@ from conftest import backend_params
 from udfx.backends.base import Backend
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.registration import RuleSet
-from udfx.ir import Call, Col, lit
+from udfx.backends.rules import fold_predicate
+from udfx.ir import Call, Col, Node, lit
 from udfx.ops.registry import Op, apply, register, scoped
 from udfx.semantics.facts import argument_length, result_type
-from udfx.types import INT, STR, Kind, Type, list_of
+from udfx.types import BOOL, INT, STR, Kind, Type, list_of
 
 
 def test_rule_metadata_passes_literals_and_static_facts(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -46,3 +47,40 @@ def test_rule_metadata_passes_literals_and_static_facts(monkeypatch: pytest.Monk
 def test_literal_translation_needs_no_fallback(backend: Backend[Any]) -> None:
     node = apply(".translate", Col("text", STR), lit("ab"), lit(("b", "a"), list_of(STR)))
     assert backend.exact(backend.lower(node)) is None
+
+
+def test_rewrite_runs_before_lowering_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PolarsBackend()
+    rules = RuleSet[pl.Expr]()
+    monkeypatch.setattr(backend, "rules", rules)
+
+    @rules.rewrite("custom_outer", Kind.STR)
+    def collapse(node: Call) -> Node:
+        inner = node.arguments[0]
+        assert isinstance(inner, Call)
+        return inner.arguments[0]
+
+    with scoped():
+        inner = register(Op("custom_inner", (STR,), STR, lambda value: value))
+        outer = register(Op("custom_outer", (STR,), STR, lambda value: value))
+        node = Call(outer, (Call(inner, (Col("text", STR),)),))
+        lowered = backend.lower(node)
+        assert lowered.exact is None
+        assert backend.evaluate([lowered.expr], {"text": STR}, [("abc",)]) == [["abc"]]
+    with pytest.raises(ValueError, match="duplicate rewrite"):
+        rules.rewrite("custom_outer", Kind.STR)(collapse)
+
+
+def test_rewrite_runs_before_predicate_folding() -> None:
+    rules = RuleSet[pl.Expr]()
+
+    @rules.rewrite("custom_pair", Kind.BOOL, Kind.BOOL)
+    def expand(node: Call) -> Node:
+        return apply("and", *node.arguments)
+
+    with scoped():
+        pair = register(Op("custom_pair", (BOOL, BOOL), BOOL, lambda left, right: left and right))
+        first, second, third = (Col(name, BOOL) for name in ("first", "second", "third"))
+        node = apply("and", first, Call(pair, (second, third)))
+        expected = apply("and", apply("and", first, second), third)
+        assert fold_predicate(node, rules.rewrite_call) == expected

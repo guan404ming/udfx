@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import register_padding
-from udfx.backends.spark.rules import RULES, when
-from udfx.backends.spark.strings import INT32_MAX, characters, join, length, list_len
-from udfx.semantics.facts import result_type
+from udfx.backends.spark.rules import INT32_MAX, RULES, when
+from udfx.backends.spark.strings import characters, join, length, list_len
+from udfx.semantics.facts import result_type, split_separator
 from udfx.semantics.padding import PaddingPrimitives
 from udfx.semantics.sequences import (
     SequencePrimitives,
     SlicePrimitives,
     slice_sequence,
     stride_pattern,
+    token_stride_pattern,
 )
 from udfx.types import Kind, Type
 
@@ -115,7 +118,7 @@ def str_slice(
     Kind.INT,
     Kind.INT,
     literals=(1, 2, 3),
-    facts={"result": result_type},
+    facts={"result": result_type, "separator": split_separator},
 )
 def list_slice(
     container: Column,
@@ -124,8 +127,28 @@ def list_slice(
     step: int | None = None,
     *,
     result: Type,
+    separator: str | None = None,
 ) -> Column:
-    return slice_sequence(SEQUENCE, container, start, stop, step, result=result)
+    sequence = SEQUENCE
+    dynamic = isinstance(start, Column) or isinstance(stop, Column)
+    if separator is not None and step is not None and abs(step) > 1 and dynamic:
+        pattern = token_stride_pattern(separator, abs(step))
+        if pattern is not None:
+            sequence = replace(
+                sequence,
+                stride=lambda values, count: functions.when(
+                    functions.size(values) == 0, functions.array().cast("array<string>")
+                ).otherwise(
+                    functions.regexp_extract_all(
+                        functions.concat(
+                            functions.lit(separator * count), join(functions.lit(separator), values)
+                        ),
+                        functions.lit(pattern),
+                        functions.lit(1),
+                    )
+                ),
+            )
+    return slice_sequence(sequence, container, start, stop, step, result=result)
 
 
 register_padding(

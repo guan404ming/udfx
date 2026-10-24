@@ -99,7 +99,8 @@ def guarded(tracer: Tracer) -> Tracer:
         except Unsupported as error:
             GOLDEN.observe(identifier, describe(error))
             raise
-        GOLDEN.observe(identifier, digest(program))
+        if RECORDING or GOLDEN.knows(identifier):
+            GOLDEN.observe(identifier, digest(program))
         return program
 
     return traced

@@ -79,7 +79,11 @@ def invoke(
     op, arguments = overload(name, arguments)
     call = Call(op, tuple(arguments))
     folded = fold(call)
-    if isinstance(folded, Lit) and folded.type.kind is not Kind.LIST:
+    if (
+        isinstance(folded, Lit)
+        and folded.type.kind is not Kind.LIST
+        and all(isinstance(argument, Lit) for argument in arguments)
+    ):
         return folded, []
     faults = [
         fault
@@ -88,7 +92,7 @@ def invoke(
         for fault in nullable_faults(argument, first_null_kind if index == 0 else TypeError)
     ]
     faults.extend(op.faults(*arguments))
-    return (call if isinstance(folded, Lit) else folded), faults
+    return (call if isinstance(folded, Lit) and folded.type.kind is Kind.LIST else folded), faults
 
 
 def nullable_faults(node: Node, kind: type[Exception] = TypeError) -> list[Fault]:

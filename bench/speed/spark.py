@@ -66,9 +66,15 @@ def measure(
         }
 
         def check(expr: Column) -> None:
-            output = frame.select(functions.col(position), expr).collect()
+            output = frame.select(functions.col(position), expr).toArrow()
+            assert output.num_rows == len(expected), (
+                f"{name} on spark: {output.num_rows} rows != {len(expected)} rows"
+            )
             verify(
-                "spark", name, [row[1] for row in sorted(output, key=lambda row: row[0])], expected
+                "spark",
+                name,
+                output.column(1).to_pylist(),
+                [expected[index] for index in output.column(0).to_pylist()],
             )
 
         def python_time() -> tuple[float, str]:
@@ -92,7 +98,9 @@ def measure(
                 fallback_in_plan(native, backend.name),
                 expression,
                 pending_share(
-                    backend, program, lambda expr: [row[0] for row in frame.select(expr).collect()]
+                    backend,
+                    program,
+                    lambda expr: frame.select(expr).toArrow().column(0).to_pylist(),
                 ),
             )
         ]

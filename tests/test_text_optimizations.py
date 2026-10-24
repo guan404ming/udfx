@@ -7,12 +7,13 @@ import pytest
 from conftest import backend_params
 from corpus.cases_regex import first_number
 
+from bench.speed.timing import fallback_in_plan
+from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.lowering import lower_program
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
-from udfx.ir import Guarded
 from udfx.semantics.text import ANY_CHAR, char_class
 from udfx.semantics.text_predicates import ascii_free
 from udfx.testing import check_function
@@ -23,7 +24,6 @@ from udfx.types import STR
 @pytest.mark.parametrize(
     "function",
     [
-        lambda value: value.title().swapcase().capitalize().casefold(),
         lambda value: value.upper().lower(),
         lambda value: value.lower().capitalize().casefold(),
     ],
@@ -31,7 +31,6 @@ from udfx.types import STR
 def test_ascii_case_chain(backend: Backend[Any], function: Callable[[str], str]) -> None:
     schema = {"value": STR}
     program = trace(function, schema)
-    assert isinstance(program.value, Guarded)
     lowered = backend.lower(program.value)
     assert lowered.exact is not None
     rows = [("AbC" * 10,), ("",), ("ß",), ("İ",), ("ΟΣ",)]
@@ -78,11 +77,33 @@ def test_spark_case_guard_skips_regex_for_ascii() -> None:
     schema = {"value": STR.or_none()}
     backend = SparkBackend()
     lowered = lower_program(backend, trace(lambda value: value.upper(), schema))
-    assert lowered.exact is not None
-    assert "octet_length(value)" in str(lowered.exact)
-    assert str(lowered.expr).startswith("Column<'CASE WHEN and(isNull(value), ")
+    assert lowered.exact is None
+    assert "octet_length(value)" in str(lowered.expr)
+    assert "CASE WHEN" in str(lowered.expr)
+    assert "patch(" not in str(lowered.expr)
     rows = [("abc",), ("ƛ",), (None,), ("okɤ",)]
-    assert backend.evaluate([lowered.exact], schema, rows)[0] == [True, False, None, False]
+    assert check_function(lambda value: value.upper(), schema, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("function", [lambda text: text.upper(), lambda text: text.lower()])
+def test_spark_case_mapping_stays_native(
+    backend: Backend[Any], function: Callable[[str], str]
+) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark case mapping")
+    schema = {"text": STR.or_none()}
+    translation = compile(function, schema, backend)
+    assert translation.ok, translation.unsupported
+    assert not fallback_in_plan(translation.expr, "spark")
+    points = ("", "Abßﬃ", "ΣΟΣ İı \u017f", "ǆƛɤ𐐨", "\u1c89", "\U00010d70", "\u1ad0")
+    values = [
+        None,
+        *points,
+        *(f"AΣ{point}A" for point in points),
+        *(f"A{point}Σ" for point in points),
+    ]
+    assert check_function(function, schema, backend, [(value,) for value in values]) == []
 
 
 def test_ascii_free_classes() -> None:

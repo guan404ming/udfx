@@ -8,16 +8,17 @@ from hypothesis import given, seed, settings
 from hypothesis import strategies as st
 
 from udfx.backends.base import Backend, Row
+from udfx.backends.polars import PolarsBackend
 from udfx.ops import Op, all_ops, resolve
 from udfx.semantics.scalars import numpy_scalar
 from udfx.testing import batches, values
-from udfx.testing.batching import EXAMPLES_PER_QUERY, check_batched
+from udfx.testing.batching import check_batched
 from udfx.testing.equivalence import check_op_batches
 from udfx.testing.strategies import (
     constant_values,
     extra_traps,
 )
-from udfx.types import INT, Kind, Type
+from udfx.types import INT, STR, Kind, Type
 
 NEUTRAL: dict[Kind, object] = {Kind.FLOAT: 1.0, Kind.INT: 1, Kind.STR: "a"}
 
@@ -87,8 +88,7 @@ def test_batching_keeps_examples(monkeypatch: pytest.MonkeyPatch) -> None:
 
     unbatched()
     check_batched(draw, checked.append)
-    assert [example for chunk in checked for example in chunk] == drawn
-    assert all(len(chunk) <= EXAMPLES_PER_QUERY for chunk in checked)
+    assert checked == [drawn]
     assert len(drawn) == settings().max_examples
 
 
@@ -134,3 +134,52 @@ def test_op_batches_keep_constants(backend: Backend[Any], monkeypatch: pytest.Mo
     )
     assert calls == 1
     assert {0, 2, 4, 7, 9, 11} <= {value for row in checked for value in row}
+    calls = 0
+    checked.clear()
+    assert check_op_batches(op, backend, [([(12, 0)], {1: index}) for index in range(12)]) == []
+    assert calls == 3
+    assert set(range(13)) <= {value for row in checked for value in row}
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_op_batches_skip_padding(backend: Backend[Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    op = resolve("__add__", (INT, INT))
+    assert op is not None
+    evaluate = backend.evaluate
+    captured: list[list[object]] = []
+
+    def capture(
+        exprs: Sequence[Any], schema: Mapping[str, Type], rows: Sequence[Row]
+    ) -> list[list[object]]:
+        outputs = evaluate(exprs, schema, rows)
+        captured.extend(outputs)
+        return outputs
+
+    monkeypatch.setattr(backend, "evaluate", capture)
+    assert (
+        check_op_batches(op, backend, [([(1, 0)], {1: 2}), ([(4, 10), (5, 11), (6, 12)], {})]) == []
+    )
+    assert captured[1] == [3, None, None]
+
+
+def test_op_batches_bound_expansion(monkeypatch: pytest.MonkeyPatch) -> None:
+    backend = PolarsBackend()
+    op = resolve(".ljust", (STR, INT))
+    assert op is not None
+    evaluate = backend.evaluate
+    calls = 0
+    seen: set[object] = set()
+
+    def capture(
+        exprs: Sequence[Any], schema: Mapping[str, Type], rows: Sequence[Row]
+    ) -> list[list[object]]:
+        nonlocal calls
+        calls += 1
+        seen.update(row[0] for row in rows)
+        return evaluate(exprs, schema, rows)
+
+    monkeypatch.setattr(backend, "evaluate", capture)
+    rows = [(str(index), 0) for index in range(40)]
+    assert check_op_batches(op, backend, [(rows, {1: 1_000_000}), ([("short", 2)], {})]) == []
+    assert calls > 1
+    assert seen == {str(index) for index in range(40)}

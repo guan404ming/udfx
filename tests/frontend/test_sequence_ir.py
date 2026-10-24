@@ -11,17 +11,24 @@ from udfx.types import INT, STR, list_of
 
 
 @pytest.mark.parametrize(
-    "function",
+    "function, expected",
     [
-        lambda value: value.title().swapcase().capitalize().casefold(),
-        lambda value: value.upper().lower(),
-        lambda value: value.lower().capitalize().casefold(),
+        (lambda value: value.lower().casefold(), ".casefold(col value)"),
+        (lambda value: value.casefold().casefold(), ".casefold(col value)"),
+        (
+            lambda value: value.title().swapcase().capitalize().casefold(),
+            ".casefold(.capitalize(.swapcase(.title(col value))))",
+        ),
+        (lambda value: value.upper().lower(), "guard(.lower(col value), .isascii(col value))"),
+        (
+            lambda value: value.lower().capitalize().casefold(),
+            ".casefold(.capitalize(.lower(col value)))",
+        ),
     ],
 )
-def test_case_chain_collapses_behind_an_ascii_guard(function: Callable[[str], str]) -> None:
+def test_case_chain_keeps_backend_choices(function: Callable[[str], str], expected: str) -> None:
     program = trace(function, {"value": STR})
-    assert isinstance(program.value, Guarded)
-    assert render(program.value) == "guard(.lower(col value), .isascii(col value))"
+    assert render(program.value) == expected
 
 
 def test_partitioned_sum_is_guarded_by_length() -> None:

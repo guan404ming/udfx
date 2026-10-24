@@ -13,6 +13,8 @@ from udfx.backends.registration import (
     register_string_predicates,
     register_translation,
 )
+from udfx.frontend.core.sequences import join_words, word_item
+from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import text
 from udfx.semantics.clusters import CLUSTER_JOINERS
 from udfx.semantics.facts import join_source_is_column, pattern_is_empty
@@ -215,6 +217,9 @@ def list_getitem(container: pl.Expr, index: pl.Expr) -> pl.Expr:
 
 
 register_string_predicates(RULES, lambda value, pattern: value.str.contains(pattern))
+RULES.rewrite(".join", Kind.STR, Kind.LIST)(join_words)
+RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(word_item)
+RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 
 
 for method in CASE_METHODS:

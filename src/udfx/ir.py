@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, fields
+from typing import TYPE_CHECKING, Any
 
 from udfx.types import BOOL, Type, list_of, type_of
 
@@ -76,6 +76,23 @@ class Guarded:
 
 
 Node = Col | Lit | Call | If | ListValue | Element | Comprehension | Guarded
+
+
+def cached_hash(self: Any) -> int:
+    found = self.__dict__.get("hashed")
+    if found is None:
+        found = hash(tuple(getattr(self, field.name) for field in fields(self)))
+        object.__setattr__(self, "hashed", found)
+    return found
+
+
+def unhashed_state(self: Any) -> dict[str, object]:
+    return {name: value for name, value in self.__dict__.items() if name != "hashed"}
+
+
+for composite in (Call, If, ListValue, Comprehension, Guarded):
+    composite.__hash__ = cached_hash
+    composite.__getstate__ = unhashed_state
 
 TRUE = Lit(True, BOOL)
 FALSE = Lit(False, BOOL)

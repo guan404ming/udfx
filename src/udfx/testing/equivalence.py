@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import batched
 from pickle import dumps
 from typing import Any
 
@@ -10,8 +11,9 @@ from udfx.backends.base import Backend, Row
 from udfx.errors import Unsupported
 from udfx.ir import TRUE, Call, Col, Lit
 from udfx.ops import Fault, Op
+from udfx.testing.allocation import allocation_batches
 from udfx.testing.outcome import Outcome, Raised, Returned, run, same
-from udfx.types import Type
+from udfx.types import BOOL, Type
 
 
 @dataclass(frozen=True)
@@ -115,9 +117,21 @@ def check_op_batches(
         if key not in grouped:
             grouped[key] = ([], constants)
         grouped[key][0].extend(rows)
+    return [
+        mismatch
+        for group in batched(grouped.values(), 5)
+        for mismatch in _check_op_group(op, backend, group)
+    ]
+
+
+def _check_op_group(
+    op: Op,
+    backend: Backend[Any],
+    batches: Sequence[tuple[Sequence[Row], Mapping[int, object]]],
+) -> list[Mismatch]:
     prepared = [
         _prepare_op(op, backend, rows, constants, index)
-        for index, (rows, constants) in enumerate(grouped.values())
+        for index, (rows, constants) in enumerate(batches)
     ]
     schema = {name: type for _, columns, _, _, _ in prepared for name, type in columns.items()}
     padding = [min(inputs, key=_footprint) for inputs, _, _, _, _ in prepared]
@@ -125,17 +139,24 @@ def check_op_batches(
         tuple(
             value
             for (inputs, _, _, _, _), pad in zip(prepared, padding, strict=True)
-            for value in (inputs[index] if index < len(inputs) else pad)
+            for value in (*(inputs[index] if index < len(inputs) else pad), index < len(inputs))
         )
         for index in range(max(len(inputs) for inputs, _, _, _, _ in prepared))
     ]
-    outputs = iter(
-        backend.evaluate([expr for _, _, exprs, _, _ in prepared for expr in exprs], schema, rows)
-    )
     mismatches: list[Mismatch] = []
-    for inputs, _, exprs, faults, exact_count in prepared:
-        results = [next(outputs) for _ in exprs]
-        mismatches.extend(_op_mismatches(op, inputs, faults, exact_count, results))
+    for offset, batch in allocation_batches(op, rows):
+        outputs = iter(
+            backend.evaluate(
+                [expr for _, _, exprs, _, _ in prepared for expr in exprs], schema, batch
+            )
+        )
+        for inputs, _, exprs, faults, exact_count in prepared:
+            results = [next(outputs) for _ in exprs]
+            mismatches.extend(
+                _op_mismatches(
+                    op, inputs[offset : offset + len(batch)], faults, exact_count, results
+                )
+            )
     return mismatches
 
 
@@ -161,6 +182,8 @@ def _prepare_op(
         Col(f"batch{batch}_arg{index}", parameter) for index, parameter in enumerate(op.parameters)
     )
     schema = {column.name: column.type for column in columns}
+    present = Col(f"batch{batch}_present", BOOL)
+    schema[present.name] = present.type
     arguments = tuple(
         Lit(constants[index], column.type) if index in constants else column
         for index, column in enumerate(columns)
@@ -173,6 +196,11 @@ def _prepare_op(
     exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]
 
     exprs = [backend.column(columns[0]), value.expr, *exact, *(item.expr for item in lowered)]
+    types = [columns[0].type, op.result, *([BOOL] * (len(exprs) - 2))]
+    exprs = [
+        backend.select(backend.column(present), expr, backend.literal(Lit(None, type.or_none())))
+        for expr, type in zip(exprs, types, strict=True)
+    ]
     return rows, schema, exprs, faults, len(exact)
 
 

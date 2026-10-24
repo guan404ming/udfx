@@ -5,6 +5,7 @@ from collections.abc import Callable
 from udfx.ir import Node
 from udfx.ops.numbers import not_finite
 from udfx.ops.registry import Fault, Op, apply, register
+from udfx.semantics.literals import saturated_integer
 from udfx.types import BOOL, FLOAT, INT, STR
 
 
@@ -27,6 +28,7 @@ def unparsable(name: str) -> Callable[[Node], tuple[Fault, ...]]:
 
 
 register(Op("int", (STR,), INT, int, unparsable("int")))
+register(Op("int_saturated", (STR,), INT, saturated_integer, unparsable("int")))
 register(Op("int", (FLOAT,), INT, int, not_finite))
 register(Op("float", (STR,), FLOAT, float, unparsable("float")))
 register(Op("float", (INT,), FLOAT, float))

@@ -143,6 +143,9 @@ class CaseDrift:
 def case_guard(
     found: CaseDrift, contains_class: Callable[[str], Any], contains_sigma: Any
 ) -> Any | None:
+    if found.nearby == ANY_CHAR:
+        pattern = f"(?:{found.alone}|{SIGMA})" if found.alone else SIGMA
+        return ~contains_class(pattern)
     guards = [~contains_class(found.alone)] if found.alone else []
     if found.nearby:
         guards.append(~(contains_sigma & contains_class(found.nearby)))

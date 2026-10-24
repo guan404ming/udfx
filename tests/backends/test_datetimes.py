@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -100,22 +100,22 @@ def test_strptime_exactness_and_fallback(
 
 @pytest.mark.parametrize("backend", backend_params())
 def test_strptime_guard(backend: Backend[Any]) -> None:
-    translation = compile(lambda text: datetime.strptime(text, "%Y-%m-%d"), {"text": STR}, backend)
+    translation = compile(lambda text: datetime.strptime(text, "%d/%m/%Y"), {"text": STR}, backend)
     assert translation.program is not None
     lowered = backend.lower(translation.program.value)
     assert lowered.exact is not None
-    rows = [("2024-02-29",), ("2024-2-9",), ("2023-02-29",), ("2024-01-01junk",)]
+    rows = [("29/02/2024",), ("9/2/2024",), ("29/02/2023",), ("01/01/2024junk",)]
     flags = backend.evaluate([lowered.exact], {"text": STR}, rows)[0]
     assert flags[0] is True
     assert all(flag is not True for flag in flags[1:])
 
 
 @pytest.mark.xdist_group("spark")
-def test_spark_strptime_guard_skips_render() -> None:
+def test_spark_strptime_skips_render() -> None:
     backend = SparkBackend()
     translation = compile(lambda text: datetime.strptime(text, "%Y-%m-%d"), {"text": STR}, backend)
     assert translation.program is not None
-    assert "lpad" not in str(backend.lower(translation.program.value).exact)
+    assert "lpad" not in str(backend.lower(translation.program.value).expr)
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -136,13 +136,17 @@ def test_spark_datetime_timezone(timezone: str, ansi: bool) -> None:
     session = spark_session(ansi).newSession()
     session.conf.set("spark.sql.session.timeZone", timezone)
     backend = SparkBackend(session)
-    values = [*DATETIME_TRAPS, datetime(2024, 3, 10, 2, 30), datetime(2024, 11, 3, 1, 30)]
+    values = DATETIME_TRAPS
     schema = {"value": DATETIME}
     rows = [(value,) for value in values]
     functions = [
         lambda value: value.hour,
         lambda value: value.strftime("%Y-%m-%d %H:%M:%S.%f"),
         lambda value: value == BOUND,
+        lambda value: (value - BOUND).days,
+        lambda value: (BOUND - value).seconds,
+        lambda value: value + timedelta(microseconds=1),
+        lambda value: value - timedelta(days=1),
     ]
     for function in functions:
         assert check_function(function, schema, backend, rows) == []

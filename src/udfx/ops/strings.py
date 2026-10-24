@@ -32,7 +32,7 @@ def out_of_range(container: Node, index: Node) -> tuple[Fault, ...]:
     too_high = apply("not", apply("__gt__", length, index))
     if isinstance(index, Lit) and isinstance(index.value, int) and index.value >= 0:
         return (Fault(IndexError, too_high),)
-    too_low = apply("__gt__", lit(0), apply("__add__", index, length))
+    too_low = apply("__lt__", index, apply("__sub__", lit(0), length))
     return (Fault(IndexError, apply("or", too_high, too_low)),)
 
 

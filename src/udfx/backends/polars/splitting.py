@@ -48,6 +48,7 @@ SPLIT = SplitPrimitives(
         list_of(STR),
     ),
     split=split,
+    words=split_words,
     join=join,
     append=lambda values, value: values.list.concat(value),
     length=length,

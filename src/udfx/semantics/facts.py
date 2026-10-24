@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from udfx.ir import Call, Col, Comprehension, If, ListValue, Lit, Node
+from udfx.semantics.assumptions import CONDITIONS
 from udfx.semantics.numbers import FLOAT_INT_MAX
+from udfx.semantics.ranges import LENGTH_OPS, integer_bounds, maximum_length
 from udfx.semantics.text import has_prefix_suffix_overlap
-from udfx.types import STR, Kind, Type, fits
-
-LENGTH_OPS = frozenset({"len", "set_size", "set_size_float"})
+from udfx.semantics.text_predicates import ASCII_PREDICATES
+from udfx.types import INT64_MAX, INT64_MIN, STR, Kind, Type, fits
 
 
 def bounded_divisor(node: Call) -> bool:
@@ -34,6 +35,25 @@ def result_type(node: Call) -> Type:
     return node.type
 
 
+def ascii_predicate_result(node: Call) -> bool | None:
+    pattern = ASCII_PREDICATES.get(node.op.name.removeprefix("."))
+    if pattern is None:
+        return None
+    for predicate, truth in CONDITIONS.get():
+        if (
+            isinstance(predicate, Call)
+            and predicate.op.name.startswith(".")
+            and predicate.arguments == node.arguments
+            and ASCII_PREDICATES.get(predicate.op.name[1:]) == pattern
+        ):
+            return truth
+    return None
+
+
+def simple_arguments(node: Call) -> bool:
+    return all(isinstance(argument, Col | Lit) for argument in node.arguments)
+
+
 def join_source_is_column(node: Call) -> bool:
     return isinstance(node.arguments[1], Col | Comprehension)
 
@@ -52,28 +72,6 @@ def pattern_is_empty(node: Call) -> bool | None:
 def separator_is_none(node: Call) -> bool | None:
     separator = node.arguments[1]
     return separator.value is None if isinstance(separator, Lit) else None
-
-
-def maximum_length(node: Node) -> int | None:
-    if isinstance(node, Lit) and isinstance(node.value, str):
-        return len(node.value)
-    if not isinstance(node, Call):
-        return None
-    if node.op.name in {".strip", ".lstrip", ".rstrip"}:
-        return maximum_length(node.arguments[0])
-    if node.op.name != "slice":
-        return None
-    text, start, stop, *steps = node.arguments
-    if steps and (not isinstance(steps[0], Lit) or steps[0].value not in (None, 1)):
-        return maximum_length(text)
-    bounds = [maximum_length(text)]
-    if isinstance(start, Lit) and isinstance(start.value, int) and start.value < 0:
-        bounds.append(-start.value)
-    if isinstance(stop, Lit) and isinstance(stop.value, int) and stop.value >= 0:
-        begin = start.value if isinstance(start, Lit) and isinstance(start.value, int) else 0
-        bounds.append(max(stop.value - max(begin, 0), 0))
-    known = [bound for bound in bounds if bound is not None]
-    return min(known) if known else None
 
 
 def minimum_length(node: Node) -> int:
@@ -103,3 +101,31 @@ def split_non_overlapping(node: Call) -> bool:
 
 def split_partitioned(node: Call) -> bool:
     return isinstance(node.arguments[0], Col | Lit) and split_non_overlapping(node)
+
+
+def split_separator(node: Call) -> str | None:
+    source = node.arguments[0]
+    while isinstance(source, Call) and source.op.name in {"slice", "list"}:
+        source = source.arguments[0]
+    if not isinstance(source, Call) or source.op.name not in {".split", ".rsplit"}:
+        return None
+    if len(source.arguments) != 2:
+        return None
+    separator = source.arguments[1]
+    if (
+        isinstance(separator, Lit)
+        and isinstance(separator.value, str)
+        and len(separator.value) == 1
+    ):
+        return separator.value
+    return None
+
+
+def integer_fits(node: Call, *, size_limit: int) -> bool:
+    bounds = integer_bounds(node, size_limit)
+    return bounds is not None and INT64_MIN <= bounds[0] <= bounds[1] <= INT64_MAX
+
+
+def argument_maximum(node: Call) -> int | None:
+    bounds = integer_bounds(node.arguments[1], INT64_MAX)
+    return bounds[1] if bounds is not None else None

@@ -91,11 +91,13 @@ def test_invalid_arguments(arguments: list[str]) -> None:
     assert error.value.code == 2
 
 
-def test_mismatch_stops_before_timing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(polars, "caller", lambda program: lambda value: "wrong")
-    monkeypatch.setattr(polars, "timed", lambda *arguments: pytest.fail("timed incorrect output"))
-    with pytest.raises(AssertionError, match="lower_strip on polars eager row 0"):
-        main(["--rows", "200", "--engines", "polars", "--cases", "lower_strip", "--repeats", "1"])
+@pytest.mark.parametrize("engine", ["polars", "spark"])
+def test_mismatch_stops_before_timing(engine: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = importlib.import_module(f"bench.speed.{engine}")
+    monkeypatch.setattr(module, "caller", lambda program: lambda value: "wrong")
+    monkeypatch.setattr(module, "timed", lambda *arguments: pytest.fail("timed incorrect output"))
+    with pytest.raises(AssertionError, match=f"lower_strip on {engine}.* row 0"):
+        main(["--rows", "200", "--engines", engine, "--cases", "lower_strip", "--repeats", "1"])
 
 
 def test_baselines_are_reused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

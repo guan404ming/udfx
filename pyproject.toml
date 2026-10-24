@@ -26,18 +26,18 @@ Issues = "https://github.com/guan404ming/udfx/issues"
 
 [project.optional-dependencies]
 polars = ["polars>=2.0"]
-duckdb = ["duckdb>=1.4", "numpy>=2.0", "pyarrow>=18"]
-datafusion = ["datafusion>=50"]
+duckdb = ["duckdb>=1.4.1", "numpy>=2.0", "pyarrow>=18"]
+datafusion = ["datafusion>=55", "pyarrow>=18"]
 spark = ["pyspark>=4.1", "pyarrow>=18"]
 testing = ["hypothesis>=6.100"]
 
 [dependency-groups]
 dev = [
     "polars>=2.0",
-    "duckdb>=1.4",
+    "duckdb>=1.4.1",
     "numpy>=2.0",
     "pandas>=2.2,<3",
-    "datafusion>=50",
+    "datafusion>=55",
     "pyspark>=4.1",
     "hypothesis>=6.100",
     "pytest>=8.3",
@@ -53,6 +53,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
+    ".venv*",
     ".github",
     ".hypothesis",
     ".python-version",

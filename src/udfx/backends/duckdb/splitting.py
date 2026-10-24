@@ -65,6 +65,7 @@ SPLIT = SplitPrimitives(
         f"udfx split {len(values)}",
     ),
     split=split,
+    words=split_words,
     join=join,
     append=lambda values, value: function("list_append", values, value),
     length=length,

@@ -3,8 +3,9 @@ from __future__ import annotations
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import Lowered, register_lists
-from udfx.backends.spark.rules import RULES, when
+from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
 from udfx.backends.spark.strings import characters, list_contains
+from udfx.semantics.facts import simple_arguments
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
@@ -32,13 +33,27 @@ def all_values(value: Column) -> Column:
     return functions.forall(value, lambda element: element)
 
 
-@RULES("sum", Kind.LIST)
-def total(value: Column) -> Lowered[Column]:
+@RULES("sum", Kind.LIST, facts={"bounded": INTEGER_FITS, "simple": simple_arguments})
+def total(value: Column, *, bounded: bool = False, simple: bool = False) -> Lowered[Column]:
+    if bounded:
+        return Lowered(
+            functions.aggregate(
+                value.cast("array<long>"), functions.lit(0).cast("long"), functions.try_add
+            )
+        )
     result = functions.aggregate(
         value.cast("array<decimal(38,0)>"),
         functions.lit(0).cast("decimal(38,0)"),
         functions.try_add,
-    ).try_cast("long")
+    )
+    if simple:
+        items = [
+            functions.coalesce(functions.get(value, index), functions.lit(0)).cast("decimal(38,0)")
+            for index in range(4)
+        ]
+        small = (items[0] + items[1]) + (items[2] + items[3])
+        result = functions.when(functions.size(value) <= 4, small).otherwise(result)
+    result = result.try_cast("long")
     return Lowered(result, overflow=result.isNull() & value.isNotNull())
 
 
@@ -89,6 +104,7 @@ register_lists(
         contains=functions.array_contains,
         intersection=functions.array_intersect,
         union=functions.array_union,
+        concatenate=concatenate,
         difference=functions.array_except,
     ),
 )

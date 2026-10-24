@@ -18,6 +18,9 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/program.py` | `Program`: traced function, schema, value, fault, row mode, and `run` for fallback rows |
 | `src/udfx/ops/` | Op specs: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py` |
 | `src/udfx/semantics/` | Shared Python facts and policies for scalars, numbers, text, literals, lists, regex, datetimes, translation, and paths. Sequence, split, and padding policies live in `sequences.py`, `splitting.py`, and `padding.py` |
+| `src/udfx/semantics/ranges.py` | Infers integer bounds. `assumptions.py` holds branch conditions and comparison facts |
+| `src/udfx/semantics/arithmetic.py` | Proves bounds for integer arithmetic regions. `casing.py` derives exact Unicode case mappings from Python |
+| `src/udfx/semantics/calendar.py` | Checks Python calendar formats and normalizes Unicode digits before native date parsing |
 | `src/udfx/frontend/` | `trace.py` turns a function and schema into a program. The frontend knows nothing about backends |
 | `src/udfx/frontend/decode/` | Decode version-specific bytecode and stack effects into blocks of semantic ops. `ops.py` defines the ops, `rules/` holds one module per opcode family plus `py313.py`, `py314.py`, and `py315.py` |
 | `src/udfx/frontend/flow/` | Execute decoded blocks, helper calls, loops, and exception paths |
@@ -26,12 +29,15 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/frontend/operations/` | Evaluate Python operators, calls, containers, attributes, and formatting with explicit operands |
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
+| `src/udfx/backends/lowering_context.py` | Stores lowered expressions and binding settings for one lowering scope. Cache keys include branch conditions |
+| `src/udfx/backends/arithmetic.py` | Lowers proven integer regions with wide engine arithmetic. `reductions.py` unrolls bounded integer sums |
 | `src/udfx/backends/hoisting.py` | Finds a list call in a comprehension body that does not read the element |
 | `src/udfx/backends/indexing.py` | Rewrites `range` comprehensions that a backend cannot lower: unrolls a small literal bound and maps `range(len(items))` to an indexed list transform |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
 | `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
 | `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Backends may also have `slicing.py` and `splitting.py`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
+| `src/udfx/testing/allocation.py` | Bounds output allocation per conformance query. It keeps every test row |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
 | `tests/corpus/` | End to end acceptance cases, run with `uv run pytest -m corpus` |
 
@@ -77,6 +83,7 @@ Op names:
 
 A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 
+- Register engine-specific IR choices with `RULES.rewrite(name, *kinds)`. Generic lowering applies the rewrite before it lowers arguments. Rewrite predicates before boolean folding. Reuse shared IR identities. Keep the frontend independent of engine costs.
 - Declare `literals=(1, 2)` on a rule to receive Python values for those zero-based parameters when the IR argument is a `Lit`. Nonliteral arguments stay engine expressions. Slice bounds, steps, and translation tables use this same contract.
 - Declare `facts={"result": result_type}` to pass static facts as keyword arguments. Fact functions take the `Call` and live in `semantics/facts.py`. Keep op names out of generic lowering.
 - A rule must never raise or panic for any input, including literal arguments. Where the op faults, any value is fine.
@@ -86,6 +93,8 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 - Every op needs a rule on every backend. `tests/conformance/test_ops.py` enforces this.
 - Put Python facts in `semantics/`, never in a backend. A backend file holds only engine calls.
 - For a Python policy, fill its `*Primitives` record from `semantics/` with engine calls and call the policy function.
+- In `DatetimePrimitives.parse`, accept only `TIMESTAMP_LITERAL`. Return null for invalid text.
+- Set `DatetimePrimitives.calendar` for an engine with native calendar parsing. Its `parse` accepts a year, year-month, or year-month-day. Return a naive midnight datetime. Return null for invalid dates.
 - Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, `register_equality`, and `register_extremum` from `registration.py`. Give them the engine cast to float and the `OrderPrimitives` record.
 
 ## Backend contract
@@ -93,8 +102,9 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `BACKEND`, a `Backend` subclass. `udfx.backends.installed()` discovers it when its engine imports.
 
 - `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
-- `list_value` builds lists. `list_transform` and `list_filter` enable native comprehensions. `list_indexed` passes each element and its index, for engines that cannot lower `range`. Set `indexes = True` to try it before `range`. Only Spark sets it, because its lambdas repeat the source per element. Set `rewrites_words = False` to keep `split()[0]`, `split()[-1]`, and `" ".join(split()[a:b])` as list operations instead of regexes. Only Spark clears it, because it shares one split between those uses. `base.py` uses Python fallback when a comprehension needs an unsupported list operation.
-- `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower an invariant list call once outside the comprehension lambdas. Only DuckDB binds. Spark cannot pass bound lambdas to a Python UDF.
+- `lower_program(program)` returns a lowered program. `build` checks column names and applies fallback. Backend overrides call the shared lowering functions.
+- `list_value` builds lists. `list_transform` and `list_filter` enable native comprehensions. `list_indexed` passes each element and its index, for engines that cannot lower `range`. Set `indexes = True` to try it before `range`. Only Spark sets it, because its lambdas repeat the source per element. Register word rewrites with `RULES.rewrite` to replace list operations with regexes. Spark keeps list operations because it shares one split between those uses. `base.py` uses Python fallback when a comprehension needs an unsupported list operation.
+- `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower an invariant list call once outside the comprehension lambdas. DuckDB binds. Spark enables binding in a lowering context and keeps it only when the program needs no Python fallback.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and calls `run_fallback_rows(program, rows)`.
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.

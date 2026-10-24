@@ -45,7 +45,8 @@ print(df.select(year=translation.expr)["year"].to_list())
 
 `compile(function, schema, backend="polars")` returns a `Translation`: `function`, `ok`, `expr`, `program`,
 `backend`, and `unsupported` (the reason when the function cannot be compiled).
-`udfx.explain` reports the traced program and native expression.
+`udfx.explain` reports native or guarded execution, fallback conditions, fault handling, compile
+time, and the traced program. See [explain output](docs/explain.md).
 
 A single parameter represents a row when the schema keys differ from its name:
 `udfx.compile(lambda row: row["price"] * row.quantity, {"price": FLOAT, "quantity": INT})`.
@@ -106,6 +107,8 @@ Main limits (`compile` returns `ok == False` with an `unsupported` reason):
 | DataFusion | `datafusion.Expr` | `udfx[datafusion]` |
 | Spark | `pyspark.sql.Column` | `udfx[spark]` |
 
+See [backend quick starts and compatibility scope](docs/backends.md) for executable examples.
+
 Every op has a rule on every backend. `tests/conformance` checks each pair against Python with
 Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bounds, `nan`, `-0.0`).
 
@@ -133,6 +136,15 @@ Hypothesis and a set of trap values (`"1_2"`, `" 12 "`, `"İ"`, `"ß"`, int64 bo
 
 Run `uv run python -m bench.speed` to compare udfx with Python UDFs on Polars eager and lazy,
 DuckDB, DataFusion, and Spark; numbers depend on the machine.
+See [recorded Spark results and measurement method](docs/performance.md), including slower cases.
+
+## Release status
+
+udfx is a public preview. The supported entry points are `compile`, `explain`, `Translation`,
+`Unsupported`, the types in `udfx.types`, and the four backend constructors. Before 1.0, minor
+releases may change these APIs; release notes describe those changes. Patch releases preserve
+their call signatures. Explain output is diagnostic text; its exact layout is not a stable API.
+Internal IR, frontend, and lowering modules can change between releases.
 
 ## Contributing
 

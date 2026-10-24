@@ -2,6 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from udfx.semantics.text import char_class
 from udfx.semantics.text_slicing import mixed_slice_pattern
 from udfx.types import INT64_MAX, Type
 
@@ -171,3 +172,11 @@ def reverse_exact(step: int | None, exact: Callable[[], Any]) -> Any:
 
 def stride_pattern(step: int) -> str | None:
     return f"(?s)(.).{{0,{step - 1}}}" if step <= 64 else None
+
+
+def token_stride_pattern(separator: str, step: int) -> str | None:
+    if step > 64:
+        return None
+    boundary = char_class(separator)
+    token = char_class(separator, negate=True) + "*"
+    return f"(?:{boundary}{token}){{{step - 1}}}{boundary}({token})"

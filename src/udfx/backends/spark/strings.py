@@ -14,8 +14,10 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.backends.spark.backend import SparkBackend
+from udfx.backends.spark.casing import exact_case
 from udfx.backends.spark.conversions import TEXT as TRANSLATION
-from udfx.backends.spark.rules import ASCII, RULES, when
+from udfx.backends.spark.rules import ASCII, INT32_MAX, RULES, when
+from udfx.frontend.core.text import folded_case_chain
 from udfx.ir import Col
 from udfx.semantics import text
 from udfx.semantics.facts import pattern_is_empty
@@ -36,7 +38,6 @@ from udfx.semantics.text import (
 from udfx.semantics.text_predicates import ascii_free
 from udfx.types import STR, Kind
 
-INT32_MAX = 2**31 - 1
 POINT = "point"
 
 
@@ -57,12 +58,14 @@ def contains_class(value: Column, pattern: str) -> Column:
     found = value.rlike(pattern)
     if not ascii_free(pattern):
         return found
-    return (functions.octet_length(value) != functions.char_length(value)) & found
+    return functions.when(ASCII.is_ascii(value), functions.lit(False)).otherwise(found)
 
 
 def recase(value: Column, method: str) -> RuleResult[Column]:
     expr = case_expression(CASE, value, method)
     exact = case_guard(case_drift(method), partial(contains_class, value), value.contains(SIGMA))
+    if method in {"lower", "upper", "casefold"}:
+        return exact_case(value, method, expr, exact, CASE.characters)
     return expr if exact is None else Lowered(expr, exact)
 
 
@@ -71,7 +74,9 @@ def length(text: Column) -> Column:
 
 
 def characters(text: Column) -> Column:
-    return functions.array_remove(functions.split(text, "", -1), "")
+    return functions.when(text == "", functions.array().cast("array<string>")).otherwise(
+        functions.split(text, "", -1)
+    )
 
 
 def array_join(words: Column, separator: Column) -> Column:
@@ -192,7 +197,9 @@ def str_contains(text: Column, item: Column) -> Column:
 
 
 def list_contains(container: Column, item: Column) -> Column:
-    return functions.size(functions.array_intersect(container, functions.array(item))) > 0
+    return functions.when(
+        item.isNull(), functions.exists(container, lambda element: element.isNull())
+    ).otherwise(functions.coalesce(functions.array_contains(container, item), functions.lit(False)))
 
 
 RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
@@ -213,6 +220,7 @@ register_string_predicates(
     lambda value, pattern: value.rlike(pattern),
     ASCII,
 )
+RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 
 
 for method in CASE_METHODS:

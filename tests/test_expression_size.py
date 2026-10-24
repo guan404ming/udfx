@@ -41,7 +41,9 @@ def test_expression_size(
 @pytest.mark.parametrize("op", [".split", ".rsplit"])
 def test_split_operands_are_bound(backend: Backend[Any], op: str) -> None:
     names = ("text_operand", "separator_operand", "maximum_operand")
-    text, separator, maximum = Col(names[0], STR), Col(names[1], STR.or_none()), Col(names[2], INT)
+    text = apply("__add__", Col(names[0], STR), lit("x"))
+    separator = apply("__add__", Col(names[1], STR.or_none()), lit("x"))
+    maximum = apply("__add__", Col(names[2], INT), lit(1))
     for _ in range(8):
         expr = str(backend.lower(apply(op, text, separator, maximum)).expr)
         assert all(expr.count(name) == 1 for name in names)
@@ -205,3 +207,24 @@ def test_literal_integer_division_is_native(backend: Backend[Any]) -> None:
         check_function(lambda value: (value + 1) // 4, {"value": INT}, backend, [(2**63 - 1,)])
         == []
     )
+
+
+def twelve_squares(value: float) -> float:
+    for _ in range(12):
+        value = value * value
+    return value
+
+
+def forty_squares(value: float) -> float:
+    for _ in range(40):
+        value = value * value
+    return value
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_shared_values_lower_once(backend: Backend[Any]) -> None:
+    rows = [(1.0,), (-1.0,), (0.5,), (1.0000001,)]
+    assert check_function(twelve_squares, {"value": FLOAT}, backend, rows) == []
+    translation = compile(forty_squares, {"value": FLOAT}, backend)
+    assert not translation.ok
+    assert "once shared values are expanded" in str(translation.unsupported)

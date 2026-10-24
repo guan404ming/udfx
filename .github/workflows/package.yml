@@ -1,0 +1,58 @@
+name: Package
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.1
+      - run: uv build --no-sources
+      - uses: actions/upload-artifact@v7
+        with:
+          name: udfx-dist
+          path: dist/*
+          if-no-files-found: error
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [polars, duckdb, datafusion, spark]
+        resolution: [lowest-direct, highest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.1
+      - uses: actions/download-artifact@v8
+        with:
+          name: udfx-dist
+          path: dist
+      - if: matrix.backend == 'spark'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: uv venv --python "${{ matrix.resolution == 'lowest-direct' && '3.12' || '3.14' }}" "$RUNNER_TEMP/udfx-smoke"
+      - name: Install the wheel and one extra
+        run: |
+          wheels=(dist/*.whl)
+          uv pip compile --python "$RUNNER_TEMP/udfx-smoke/bin/python" pyproject.toml \
+            --resolution "${{ matrix.resolution }}" --extra "${{ matrix.backend }}" \
+            --output-file "$RUNNER_TEMP/udfx-constraints.txt"
+          uv pip install --python "$RUNNER_TEMP/udfx-smoke/bin/python" \
+            --constraint "$RUNNER_TEMP/udfx-constraints.txt" \
+            "${wheels[0]}[${{ matrix.backend }}]"
+          uv pip check --python "$RUNNER_TEMP/udfx-smoke/bin/python"
+      - name: Check native, fallback, and error paths
+        run: |
+          export PYSPARK_PYTHON="$RUNNER_TEMP/udfx-smoke/bin/python"
+          "$PYSPARK_PYTHON" -I .github/scripts/smoke.py "${{ matrix.backend }}"
+        env:
+          PYTHONPATH: ""
+          PYSPARK_SUBMIT_ARGS: "--master local[2] --conf spark.ui.enabled=false pyspark-shell"

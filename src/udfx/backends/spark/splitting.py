@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 from pyspark.sql import Column, functions
 
-from udfx.backends.spark.rules import RULES, split_literal
+from udfx.backends.spark.rules import INT32_MAX, RULES, split_literal
 from udfx.backends.spark.slicing import SEQUENCE
-from udfx.backends.spark.strings import INT32_MAX, array_join, join, length, lstrip
-from udfx.semantics.facts import separator_is_none, split_partitioned
-from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
+from udfx.backends.spark.strings import array_join, join, length, lstrip
+from udfx.semantics.facts import (
+    separator_is_none,
+    simple_arguments,
+    split_non_overlapping,
+    split_partitioned,
+)
+from udfx.semantics.splitting import (
+    RightSplitPrimitives,
+    SplitPrimitives,
+    split_limited,
+    split_right,
+    split_right_native,
+)
 from udfx.semantics.text import non_whitespace_pattern, whitespace_pattern, word_prefix_pattern
-from udfx.types import STR, Kind, list_of
+from udfx.types import Kind
 
 
 def split_words(text: Column) -> Column:
@@ -38,19 +51,28 @@ def split(text: Column, separator: Column, *, optional: bool | None = None) -> C
 RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split)
 
 
-@RULES("last_split", Kind.STR, Kind.STR)
-def last_split(text: Column, separator: Column) -> Column:
+@RULES("last_split", Kind.STR, Kind.STR, facts={"non_overlapping": split_non_overlapping})
+def last_split(text: Column, separator: Column, *, non_overlapping: bool = False) -> Column:
+    if non_overlapping:
+        return functions.call_function("substring_index", text, separator, functions.lit(-1))
     return functions.split_part(text, separator, functions.lit(-1))
+
+
+def bind(values: Sequence[Column], body: Callable[..., Column], simple: bool) -> Column:
+    if simple:
+        return body(*values)
+    packed = functions.struct(*(value.alias(str(index)) for index, value in enumerate(values)))
+    return functions.transform(
+        functions.array(packed),
+        lambda value: body(*(value[str(index)] for index in range(len(values)))),
+    )[0]
 
 
 SPLIT = SplitPrimitives(
     sequence=SEQUENCE,
-    bind=lambda values, transform: SEQUENCE.bind(
-        functions.struct(*(value.alias(str(index)) for index, value in enumerate(values))),
-        lambda value: transform(*(value.getField(str(index)) for index in range(len(values)))),
-        list_of(STR),
-    ),
+    bind=lambda values, transform: transform(*values),
     split=split,
+    words=split_words,
     join=join,
     append=functions.array_append,
     length=length,
@@ -69,19 +91,75 @@ SPLIT = SplitPrimitives(
     is_null=Column.isNull,
     reverse=functions.reverse,
     restore=lambda values: functions.transform(functions.reverse(values), functions.reverse),
+    limited=lambda text, separator, limit: split_literal(text, separator, limit.cast("int")),
+)
+
+RIGHT_SPLIT = RightSplitPrimitives(
+    split=SPLIT,
+    head=lambda value, size: functions.substring(value, functions.lit(1), size.cast("int")),
+    contains=functions.contains,
+    tail=lambda text, separator, count: functions.call_function(
+        "substring_index", text, separator, -count.cast("int")
+    ),
+    singleton=functions.array,
+    concatenate=functions.concat,
 )
 
 
-@RULES(".split", Kind.STR, Kind.STR, Kind.INT, facts={"partitioned": split_partitioned})
+@RULES(
+    ".split",
+    Kind.STR,
+    Kind.STR,
+    Kind.INT,
+    facts={"optional": separator_is_none, "simple": simple_arguments},
+)
 def split_limit(
-    text: Column, separator: Column, maximum: Column, *, partitioned: bool = False
+    text: Column,
+    separator: Column,
+    maximum: Column,
+    *,
+    optional: bool | None = None,
+    simple: bool = False,
 ) -> Column:
-    return split_limited(SPLIT, text, separator, maximum, partitioned)
+    return bind(
+        (text, separator, maximum),
+        lambda text, separator, maximum: split_limited(
+            SPLIT, text, separator, maximum, optional=optional
+        ),
+        simple,
+    )
 
 
-@RULES(".rsplit", Kind.STR, Kind.STR, facts={"partitioned": split_partitioned})
-@RULES(".rsplit", Kind.STR, Kind.STR, Kind.INT, facts={"partitioned": split_partitioned})
+@RULES(
+    ".rsplit",
+    Kind.STR,
+    Kind.STR,
+    facts={"partitioned": split_partitioned, "simple": simple_arguments},
+)
+@RULES(
+    ".rsplit",
+    Kind.STR,
+    Kind.STR,
+    Kind.INT,
+    facts={"optional": separator_is_none, "simple": simple_arguments},
+)
 def rsplit(
-    text: Column, separator: Column, maximum: Column | None = None, *, partitioned: bool = False
+    text: Column,
+    separator: Column,
+    maximum: Column | None = None,
+    *,
+    partitioned: bool = False,
+    optional: bool | None = None,
+    simple: bool = False,
 ) -> Column:
-    return split_right(SPLIT, text, separator, maximum, partitioned)
+    return bind(
+        (text, separator) if maximum is None else (text, separator, maximum),
+        lambda text, separator, maximum=None: split_right_native(
+            RIGHT_SPLIT,
+            text,
+            separator,
+            maximum,
+            split_right(SPLIT, text, separator, maximum, partitioned, optional=optional),
+        ),
+        simple,
+    )

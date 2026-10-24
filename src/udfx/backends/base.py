@@ -8,7 +8,13 @@ from functools import reduce
 from typing import Any, ClassVar, cast
 
 from udfx.backends.faults import FALLBACK_MARKER, NativeFaults, decode_fallback_error
-from udfx.backends.lowering import lower_call, lower_comprehension, lower_if, lower_program
+from udfx.backends.lowering import (
+    lower_call,
+    lower_comprehension,
+    lower_if,
+    lower_program,
+)
+from udfx.backends.lowering_context import lower_shared
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.rules import fold_predicate
 from udfx.errors import Unsupported
@@ -57,7 +63,6 @@ class Backend[E](ABC):
     rules: ClassVar[RuleSet[Any]]
     binds: ClassVar[bool] = False
     indexes: ClassVar[bool] = False
-    rewrites_words: ClassVar[bool] = True
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
@@ -150,13 +155,15 @@ class Backend[E](ABC):
     ) -> list[list[object]]: ...
 
     def lower(self, node: Node, elements: Mapping[Node, E] | None = None) -> Lowered[E]:
-        elements = elements or {}
+        return lower_shared(self, node, {} if elements is None else elements)
+
+    def lower_node(self, node: Node, elements: Mapping[Node, E]) -> Lowered[E]:
         if elements and node in elements:
             return Lowered(elements[node])
         match node:
             case Guarded():
                 value = self.lower(node.value, elements)
-                predicate = fold_predicate(node.exact)
+                predicate = fold_predicate(node.exact, self.rules.rewrite_call)
                 if predicate == TRUE:
                     return value
                 exact = self.lower(predicate, elements)
@@ -212,10 +219,13 @@ class Backend[E](ABC):
 
     def build(self, program: Program) -> E:
         self.check_names(program.schema)
-        value = lower_program(self, program)
+        value = self.lower_program(program)
         return (
             value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
         )
+
+    def lower_program(self, program: Program) -> Lowered[E]:
+        return lower_program(self, program)
 
     def exact(self, lowered: Lowered[E]) -> E | None:
         return self.conjunction(

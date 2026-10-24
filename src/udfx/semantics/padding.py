@@ -16,15 +16,22 @@ class PaddingPrimitives:
 
 
 def pad_text(
-    primitives: PaddingPrimitives, value: Any, width: Any, fill: Any, method: str
+    primitives: PaddingPrimitives,
+    value: Any,
+    width: Any,
+    fill: Any,
+    method: str,
+    *,
+    maximum: int | None = None,
 ) -> tuple[Any, Any]:
     sequence = primitives.sequence
     literal = primitives.literal
     when = sequence.bounds.when
     zero = literal(0)
     limit = literal(NATIVE_PADDING_LIMIT)
-    exact = width <= limit
-    width = when((width > zero) & exact, width, zero)
+    exact = None if maximum is not None and maximum <= NATIVE_PADDING_LIMIT else width <= limit
+    positive = width > zero
+    width = when(positive if exact is None else positive & exact, width, zero)
     padding = sequence.bounds.clip(width - sequence.length(value), zero, limit)
     if method == "zfill":
         zeros = primitives.repeat(literal("0"), padding)

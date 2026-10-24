@@ -4,7 +4,11 @@ from duckdb import Expression
 
 from udfx.backends.duckdb.rules import RULES, constant, function, null_safe_equal, when
 from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
-from udfx.semantics.datetimes import DatetimeArithmeticPrimitives, DatetimePrimitives
+from udfx.semantics.datetimes import (
+    TIMESTAMP_LITERAL,
+    DatetimeArithmeticPrimitives,
+    DatetimePrimitives,
+)
 
 
 def part(value: Expression, name: str) -> Expression:
@@ -31,7 +35,11 @@ register_datetimes(
         extract=lambda text, pattern, group: function(
             "regexp_extract", text, constant(pattern), constant(group)
         ),
-        parse=lambda text: function("try_strptime", text, constant("%Y-%m-%d %H:%M:%S.%f")),
+        parse=lambda text: when(
+            function("regexp_matches", text, constant(TIMESTAMP_LITERAL)),
+            function("try_strptime", text, constant("%Y-%m-%d %H:%M:%S.%f")),
+            constant(None),
+        ),
         to_integer=lambda value: function("nullif", value, constant("")).cast("BIGINT"),
         select=when,
         is_null=Expression.isnull,
@@ -44,6 +52,7 @@ register_datetime_arithmetic(
     RULES,
     DatetimeArithmeticPrimitives(
         literal=constant,
+        difference=lambda left, right: function("epoch_us", left) - function("epoch_us", right),
         to_microseconds=lambda value: function("epoch_us", value),
         from_microseconds=lambda value: function("make_timestamp", value),
         select=when,
