@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import heapq
+import json
 import math
 import os
 import posixpath
 import re
+from collections import Counter
 from datetime import datetime
 
 from udfx.errors import Unsupported
@@ -12,6 +15,10 @@ from udfx.frontend.core.values import (
 )
 
 CALLABLES: tuple[tuple[object, str], ...] = (
+    (Counter, "collections.Counter"),
+    (heapq.nlargest, "heapq.nlargest"),
+    (json.dumps, "json.dumps"),
+    (json.loads, "json.loads"),
     (abs, "abs"),
     (any, "any"),
     (all, "all"),

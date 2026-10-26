@@ -6,9 +6,11 @@ from typing import ClassVar
 import polars as pl
 
 from udfx.backends.base import RAISED, RESERVED, Backend, Row, output_names, transpose_rows
+from udfx.backends.hoisting import free
 from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES, broadcast, evaluate_list
 from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
 from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
@@ -20,14 +22,17 @@ ROW = f"{RESERVED}row"
 class PolarsBackend(Backend[pl.Expr]):
     name: ClassVar[str] = "polars"
     rules: ClassVar[RuleSet[pl.Expr]] = RULES
+    graphs: ClassVar[bool] = True
 
     def build(self, program: Program) -> pl.Expr:
         expr = super().build(program)
         return expr if expr.meta.root_names() else broadcast(expr)
 
-    def lower(self, node: Node, elements: Mapping[Node, pl.Expr] | None = None) -> Lowered[pl.Expr]:
+    def lower(self, node: Node, elements: Scope[pl.Expr] | None = None) -> Lowered[pl.Expr]:
         if isinstance(node, Comprehension) and elements:
-            raise Unsupported("Polars cannot nest list element scopes")
+            captured = free(node.value) | free(node.condition) | free(node.fault)
+            if captured - {node.element}:
+                raise Unsupported("Polars cannot capture outer list elements")
         return super().lower(node, elements)
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
@@ -40,11 +45,37 @@ class PolarsBackend(Backend[pl.Expr]):
     def column(self, node: Col) -> pl.Expr:
         return pl.col(node.name)
 
+    def bind(self, value: pl.Expr, body: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
+        return pl.concat_arr(value).arr.to_list().list.eval(body(pl.element())).list.first()
+
+    def bind_sequence(
+        self, value: pl.Expr, steps: Sequence[Callable[[pl.Expr], pl.Expr]]
+    ) -> pl.Expr:
+        def nested(index: int, expression: pl.Expr) -> pl.Expr:
+            if index == len(steps):
+                return expression
+            return self.bind(expression, lambda item: nested(index + 1, steps[index](item)))
+
+        return nested(0, value)
+
+    def record(self, values: Sequence[pl.Expr]) -> pl.Expr:
+        return pl.struct([value.alias(str(index)) for index, value in enumerate(values)])
+
+    def field(self, value: pl.Expr, index: int) -> pl.Expr:
+        return value.struct.field(str(index))
+
     def literal(self, node: Lit) -> pl.Expr:
         return pl.lit(node.value, dtype=dtype(node.type))
 
     def select(self, condition: pl.Expr, then: pl.Expr, orelse: pl.Expr) -> pl.Expr:
         return pl.when(condition).then(then).otherwise(orelse)
+
+    def select_many(self, cases: Sequence[tuple[pl.Expr, pl.Expr]], orelse: pl.Expr) -> pl.Expr:
+        condition, value = cases[0]
+        selected = pl.when(condition).then(value)
+        for condition, value in cases[1:]:
+            selected = selected.when(condition).then(value)
+        return selected.otherwise(orelse)
 
     def list_value(self, items: Sequence[pl.Expr], type: Type) -> pl.Expr:
         if items and type.item is not None and type.item.kind is Kind.LIST:

@@ -9,9 +9,11 @@ from duckdb import Expression
 
 from udfx.backends.duckdb.conversions import TEXT as TRANSLATION
 from udfx.backends.duckdb.rules import (
+    ASCII,
     ITEM,
     RULES,
     column,
+    concatenate,
     constant,
     function,
     length,
@@ -27,7 +29,7 @@ from udfx.backends.registration import (
 )
 from udfx.frontend.core.sequences import join_words, word_item
 from udfx.frontend.core.text import folded_case_chain
-from udfx.semantics import text
+from udfx.semantics import casing, text
 from udfx.semantics.clusters import CLUSTER_JOINERS
 from udfx.semantics.facts import pattern_is_empty
 from udfx.semantics.sequences import SearchPrimitives, count_occurrences, reverse_find
@@ -40,6 +42,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
+from udfx.semantics.text_predicates import unicode_match
 from udfx.types import INT64_MAX, Kind
 
 POINT = "udfx point"
@@ -60,11 +63,10 @@ def case_drift(method: str) -> CaseDrift:
 
 def recase(value: Expression, method: str) -> RuleResult[Expression]:
     expr = case_expression(CASE, value, method)
-    sigma = function("contains", value, constant(SIGMA))
     exact = case_guard(
         case_drift(method),
-        lambda pattern: function("regexp_matches", value, constant(pattern)),
-        sigma,
+        partial(unicode_match, ASCII, CASE.matches, value),
+        function("contains", value, constant(SIGMA)),
     )
     return expr if exact is None else Lowered(expr, exact)
 
@@ -140,7 +142,7 @@ def join(separator: Expression, words: Expression) -> Expression:
     first = column(INDEX) == constant(1)
     prefixed = when(first, column(ITEM), function("concat", separator, column(ITEM)))
     pieces = function("list_transform", words, duckdb.LambdaExpression((ITEM, INDEX), prefixed))
-    return function("array_to_string", pieces, constant(""))
+    return concatenate(pieces)
 
 
 RULES(".join", Kind.STR, Kind.LIST)(join)
@@ -216,17 +218,15 @@ for method in CASE_METHODS:
 CASE = CasePrimitives(
     lower=lambda value: function("lower", value),
     upper=lambda value: function("upper", value),
-    title=lambda value: text.title_words(
+    title=lambda value: casing.title_words(
         CASE,
         value,
-        lambda value, pattern, transform: function(
-            "array_to_string",
+        lambda value, pattern, transform: concatenate(
             function(
                 "list_transform",
                 function("regexp_extract_all", value, constant(pattern)),
                 duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
             ),
-            constant(""),
         ),
     ),
     head=lambda value: function("substring", value, constant(1), constant(1)),
@@ -234,14 +234,12 @@ CASE = CasePrimitives(
     concat=lambda *values: function("concat", *values),
     when=when,
     matches=lambda value, pattern: function("regexp_matches", value, constant(pattern)),
-    characters=lambda value, transform: function(
-        "array_to_string",
+    characters=lambda value, transform: concatenate(
         function(
             "list_transform",
             function("string_split", value, constant("")),
             duckdb.LambdaExpression(ITEM, transform(column(ITEM))),
         ),
-        constant(""),
     ),
 )
 

@@ -15,9 +15,23 @@ PATTERN = re.compile(r"udfx fault ([0-9a-f]+):([0-9A-Fa-f]+)")
 FALLBACK_MARKER = "udfx raised "
 
 
+def encode_fallback_error(error: Exception) -> str:
+    detail = str(error)
+    if isinstance(error, json.JSONDecodeError):
+        detail = json.dumps([error.msg, error.doc, error.pos]).encode().hex()
+    return f"{FALLBACK_MARKER}{type(error).__name__}: {detail}"
+
+
 def decode_fallback_error(text: str) -> Exception | None:
     _, found, detail = text.partition(FALLBACK_MARKER)
     name, _, message = detail.partition(": ")
+    if found and name.strip() == "JSONDecodeError":
+        encoded = re.match(r"[0-9a-f]+", message)
+        if encoded is not None:
+            try:
+                return json.JSONDecodeError(*json.loads(bytes.fromhex(encoded.group())))
+            except (ValueError, TypeError):
+                return None
     kind = getattr(builtins, name.strip(), None)
     if not found or not isinstance(kind, type) or not issubclass(kind, Exception):
         return None

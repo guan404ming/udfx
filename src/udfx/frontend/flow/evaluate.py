@@ -13,7 +13,7 @@ from udfx.frontend.operations.attributes import load_attribute
 from udfx.frontend.operations.formatting import build_string, format_operand
 from udfx.frontend.operations.iterables import iterator_of
 from udfx.frontend.operations.library import require_empty_keywords
-from udfx.frontend.resolve.constants import constant, global_item
+from udfx.frontend.resolve.constants import constant, constant_value, global_item
 from udfx.frontend.resolve.functions import make_function
 from udfx.ir import lit
 
@@ -54,6 +54,17 @@ def delete(frame: Frame, flow: Flow, op: ops.Delete) -> list[Result]:
 @evaluates(ops.Global)
 def global_(frame: Frame, flow: Flow, op: ops.Global) -> list[Result]:
     return [Produced(flow.bindings, (global_item(frame.scope, frame.builtins, op.name),))]
+
+
+@evaluates(ops.Import)
+def import_(frame: Frame, flow: Flow, op: ops.Import) -> list[Result]:
+    module = frame.snapshot.imported(
+        op.name,
+        constant_value(flow.values[op.level]),
+        constant_value(flow.values[op.names]),
+        frame.builtins,
+    )
+    return [Produced(flow.bindings, (constant(module),))]
 
 
 @evaluates(ops.Placeholder)
@@ -149,6 +160,13 @@ def build(frame: Frame, flow: Flow, op: ops.Build) -> list[Result]:
 def extend(frame: Frame, flow: Flow, op: ops.Extend) -> list[Result]:
     container, source = flow.values[op.container], flow.values[op.source]
     evaluation = containers.extend(container, source, op.kind, frame.where(op.offset))
+    return frame.settle(flow.bindings, evaluation)
+
+
+@evaluates(ops.MapAdd)
+def map_add(frame: Frame, flow: Flow, op: ops.MapAdd) -> list[Result]:
+    values = flow.values
+    evaluation = containers.map_add(values[op.container], values[op.key], values[op.value])
     return frame.settle(flow.bindings, evaluation)
 
 

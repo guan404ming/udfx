@@ -16,6 +16,15 @@ def build_map(items: tuple[Item, ...]) -> Evaluation:
     return single(Opaque(dict(zip(constants[::2], constants[1::2], strict=True))))
 
 
+def map_add(container: Item, key: Item, value: Item) -> Evaluation:
+    mapping = constant_value(container)
+    if not isinstance(mapping, dict):
+        raise Unsupported("map insertion requires a constant dictionary")
+    name = constant_value(key)
+    scalar_map(((name, None),))
+    return single(Opaque({**mapping, name: constant_value(value)}))
+
+
 def build_keys_map(items: tuple[Item, ...], where: str) -> Evaluation:
     *values, keys = items
     names = constant_value(keys)
@@ -102,7 +111,9 @@ def extend(current: Item, source: Item, kind: str, where: str) -> Evaluation:
         members = constant_value(source)
         existing = constant_value(current)
     except Unsupported:
-        raise Unsupported("list and set literal extension requires constants", where) from None
+        raise Unsupported("container literal extension requires constants", where) from None
+    if kind == "map" and isinstance(existing, dict) and isinstance(members, dict):
+        return single(Opaque({**existing, **members}))
     sequences = (tuple, list, set, frozenset)
     if not isinstance(members, sequences) or not isinstance(existing, sequences):
         raise Unsupported("list and set literals", where)

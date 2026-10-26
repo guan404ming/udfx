@@ -4,8 +4,8 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from workloads.corpus.cases_callables import CASES, Case
 
-from .cases_callables import CASES, Case
 from .test_corpus import test_case as check_case
 
 pytestmark = pytest.mark.corpus

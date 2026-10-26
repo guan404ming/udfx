@@ -9,9 +9,10 @@ from udfx.frontend.core.bindings import Bindings
 from udfx.frontend.core.evaluation import Raise, Return
 from udfx.frontend.core.logic import disjunction
 from udfx.frontend.core.merge import merge
+from udfx.frontend.core.tracing import joining_helpers
 from udfx.frontend.core.values import Row, Value, named
 from udfx.frontend.flow.frame import Flow, Frame
-from udfx.frontend.flow.machine import explore
+from udfx.frontend.flow.machine import PathLimit, explore
 from udfx.frontend.resolve.frozen import Snapshot, closure
 from udfx.frontend.resolve.functions import parameters
 from udfx.ir import FALSE, TRUE, Col
@@ -20,6 +21,14 @@ from udfx.types import Type
 
 
 def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Program:
+    try:
+        return trace_function(function, schema)
+    except PathLimit:
+        with joining_helpers():
+            return trace_function(function, schema)
+
+
+def trace_function(function: Callable[..., object], schema: Mapping[str, Type]) -> Program:
     if not inspect.isfunction(function):
         raise Unsupported(f"{named(function)} is not a Python function")
     for name, column_type in schema.items():
@@ -47,4 +56,10 @@ def trace(function: Callable[..., object], schema: Mapping[str, Type]) -> Progra
         raise Unsupported("function never returns")
     faults = [outcome.path for outcome in outcomes if isinstance(outcome, Raise)]
     value = merge(returns, faults)
-    return Program(function, dict(schema), value, reduce(disjunction, faults, FALSE), row_mode)
+    return Program(
+        snapshot.callable(function),
+        dict(schema),
+        value,
+        reduce(disjunction, faults, FALSE),
+        row_mode,
+    )

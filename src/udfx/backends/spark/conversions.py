@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.registration import Lowered, register_text_conversions
+from udfx.backends.registration import Lowered, register_json, register_text_conversions
 from udfx.backends.spark.numbers import cast_float64, float_isinf
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import (
@@ -29,6 +29,7 @@ TEXT = TextPrimitives(
     not_null=Column.isNotNull,
     try_int=lambda text: text.try_cast("bigint"),
     try_float=lambda text: text.try_cast("double"),
+    lazy_coalesce=True,
 )
 
 SPELLING = SpellingPrimitives(functions.lit, when, Column.isNull, functions.coalesce)
@@ -72,3 +73,10 @@ def bool_str(value: Column) -> Column:
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 register_text_conversions(RULES, TEXT)
+register_json(
+    RULES,
+    TEXT,
+    functions.concat,
+    lambda text, pattern: functions.regexp_extract_all(text, functions.lit(pattern), 0),
+    possessive=True,
+)

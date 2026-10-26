@@ -3,13 +3,13 @@ from typing import Any
 
 import pytest
 from conftest import backend_params
-from corpus.cases_lists import total_numbers, unpack_numbers
 
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.testing import check_function
 from udfx.types import INT, INT64_MAX, INT64_MIN, STR, list_of
+from workloads.corpus.cases_lists import total_numbers, unpack_numbers
 
 
 def sum_numbers(numbers: list[int]) -> int:

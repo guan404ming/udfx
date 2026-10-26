@@ -4,14 +4,14 @@ from typing import Any
 import pytest
 from conftest import backend_params
 
-from bench.speed.timing import fallback_in_plan
-from tests.corpus.cases_lists import total_word_length, weighted_word_length
+from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.testing import check_function
 from udfx.types import INT, INT64_MAX, INT64_MIN, STR, list_of
+from workloads.corpus.cases_lists import total_word_length, weighted_word_length
 
 
 @pytest.mark.parametrize("backend", backend_params())

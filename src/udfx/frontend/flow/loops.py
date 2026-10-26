@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import replace
-from functools import reduce
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.evaluation import Raise, guard
 from udfx.frontend.core.expressions import invoke, node_of
-from udfx.frontend.core.logic import choose, depends_on, disjunction
+from udfx.frontend.core.logic import depends_on
 from udfx.frontend.core.values import Item, Iterator, Opaque, Value
 from udfx.frontend.decode import graph, ops
+from udfx.frontend.flow.comprehensions import comprehension, region_of, series, target_names
 from udfx.frontend.flow.frame import Flow, Frame
-from udfx.frontend.flow.machine import Step, divert, exits, explore, follow, operation_at
+from udfx.frontend.flow.machine import Step, divert, exits, explore, follow
 from udfx.frontend.operations.iterables import indexed
-from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Lit, Node, lit
+from udfx.ir import TRUE, Call, Element, Lit, Node, lit
 from udfx.ops import apply
 from udfx.types import FLOAT, INT, STR
 
@@ -31,31 +30,8 @@ def is_empty_list(item: Item | None) -> bool:
     )
 
 
-def target_names(body: Sequence[ops.Op]) -> set[str]:
-    names: set[str] = set()
-    for op in body:
-        if isinstance(op, ops.Store) and not op.cell:
-            names.add(op.name)
-        elif not (isinstance(op, ops.Unpack) and not op.starred):
-            break
-    return names
-
-
-def region_of(frame: Frame, exit: graph.ForEach) -> frozenset[int]:
-    return frozenset(block.offset for block in frame.decoded.span(exit.offset, exit.end))
-
-
 def leave(frame: Frame, flow: Flow, exit: graph.ForEach, values: dict[int, Item]) -> Step:
     return follow(frame, flow, exit.done, {**values, exit.dummy: Opaque(None)})
-
-
-def validate_fault_handlers(frame: Frame) -> None:
-    while True:
-        if frame.decoded.catches:
-            raise Unsupported("comprehension faults with exception handlers")
-        if frame.caller is None:
-            return
-        frame = frame.caller[0]
 
 
 @exits(graph.ForEach)
@@ -67,8 +43,13 @@ def iterate(frame: Frame, flow: Flow, exit: graph.ForEach) -> list[Step]:
     if exit.accumulator is not None and is_empty_list(below):
         if not iterator.items and iterator.source is None:
             return [leave(frame, flow, exit, dict(flow.values))]
-        node = comprehension(frame, flow, exit, iterator, ops.Append)
-        return [leave(frame, flow, exit, {**flow.values, exit.accumulator: Value(node)})]
+        item, pending = comprehension(frame, flow, exit, iterator, ops.Append)
+        path, raised = guard(flow.bindings.path, pending)
+        steps = [divert(frame, flow, exit, failure) for failure in raised]
+        if path is not None:
+            stored = replace(flow, bindings=flow.bindings.under(path))
+            steps.append(leave(frame, stored, exit, {**flow.values, exit.accumulator: item}))
+        return steps
     if iterator.source is not None:
         if iterator.value is not None and not iterator.requires_native:
             return reduced_loop(frame, flow, exit, iterator)
@@ -81,82 +62,6 @@ def iterate(frame: Frame, flow: Flow, exit: graph.ForEach) -> list[Step]:
         exit.item: iterator.items[iterator.position],
     }
     return [follow(frame, flow, exit.body, values)]
-
-
-def comprehension(
-    frame: Frame, flow: Flow, exit: graph.ForEach, iterator: Iterator, operation: type[ops.Op]
-) -> Node:
-    validate_comprehension(frame, exit)
-    decoded = frame.decoded
-    source, element, item = indexed(iterator, f"{frame.code.co_qualname}:{exit.offset}")
-    nested = replace(frame, catching=False)
-    region = region_of(frame, exit)
-
-    def boundary(current: Flow) -> bool:
-        return (
-            current.block == flow.block
-            or current.block not in region
-            or isinstance(operation_at(decoded, current), operation)
-        )
-
-    values = {**flow.values, exit.advanced: iterator, exit.item: item}
-    start = follow(nested, replace(flow, bindings=flow.bindings.under(TRUE)), exit.body, values)
-    cases: list[tuple[Node, Node]] = []
-    failures: list[Node] = []
-    for outcome in explore(nested, start, boundary):
-        if isinstance(outcome, Raise):
-            failures.append(outcome.path)
-            continue
-        if not isinstance(outcome, Flow):
-            raise refusal(frame, exit)
-        reached = operation_at(decoded, outcome)
-        if isinstance(reached, operation) and isinstance(reached, ops.Append | ops.Yield):
-            cases.append((outcome.bindings.path, node_of(outcome.values[reached.value])))
-        elif outcome.block != flow.block:
-            raise refusal(frame, exit)
-    return series(
-        frame,
-        source,
-        element,
-        cases,
-        failures,
-        empty=lit(""),
-        requires_native=iterator.requires_native,
-    )
-
-
-def validate_comprehension(frame: Frame, exit: graph.ForEach) -> None:
-    body = frame.decoded.operations(exit.offset + 1, exit.end)
-    if any(isinstance(op, graph.ForEach) or (isinstance(op, ops.Store) and op.cell) for op in body):
-        raise refusal(frame, exit)
-    names = target_names(body)
-    if not names:
-        raise refusal(frame, exit)
-    if any(isinstance(op, ops.Store) and not op.cell and op.name not in names for op in body):
-        raise Unsupported("comprehension assignment", frame.where(exit.offset))
-
-
-def series(
-    frame: Frame,
-    source: Node,
-    element: Element,
-    cases: list[tuple[Node, Node]],
-    failures: list[Node],
-    *,
-    empty: Node,
-    requires_native: bool = False,
-) -> Comprehension:
-    node = Comprehension(
-        source,
-        element,
-        choose(cases) if cases else empty,
-        reduce(disjunction, (path for path, _ in cases), FALSE),
-        reduce(disjunction, failures, FALSE),
-        requires_native,
-    )
-    if node.fault != FALSE:
-        validate_fault_handlers(frame)
-    return node
 
 
 def reduction_target(frame: Frame, exit: graph.ForEach) -> str:

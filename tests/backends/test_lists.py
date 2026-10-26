@@ -91,7 +91,7 @@ def test_single_invariant_split_binds_once(backend: Backend[Any]) -> None:
     program = trace(split_counts, {"text": STR})
     assert isinstance(program.value, Comprehension)
     source = backend.lower(program.value.source).expr
-    assert str(backend.build(program)).count("text") == str(source).count("text")
+    assert str(backend.lower_program(program).expr).count("text") == str(source).count("text")
     assert check_function(split_counts, {"text": STR}, backend, [("a,b,c",), ("",)]) == []
 
 

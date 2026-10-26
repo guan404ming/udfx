@@ -22,6 +22,10 @@ EVALUATORS: dict[type, Evaluator] = {}
 EXITS: dict[type, Exit] = {}
 
 
+class PathLimit(Unsupported):
+    pass
+
+
 def evaluates(*kinds: type) -> Callable[[Evaluator], Evaluator]:
     def register(evaluator: Evaluator) -> Evaluator:
         for kind in kinds:
@@ -109,7 +113,7 @@ def explore(frame: Frame, start: Flow, stop: Callable[[Flow], bool] | None = Non
         flow = pending.pop()
         count += operation_at(frame.decoded, flow).weight
         if count > MAX_STEPS:
-            raise Unsupported(
+            raise PathLimit(
                 f"more than {MAX_STEPS} execution paths; "
                 "the function has too many independent branches for one expression"
             )

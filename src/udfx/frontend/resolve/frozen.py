@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from types import CellType, FunctionType, ModuleType
+import sys
+from collections.abc import Callable, Mapping
+from types import BuiltinFunctionType, CellType, FunctionType, ModuleType
 
+from udfx.errors import Unsupported
 from udfx.frontend.core.values import Item
 from udfx.frontend.resolve.callables import known_op
 from udfx.frontend.resolve.constants import constant
+from udfx.frontend.resolve.imports import (
+    STANDARD_IMPORT,
+    FrozenModule,
+    ImportTable,
+    capture_imports,
+)
 from udfx.semantics.functions import code_names
 
 
@@ -12,9 +21,39 @@ class Snapshot:
     def __init__(self) -> None:
         self.values: dict[int, object] = {}
         self.modules: dict[ModuleType, dict[str, object]] = {}
+        self.imports: dict[tuple[str, tuple[str, ...]], ModuleType] = {}
+        self.importer = ImportTable(self.imports)
+
+    def imported(
+        self, name: str, level: object, names: object, scope: Mapping[str, object]
+    ) -> object:
+        if level != 0 or scope.get("__import__") is not self.importer:
+            raise Unsupported("imports require the standard absolute import mechanism")
+        if names is not None and not (
+            isinstance(names, tuple) and all(isinstance(item, str) for item in names)
+        ):
+            raise Unsupported("import names require a constant tuple")
+        members = tuple(str(item) for item in names or ())
+        target = name if members else name.split(".", maxsplit=1)[0]
+        module = sys.modules.get(target)
+        if not isinstance(sys.modules.get(name), ModuleType) or not isinstance(module, ModuleType):
+            raise Unsupported(f"import requires an already loaded module: {name}")
+        frozen = self.value(module)
+        if not isinstance(frozen, ModuleType):
+            raise Unsupported(f"import requires a module: {name}")
+        self.imports[name, members] = frozen
+        return frozen
 
     def members(self, module: ModuleType) -> dict[str, object]:
         return self.modules.get(module, vars(module))
+
+    def callable(self, function: FunctionType) -> Callable[..., object]:
+        if not self.imports:
+            return function
+        functions = list(
+            {value for value in self.values.values() if isinstance(value, FunctionType)}
+        )
+        return capture_imports(function, functions, self.imports, list(self.modules))
 
     def attribute(self, module: ModuleType, name: str) -> object:
         value = self.value(self.members(module)[name])
@@ -28,7 +67,7 @@ class Snapshot:
         if isinstance(value, FunctionType) and known_op(value) is None:
             return self.function(value)
         if isinstance(value, ModuleType):
-            frozen = ModuleType(value.__name__)
+            frozen = FrozenModule(value.__name__)
             self.modules[frozen] = vars(value).copy()
             self.values[id(value)] = frozen
             self.values[id(frozen)] = frozen
@@ -44,9 +83,15 @@ class Snapshot:
         existing = self.values.get(id(function))
         if isinstance(existing, FunctionType):
             return existing
+        namespace = dict(function.__builtins__)
+        if (
+            isinstance(STANDARD_IMPORT, BuiltinFunctionType)
+            and namespace.get("__import__") is STANDARD_IMPORT
+        ):
+            namespace["__import__"] = self.importer
         frozen = FunctionType(
             function.__code__,
-            {"__builtins__": function.__builtins__},
+            {"__builtins__": namespace},
             function.__name__,
             function.__defaults__,
             tuple(_freeze_cell(cell) for cell in function.__closure__)

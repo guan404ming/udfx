@@ -48,6 +48,16 @@ def ordered(value: pl.Expr) -> pl.Expr:
     return value.list.sort()
 
 
+@RULES("frequency_order", Kind.LIST)
+def frequency_order(value: pl.Expr) -> pl.Expr:
+    element = pl.element()
+    runs = element.sort().rle()
+    keys = runs.struct.field("value")
+    indexes = pl.int_range(pl.len()).sort_by(element, maintain_order=True)
+    first = indexes.gather(element.sort().search_sorted(keys))
+    return value.list.eval(keys.sort_by(runs.struct.field("len"), first, descending=[True, False]))
+
+
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)
 def float_contains(value: pl.Expr, item: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(list_contains(value, item), item.is_not_nan())

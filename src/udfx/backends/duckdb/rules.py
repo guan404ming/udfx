@@ -1,20 +1,27 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from typing import Any, cast
 
 import duckdb
 from duckdb import Expression
 
+from udfx.backends.lowering_context import lowering_context
 from udfx.backends.registration import RuleSet
 from udfx.semantics.text import strip_pattern
+from udfx.semantics.text_predicates import AsciiPrimitives
 
 RULES: RuleSet[Expression] = RuleSet()
 ITEM = "udfx item"
 
-function = duckdb.FunctionExpression
 NAN = duckdb.SQLExpression("'nan'::DOUBLE")
+
+
+def function(name: str, *arguments: Expression) -> Expression:
+    if name in {"list_transform", "list_filter"}:
+        with lowering_context() as context:
+            context.has_bindings = True
+    return duckdb.FunctionExpression(name, *arguments)
 
 
 def column(name: str) -> Expression:
@@ -22,8 +29,10 @@ def column(name: str) -> Expression:
 
 
 def constant(value: object) -> Expression:
-    if isinstance(value, float) and math.isnan(value):
-        return NAN
+    if isinstance(value, float):
+        return duckdb.ConstantExpression(repr(value)).cast("DOUBLE")
+    if isinstance(value, str) and "\x00" in value:
+        return function("decode", constant(value.encode("utf-8")))
     return duckdb.ConstantExpression(cast("Any", value))
 
 
@@ -56,6 +65,10 @@ def length(value: Expression) -> Expression:
     return function("len", value)
 
 
+def concatenate(items: Expression) -> Expression:
+    return duckdb.CoalesceOperator(function("array_to_string", items, constant("")), constant(""))
+
+
 def trim(text: Expression, characters: str, method: str) -> Expression:
     return function(
         "regexp_replace",
@@ -64,3 +77,10 @@ def trim(text: Expression, characters: str, method: str) -> Expression:
         constant(""),
         constant("g"),
     )
+
+
+ASCII = AsciiPrimitives(
+    is_ascii=lambda value: function("strlen", value) == length(value),
+    when=when,
+    literal=constant,
+)

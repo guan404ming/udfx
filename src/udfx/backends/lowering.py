@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast
 
-from udfx.backends.diagnostics import record_lowering
-from udfx.backends.hoisting import exact_free, hoist, invariant, size
+from udfx.backends.hoisting import exact_free, hoist, invariant, repeated_condition
 from udfx.backends.indexing import (
     Parts,
     comprehension_parts,
@@ -14,14 +13,14 @@ from udfx.backends.indexing import (
     literal_range,
     lower_indexed,
 )
-from udfx.backends.lowering_context import bindings_enabled
+from udfx.backends.lowering_context import assuming_exact, bindings_enabled
 from udfx.backends.reductions import lower_reduction
 from udfx.backends.registration import Lowered, RuleResult
-from udfx.backends.rules import fold_predicate
+from udfx.backends.rules import Scope, fold_predicate
+from udfx.backends.selection import lower_cases
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
 from udfx.ops import OpKey
-from udfx.program import Program
 from udfx.semantics.assumptions import assuming
 from udfx.types import Kind
 
@@ -29,54 +28,27 @@ if TYPE_CHECKING:
     from udfx.backends.base import Backend
 
 
-EXPANDED_LIMIT = 10_000
-
-
-def lower_program[E](backend: Backend[E], program: Program) -> Lowered[E]:
-    expanded = size(program.value) + size(program.fault)
-    if expanded > EXPANDED_LIMIT:
-        raise Unsupported(
-            f"the expression has {expanded} nodes once shared values are expanded; "
-            f"the limit is {EXPANDED_LIMIT}"
-        )
-    predicate = fold_predicate(program.fault, backend.rules.rewrite_call)
-    with assuming(predicate, False):
-        value = backend.lower(program.value)
-    expr, exact, failure = value.expr, value.exact, value.overflow
-    fault_guard = False
-    native_errors = False
-    if predicate != FALSE:
-        fault = backend.lower(predicate)
-        fault_guard = fault.exact is not None or fault.overflow is not None
-        exact = backend.conjunction(exact, backend.exact(fault))
-        failure = backend.disjunction(failure, fault.expr)
-    if failure is not None:
-        raised = backend.native_raise(program)
-        native_errors = raised is not None
-        if raised is None:
-            exact = backend.conjunction(exact, backend.negate(failure))
-        else:
-            condition = failure if exact is None else backend.both(failure, exact)
-            expr = backend.select(condition, raised, expr)
-    record_lowering(
-        exact,
-        value_guard=value.exact is not None,
-        fault_guard=fault_guard,
-        failure=failure is not None,
-        native_errors=native_errors,
-    )
-    return Lowered(expr, exact)
-
-
-def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Node, E]) -> Lowered[E]:
+def lower_if[E](
+    backend: Backend[E],
+    node: If,
+    elements: Scope[E],
+    lower_result: Callable[[Node, Scope[E]], Lowered[E]] | None = None,
+) -> Lowered[E]:
+    lower = lower_result or backend.lower
     predicate = fold_predicate(node.condition, backend.rules.rewrite_call)
     if predicate in (TRUE, FALSE):
-        return backend.lower(node.then if predicate == TRUE else node.orelse, elements)
+        return lower(node.then if predicate == TRUE else node.orelse, elements)
+    repeated = repeated_condition(node, elements) if bindings_enabled(backend.binds) else None
+    if repeated is not None and exact_free(backend, repeated, elements):
+        return hoist(backend, node, elements, repeated, lower_result)
+    selected = lower_cases(backend, node, elements)
+    if selected is not None:
+        return selected
     condition = backend.lower(predicate, elements)
-    with assuming(predicate, True):
-        then = backend.lower(node.then, elements)
-    with assuming(predicate, False):
-        orelse = backend.lower(node.orelse, elements)
+    with assuming(predicate, True), assuming_exact(predicate):
+        then = lower(node.then, elements)
+    with assuming(predicate, False), assuming_exact(predicate):
+        orelse = lower(node.orelse, elements)
     expr = backend.select(condition.expr, then.expr, orelse.expr)
     exact = backend.exact(condition)
     if then.exact is not None or orelse.exact is not None:
@@ -96,7 +68,7 @@ def lower_if[E](backend: Backend[E], node: If, elements: Mapping[Node, E]) -> Lo
     return Lowered(expr, exact, overflow)
 
 
-def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Node, E]) -> Lowered[E]:
+def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowered[E]:
     reduced = lower_reduction(backend, node, elements)
     if reduced is not None:
         return reduced
@@ -137,7 +109,7 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Mapping[Node, E]) -
 
 
 def lower_comprehension[E](
-    backend: Backend[E], node: Comprehension, elements: Mapping[Node, E]
+    backend: Backend[E], node: Comprehension, elements: Scope[E]
 ) -> Lowered[E]:
     hoisted = invariant(node, elements) if bindings_enabled(backend.binds) else None
     if hoisted is not None and exact_free(backend, hoisted, elements):
@@ -209,7 +181,7 @@ def lower_comprehension[E](
 
 
 def rewrite_range[E](
-    backend: Backend[E], node: Comprehension, elements: Mapping[Node, E]
+    backend: Backend[E], node: Comprehension, elements: Scope[E]
 ) -> Lowered[E] | None:
     with suppress(Unsupported):
         unrolled = literal_range(node)

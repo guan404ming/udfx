@@ -96,6 +96,10 @@ def comparison(symbol: str, left: Item, right: Item, where: str) -> Evaluation:
     if name is None:
         raise Unsupported(f"comparison {symbol}", where)
     if name in ("__eq__", "__ne__"):
+        if all(isinstance(item, Value) and isinstance(item.node, Lit) for item in (left, right)):
+            return single(
+                constant(getattr(operator, name)(constant_value(left), constant_value(right)))
+            )
         test = type_comparison(left, right)
         if test is not None:
             return single(Value(negate(test) if name == "__ne__" else test))
@@ -137,6 +141,8 @@ def membership(item: Item, container: Item, negated: bool) -> Evaluation:
 
 
 def subscript(container: Item, index: Item, where: str) -> Evaluation:
+    if isinstance(container, Opaque) and isinstance(container.value, tuple):
+        container = Tuple(tuple(constant(value) for value in container.value))
     if isinstance(container, Tuple):
         position = constant_value(index)
         if not isinstance(position, int):

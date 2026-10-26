@@ -1,0 +1,177 @@
+{
+  "name": "UDFBench tiny",
+  "source": "https://github.com/athenarc/UDFBench",
+  "revision": "8da987566590e2534f24cd97bcfaa9157c24962c",
+  "license": "GPL-3.0; upstream files remain outside the distribution",
+  "published_inventory": {
+    "scalar": 24,
+    "aggregate": 4,
+    "table": 14,
+    "queries": 21
+  },
+  "python_scalar_files": 25,
+  "inventory_note": "The Spark directory includes jsonparse in addition to the 24 documented scalar functions. All 25 files remain in the inventory.",
+  "selection": "Original Parquet row order. Explicit column bindings. No row filtering or function rewrites. Frequentterms uses N=5. Jsonparse uses key1=value. Jaccard compares adjacent author lists (last pairs with first).",
+  "files": [
+    {
+      "path": "dataset/parquet/tiny/artifact_abstracts/artifact_abstracts.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/artifact_abstracts/artifact_abstracts.parquet",
+      "sha256": "6ecebb494dbecdaabdf7c59d8b97c57b5445357e07228a8d6abcff3d3cfdb31a"
+    },
+    {
+      "path": "dataset/parquet/tiny/artifact_authorlists/artifact_authorlists.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/artifact_authorlists/artifact_authorlists.parquet",
+      "sha256": "51a1de4d5e94b2e2188fc141a04d88b50c1bbd7afd8db70b0c27926e03251a95"
+    },
+    {
+      "path": "dataset/parquet/tiny/artifact_authors/artifact_authors.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/artifact_authors/artifact_authors.parquet",
+      "sha256": "706422896764e623511166d9ccca4bf321ee1603540d41b3671319ac796737ce"
+    },
+    {
+      "path": "dataset/parquet/tiny/artifact_charges/artifact_charges.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/artifact_charges/artifact_charges.parquet",
+      "sha256": "acc1ce05d121a04a9b8d6cbab99d8ccbd47240b5826ffd5e530b5e7a2884ea26"
+    },
+    {
+      "path": "dataset/parquet/tiny/artifacts/artifacts.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/artifacts/artifacts.parquet",
+      "sha256": "b4fd5550c27eff3e4305ccfdbe2071779be178a0c17b617c5d58aa5576ee2991"
+    },
+    {
+      "path": "dataset/parquet/tiny/project_artifactcount/project_artifactcount.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/project_artifactcount/project_artifactcount.parquet",
+      "sha256": "cf006f6ee1f4432bbd82dce6c50fca3f1df63a0c4ec245332efde15f8e335700"
+    },
+    {
+      "path": "dataset/parquet/tiny/projects/projects.parquet",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/dataset/parquet/tiny/projects/projects.parquet",
+      "sha256": "4a15e8e2bf875cbbb4867e59de0110dd68b3d081cbe09237c249b244a01bdef5"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/addnoise.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/addnoise.py",
+      "sha256": "dcedfb2c95c2ec017112590b49ed1e087be0f6b082e9f992fa5108848e210c44"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/clean.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/clean.py",
+      "sha256": "e015790058251868d18f42e7397aff0bfa713543053f4f97b7af2d06f0a26c3a"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/cleandate.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/cleandate.py",
+      "sha256": "3ef3ff0e4baceb284ee3463b9e71b0a69a12c26eb798adee2135658932c93e40"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/converttoeuro.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/converttoeuro.py",
+      "sha256": "26b75d1cb0dc2a702f44c316a19921ed86406704e71b2dc9696d5567ab1fa503"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractclass.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractclass.py",
+      "sha256": "eb454d4ad5fa90a3db12bcef2898da1c410acceea63c71b797eb886455431b3e"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractcode.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractcode.py",
+      "sha256": "e3163600f07586d61f84f8b7b1008fab1a9ba5b0dfb33735f085eeb8eae8880a"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractday.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractday.py",
+      "sha256": "22fdd79d57f5396ae34ee975aef7706d053fb824bf6580cb5650a4047b7cadbb"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractfunder.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractfunder.py",
+      "sha256": "655bf675643e89e3341e29c6e58e6558a6be2c058e64ad39de8a490c581a8df0"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractid.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractid.py",
+      "sha256": "5337b5473e8428e6090b038aab526067370d93275554ca09fd873a9d6c687f37"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractmonth.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractmonth.py",
+      "sha256": "37559ff82139989047f4034622cc9531a7e0eaf62b1d7418a4381ada73803d8b"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractprojectid.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractprojectid.py",
+      "sha256": "a4722a7872a3c8119da0726c64cea5cde3619ea594f843a5a1b363a2f325cbe3"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/extractyear.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/extractyear.py",
+      "sha256": "486b50c598b18f72ed49f669d7d2f2d20e26df11fa4f32b99681dab4d2fd5034"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/filterstopwords.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/filterstopwords.py",
+      "sha256": "678959af5376ac368aa51c447f2ba988dcb0de9fba09d5390f8c42a1ab1d8208"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/frequentterms.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/frequentterms.py",
+      "sha256": "9c5abcd7f4a9145f05b8a64f6f5a84849064f9c5fc6a6fe679d99e7e24f9964d"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/jaccard.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/jaccard.py",
+      "sha256": "30e7b986de07987c028b17cb7b8e2d96fd7dd70f2969febc33ceba6d31011738"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/jpack.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/jpack.py",
+      "sha256": "362ac397d5a9d87781b812ec7befdd7cf92fb2fafdb555ab0f9ba9890d63bbd7"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/jsoncount.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/jsoncount.py",
+      "sha256": "90b36811ab9adca1ab593010a4a48f7e80a17cae3202eaa9a96614a18a642eb8"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/jsonparse.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/jsonparse.py",
+      "sha256": "9e4876013ee07605e7b50a41a83f5b3667f72d24922f2291eb2f8f1ad37e7284"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/jsort.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/jsort.py",
+      "sha256": "49bcbd61a8a94334205c3ca9b53c4e809535b68a8a474dd67f43d90d3b6474ba"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/jsortvalues.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/jsortvalues.py",
+      "sha256": "2b18a32eb3c88464111f76ef18f3f8f6b755e4efe86aa572b57ce6095a535bfb"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/keywords.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/keywords.py",
+      "sha256": "6bc2058250d4c0dc1d46969912e8b7e95e69e497af7dba1cded518f197cd41d1"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/log_10.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/log_10.py",
+      "sha256": "7a65e4caee50e57c885bb0bda6260e014b7cf1a1211840f75a664f04c40cd10f"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/lowerize.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/lowerize.py",
+      "sha256": "28e108abf4246025c731413566bf4c89c4e476308bc91c9cbbf0d5fbb8ab4856"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/removeshortterms.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/removeshortterms.py",
+      "sha256": "5a9f0518902d2931f5e216924865868a09cfcdc56310b272d636987a7cf1af41"
+    },
+    {
+      "path": "engines/pyspark/udfs/scalar/stem.py",
+      "url": "https://raw.githubusercontent.com/athenarc/UDFBench/8da987566590e2534f24cd97bcfaa9157c24962c/engines/pyspark/udfs/scalar/stem.py",
+      "sha256": "6050d54c7c5d8068d628de7fd4522227923883448f6fbfd689c2812c58874823"
+    }
+  ]
+}

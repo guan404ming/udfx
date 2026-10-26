@@ -12,10 +12,13 @@ from udfx.backends import arrow
 from udfx.backends.arithmetic import lower_integer_region
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.faults import NativeFaults, faults_for
+from udfx.backends.hoisting import free
 from udfx.backends.indexing import literal_range
-from udfx.backends.lowering import lower_program
 from udfx.backends.lowering_context import lowering_context
+from udfx.backends.program_lowering import lower_program
 from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.results import ResultLowering
+from udfx.backends.rules import Scope
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.numbers import WIDE_INTEGERS
 from udfx.backends.spark.rules import RULES
@@ -43,21 +46,24 @@ class SparkBackend(Backend[Column]):
     name: ClassVar[str] = "spark"
     rules: ClassVar[RuleSet[Column]] = RULES
     indexes: ClassVar[bool] = True
+    graphs: ClassVar[bool] = True
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
 
     def lower_program(self, program: Program) -> Lowered[Column]:
         with lowering_context(binds=True) as context:
-            lowered = lower_program(self, program)
+            lowered = lower_program(self, program, ResultLowering(self, program))
         if lowered.exact is not None and context.has_bindings:
-            return lower_program(self, program)
+            return lower_program(self, program, ResultLowering(self, program))
         return lowered
 
-    def lower(self, node: Node, elements: Mapping[Node, Column] | None = None) -> Lowered[Column]:
+    def lower(self, node: Node, elements: Scope[Column] | None = None) -> Lowered[Column]:
         lowered = super().lower(node, elements)
         if isinstance(node, Comprehension) and elements and self.exact(lowered) is not None:
-            raise Unsupported("Spark cannot pass guarded nested lambdas to a Python UDF")
+            captured = free(node.value) | free(node.condition) | free(node.fault)
+            if captured - {node.element}:
+                raise Unsupported("Spark cannot pass guarded capturing lambdas to a Python UDF")
         return lowered
 
     def session(self) -> SparkSession:
@@ -68,7 +74,7 @@ class SparkBackend(Backend[Column]):
         except Exception as error:
             raise RuntimeError("udfx needs a SparkSession to build Spark columns") from error
 
-    def lower_node(self, node: Node, elements: Mapping[Node, Column]) -> Lowered[Column]:
+    def lower_node(self, node: Node, elements: Scope[Column]) -> Lowered[Column]:
         if isinstance(node, Comprehension) and (
             isinstance(node.source, Lit) or literal_range(node) is not None
         ):
@@ -101,6 +107,12 @@ class SparkBackend(Backend[Column]):
     def select(self, condition: Column, then: Column, orelse: Column) -> Column:
         return functions.when(condition, then).otherwise(orelse)
 
+    def select_many(self, cases: Sequence[tuple[Column, Column]], orelse: Column) -> Column:
+        selected = functions.when(*cases[0])
+        for condition, value in cases[1:]:
+            selected = selected.when(condition, value)
+        return selected.otherwise(orelse)
+
     def list_value(self, items: Sequence[Column], type: Type) -> Column:
         return functions.array(*items).cast(dtype(type))
 
@@ -115,6 +127,19 @@ class SparkBackend(Backend[Column]):
         with lowering_context() as context:
             context.has_bindings = True
         return expr
+
+    def bind_sequence(self, value: Column, steps: Sequence[Callable[[Column], Column]]) -> Column:
+        for step in steps:
+            value = functions.aggregate(
+                functions.array(functions.lit(0)), value, lambda total, item: total, step
+            )
+        return value
+
+    def record(self, values: Sequence[Column]) -> Column:
+        return functions.struct(*(value.alias(str(index)) for index, value in enumerate(values)))
+
+    def field(self, value: Column, index: int) -> Column:
+        return value[str(index)]
 
     def list_indexed(
         self,

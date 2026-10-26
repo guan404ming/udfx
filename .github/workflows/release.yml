@@ -39,6 +39,8 @@ jobs:
         env:
           HYPOTHESIS_PROFILE: ci
           UDFX_TESTS: full
+      - run: uv run python -m workloads.prepare --suites udfbench --rows 32
+      - run: uv run pytest -m public
       - uses: actions/download-artifact@v8
         with:
           name: udfx-dist

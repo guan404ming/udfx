@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
+from udfx.frontend.core.text import combined_search, joined_split, lowercase_contains
 from udfx.ir import FALSE, TRUE, Call, Node
 from udfx.ops.registry import OpKey
+from udfx.semantics.assumptions import assuming
 from udfx.semantics.ranges import proven
 from udfx.types import Kind
 
@@ -17,6 +19,9 @@ class Lowered[E]:
     expr: E
     exact: E | None = None
     overflow: E | None = None
+
+
+type Scope[E] = Mapping[Node, E | Lowered[E]]
 
 
 type RuleResult[E] = E | Lowered[E]
@@ -42,7 +47,11 @@ def fold_predicate(node: Node, rewrite: Rewrite) -> Node:
         return TRUE if known else FALSE
     if not isinstance(node, Call) or node.op.key not in BOOLEAN_RULES:
         return fold(node)
-    arguments = tuple(fold_predicate(argument, rewrite) for argument in node.arguments)
+    first, *rest = node.arguments
+    arguments = (fold_predicate(first, rewrite),)
+    if rest:
+        with assuming(arguments[0], node.op.name == "and"):
+            arguments += (fold_predicate(rest[0], rewrite),)
     builders = {"not": negate, "and": conjunction, "or": disjunction}
     return builders[node.op.name](*arguments)
 
@@ -58,7 +67,11 @@ class RuleSet[E]:
     def __init__(self) -> None:
         self._rules: dict[OpKey, Rule[E]] = dict(BOOLEAN_RULES)
         self._options: dict[OpKey, RuleOptions] = {}
-        self._rewrites: dict[OpKey, Rewrite] = {}
+        self._rewrites: dict[OpKey, Rewrite] = {
+            OpKey("or", (Kind.BOOL, Kind.BOOL)): combined_search,
+            OpKey("__add__", (Kind.STR, Kind.STR)): joined_split,
+            OpKey("__contains__", (Kind.STR, Kind.STR)): lowercase_contains,
+        }
 
     def rewrite(self, name: str, *kinds: Kind) -> Callable[[Rewrite], Rewrite]:
         key = OpKey(name, kinds)

@@ -51,3 +51,12 @@ def ascii_predicate(
 def ascii_free(pattern: str) -> bool:
     points = re.findall(r"\\x\{([0-9A-F]+)\}", pattern)
     return bool(points) and min(int(point, 16) for point in points) >= 0x80
+
+
+def unicode_match(
+    primitives: AsciiPrimitives, matches: Callable[[Any, str], Any], value: Any, pattern: str
+) -> Any:
+    found = matches(value, pattern)
+    if not ascii_free(pattern):
+        return found
+    return primitives.when(primitives.is_ascii(value), primitives.literal(False), found)

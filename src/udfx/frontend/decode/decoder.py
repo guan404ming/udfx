@@ -24,24 +24,19 @@ SPLITS = frozenset(
         "FOR_ITER",
     }
 )
-CLEANUP = frozenset({"SWAP", "POP_TOP", "STORE_FAST", "STORE_FAST_STORE_FAST"})
 SUSPENDING = inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR
 
 
-def is_cleanup(builder: Builder, target: int) -> bool:
-    names = [part.opname for part in builder.instructions[builder.index_of[target] :]]
-    if names[:2] == ["CALL_INTRINSIC_1", "RERAISE"]:
-        return True
-    length = 0
-    while names[length] in CLEANUP:
-        length += 1
-    return names[0] == "SWAP" and names[length] == "RERAISE"
+def is_generator_cleanup(builder: Builder, target: int) -> bool:
+    start = builder.index_of[target]
+    names = [part.opname for part in builder.instructions[start : start + 2]]
+    return names == ["CALL_INTRINSIC_1", "RERAISE"]
 
 
 def attach_handler(builder: Builder, entries: list[Any]) -> None:
     for entry in entries:
         if entry.start <= builder.offset < entry.end:
-            if is_cleanup(builder, entry.target):
+            if is_generator_cleanup(builder, entry.target):
                 return
             depth, lasti, target = entry.depth, entry.lasti, entry.target
             if depth > len(builder.stack):

@@ -33,6 +33,7 @@ class TextPrimitives:
     not_null: Callable[[Any], Any]
     try_int: Callable[[Any], Any]
     try_float: Callable[[Any], Any]
+    lazy_coalesce: bool = False
 
 
 @cache
@@ -101,10 +102,17 @@ def float_parses(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
 
 
 def parse_int(
-    primitives: TextPrimitives, text: Any, maximum_length: int | None = None
+    primitives: TextPrimitives,
+    text: Any,
+    maximum_length: int | None = None,
+    valid: bool = False,
 ) -> tuple[Any, Any]:
     native = primitives.try_int(primitives.strip(text, ASCII_SPACE))
-    pending = primitives.when(primitives.not_null(native), primitives.literal(None), text)
+    pending = (
+        text
+        if primitives.lazy_coalesce
+        else primitives.when(primitives.not_null(native), primitives.literal(None), text)
+    )
     original, replacement = integer_characters()
     cleaned = primitives.strip(
         primitives.translate(pending, original + "_", replacement), ASCII_SPACE
@@ -112,6 +120,8 @@ def parse_int(
     value = primitives.coalesce(native, primitives.try_int(cleaned))
     if maximum_length is not None and maximum_length <= 18:
         return value, None
+    if valid:
+        return value, primitives.not_null(value)
     return value, primitives.not_null(value) | ~integer_matches(primitives, text)
 
 

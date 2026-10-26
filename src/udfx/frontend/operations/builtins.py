@@ -122,6 +122,8 @@ def call(
         case Opaque(value=value):
             name = op_name(value)
             nodes = [node_of(argument) for argument in arguments]
+            if name == "int" and len(nodes) == 1 and nodes[0].type.kind is Kind.INT:
+                return nodes[0], nullable_faults(nodes[0])
             if name == "datetime.strptime":
                 return invoke(name, nodes, TypeError)
             if name in {"min", "max"} and len(nodes) > 2:
@@ -173,6 +175,8 @@ def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
     if isinstance(item, Tuple) and name == "len":
         return lit(len(item.items)), []
     if isinstance(item, Set):
+        if item.dynamic and name not in {"len", "bool"}:
+            raise Unsupported("dynamic JSON sets support cardinality and predicates")
         return set_call(name, item.node)
     source = iterable_node(item)
     faults = nullable_faults(source)

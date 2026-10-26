@@ -5,9 +5,7 @@ from typing import Any
 import pytest
 from conftest import backend_params
 
-from bench.speed.timing import fallback_in_plan
-from tests.corpus.cases_lists import unpack_numbers
-from tests.corpus.cases_strings import index_sliced_parts
+from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
@@ -16,6 +14,8 @@ from udfx.ir import FALSE, Guarded, lit
 from udfx.ops import apply
 from udfx.testing import check_function
 from udfx.types import INT, INT64_MAX, INT64_MIN, STR, list_of
+from workloads.corpus.cases_lists import unpack_numbers
+from workloads.corpus.cases_strings import index_sliced_parts
 
 
 def negative_index(index: int, text: str) -> int:

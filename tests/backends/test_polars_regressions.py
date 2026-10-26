@@ -5,14 +5,14 @@ import polars as pl
 import pytest
 from conftest import backend_params
 
-from tests.corpus.cases_lists import unpack_ends, weighted_word_length
-from tests.corpus.cases_string_splitting import index_split_limit
-from tests.corpus.cases_strings import join_characters
-from tests.corpus.cases_structure import remove_stopwords
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.testing import check_function
 from udfx.types import INT, STR, Type
+from workloads.corpus.cases_lists import unpack_ends, weighted_word_length
+from workloads.corpus.cases_string_splitting import index_split_limit
+from workloads.corpus.cases_strings import join_characters
+from workloads.corpus.cases_structure import remove_stopwords
 
 SCHEMA = {"text": STR, "maximum": INT, "index": INT}
 ROWS = [("", 0, 1), ("1_1", 1, 0)]

@@ -18,6 +18,16 @@ def escaped(point: int) -> str:
     return f"\\x{{{point:X}}}"
 
 
+def union_patterns(left: str, right: str, flags: int) -> str | None:
+    try:
+        patterns = [re.compile(pattern, flags) for pattern in (left, right)]
+    except (re.error, ValueError, OverflowError, RecursionError):
+        return None
+    if any(pattern.groups or pattern.flags != flags | re.UNICODE for pattern in patterns):
+        return None
+    return f"(?:{left})|(?:{right})"
+
+
 def ranges(points: Iterable[int]) -> str:
     parts: list[str] = []
     start = previous = -1

@@ -29,9 +29,12 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/frontend/operations/` | Evaluate Python operators, calls, containers, attributes, and formatting with explicit operands |
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
+| `src/udfx/backends/program_lowering.py` | Program limits, graph selection, and final fault handling |
+| `src/udfx/backends/graph.py` | Shared expression bindings. `graph_lists.py` combines comprehension values and guards |
+| `src/udfx/graphs.py` | IR canonicalization and substitution by node identity |
 | `src/udfx/backends/lowering_context.py` | Stores lowered expressions and binding settings for one lowering scope. Cache keys include branch conditions |
 | `src/udfx/backends/arithmetic.py` | Lowers proven integer regions with wide engine arithmetic. `reductions.py` unrolls bounded integer sums |
-| `src/udfx/backends/hoisting.py` | Finds a list call in a comprehension body that does not read the element |
+| `src/udfx/backends/hoisting.py` | Binds invariant list calls and repeated condition strings once |
 | `src/udfx/backends/indexing.py` | Rewrites `range` comprehensions that a backend cannot lower: unrolls a small literal bound and maps `range(len(items))` to an indexed list transform |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
 | `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
@@ -40,6 +43,8 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/testing/allocation.py` | Bounds output allocation per conformance query. It keeps every test row |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
 | `tests/corpus/` | End to end acceptance cases, run with `uv run pytest -m corpus` |
+| `workloads/` | Shared corpus definitions, public dataset manifests, preparation, and workload bindings |
+| `bench/` | Paired timing, engine adapters, correctness validation, and versioned reports |
 
 ## Rules
 
@@ -102,9 +107,13 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `BACKEND`, a `Backend` subclass. `udfx.backends.installed()` discovers it when its engine imports.
 
 - `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
+- `select_many` builds a flat case expression for literal choices. Shared lowering checks each choice for guards first.
+- A scalar binding adds three engine operations: an array, a transform, and an element selection. Hoist a repeated condition string only when it removes more operations.
 - `lower_program(program)` returns a lowered program. `build` checks column names and applies fallback. Backend overrides call the shared lowering functions.
 - `list_value` builds lists. `list_transform` and `list_filter` enable native comprehensions. `list_indexed` passes each element and its index, for engines that cannot lower `range`. Set `indexes = True` to try it before `range`. Only Spark sets it, because its lambdas repeat the source per element. Register word rewrites with `RULES.rewrite` to replace list operations with regexes. Spark keeps list operations because it shares one split between those uses. `base.py` uses Python fallback when a comprehension needs an unsupported list operation.
 - `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower an invariant list call once outside the comprehension lambdas. DuckDB binds. Spark enables binding in a lowering context and keeps it only when the program needs no Python fallback.
+- `graphs = True` enables shared graph lowering above the expression size limit. It requires `record`, `field`, and `bind`. `supports_graphs()` checks availability. DataFusion plans a small nested lambda once per backend to check engine support. This check does not execute a query. Bound values retain exactness and overflow predicates.
+- `bind_sequence` composes native record steps. Each step runs once during expression construction. Polars nests the steps. DuckDB uses successive bindings. Spark uses aggregate finish lambdas. DataFusion uses successive array transforms.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and calls `run_fallback_rows(program, rows)`.
 - `evaluate(exprs, schema, rows)` runs expressions on in-memory rows for tests. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.

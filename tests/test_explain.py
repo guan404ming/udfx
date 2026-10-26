@@ -4,7 +4,7 @@ from udfx import compile, explain
 from udfx.explain import render
 from udfx.ir import Col, If, lit
 from udfx.ops import apply
-from udfx.types import INT, STR
+from udfx.types import FLOAT, INT, STR, Type
 
 
 def project_name(project: str | None) -> str | None:
@@ -59,6 +59,20 @@ def test_render() -> None:
     )
 
     assert render(node) == "if(bool(col project), .split(col project, '::')[0], None)"
+
+
+@pytest.mark.parametrize("kind", [FLOAT, INT])
+def test_report_preserves_shared_expressions(kind: Type) -> None:
+    def squares(value: float) -> float:
+        for _ in range(40):
+            value *= value
+        return value
+
+    report = explain(squares, {"value": kind})
+    assert "Value: let %0 = __mul__(col value, col value)" in report
+    assert "%39 = __mul__(%38, %38); %39" in report
+    assert "Native: shared expression graph" in report
+    assert len(report) < 5000
 
 
 def test_report_escapes_control_characters() -> None:

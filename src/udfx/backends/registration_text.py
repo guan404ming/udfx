@@ -4,7 +4,13 @@ from collections.abc import Callable
 from typing import Any
 
 from udfx.backends.rules import Lowered, Rule, RuleSet
-from udfx.semantics.facts import argument_length, argument_maximum, ascii_predicate_result
+from udfx.semantics.facts import (
+    argument_length,
+    argument_maximum,
+    ascii_predicate_result,
+    integer_is_valid,
+)
+from udfx.semantics.json import lower_string, lower_type, native_shape, patterns
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -21,13 +27,38 @@ from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
 
 
+def register_json[E](
+    rules: RuleSet[E],
+    primitives: TextPrimitives,
+    concatenate: Callable[[E, E], E],
+    findall: Callable[[E, str], E],
+    *,
+    possessive: bool = False,
+) -> None:
+    string, array, _ = patterns(possessive)
+    rules("json.tokens", Kind.STR)(
+        lambda value: Lowered(findall(value, string), primitives.matches(value, rf"\A{array}\z"))
+    )
+    rules("json.valid", Kind.STR)(
+        lambda value: Lowered(primitives.literal(True), native_shape(primitives, value, possessive))
+    )
+    rules("json.is_type", Kind.STR, Kind.STR, literals=(1,))(
+        lambda value, name: Lowered(*lower_type(primitives, value, name, possessive))
+    )
+    rules("json.dumps", Kind.STR, Kind.BOOL, literals=(1,))(
+        lambda value, ensure_ascii: Lowered(
+            *lower_string(primitives, concatenate, value, ensure_ascii)
+        )
+    )
+
+
 def register_regex[E](
     rules: RuleSet[E], primitives: RegexPrimitives, ascii: AsciiPrimitives | None = None
 ) -> None:
     def rule(name: str) -> Rule[E]:
         return lambda *arguments: Lowered(*lower_regex(primitives, name, *arguments, ascii=ascii))
 
-    for name in ("search", "match", "fullmatch", "findall"):
+    for name in ("search", "match", "fullmatch", "findall", "contains"):
         rules(f"re.{name}", Kind.STR, Kind.STR, Kind.INT, literals=(1, 2))(rule(name))
     rules("re.sub", Kind.STR, Kind.STR, Kind.INT, Kind.STR, Kind.INT, literals=(1, 2, 3, 4))(
         lambda text, pattern, flags, substitute, count: Lowered(
@@ -96,11 +127,13 @@ def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> Non
         lambda value, maximum_length=None: Lowered(*int_parses(text, value, maximum_length))
     )
 
-    def integer(value: E, maximum_length: int | None = None) -> Lowered[E]:
-        parsed, exact = parse_int(text, value, maximum_length)
+    def integer(value: E, maximum_length: int | None = None, valid: bool = False) -> Lowered[E]:
+        parsed, exact = parse_int(text, value, maximum_length, valid)
         return Lowered(parsed, overflow=None if exact is None else ~exact)
 
-    rules("int", Kind.STR, facts={"maximum_length": argument_length})(integer)
+    rules("int", Kind.STR, facts={"maximum_length": argument_length, "valid": integer_is_valid})(
+        integer
+    )
     rules("int_saturated", Kind.STR)(lambda value: parse_saturated_int(text, value))
     register("float_parses", float_parses)
     register("float", parse_float)

@@ -5,11 +5,13 @@ from functools import reduce
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of, nullable_faults
+from udfx.frontend.core.json import array, iterable_faults
 from udfx.frontend.core.logic import fold
 from udfx.frontend.core.values import (
     Generator,
     Item,
     Iterator,
+    Json,
     Method,
     Opaque,
     Set,
@@ -18,7 +20,7 @@ from udfx.frontend.core.values import (
     require_bounded,
 )
 from udfx.frontend.operations.builtins import iterable_node
-from udfx.frontend.operations.sets import set_method
+from udfx.frontend.operations.sets import frozen_set, set_method
 from udfx.frontend.resolve.constants import (
     constant,
     constant_value,
@@ -36,6 +38,8 @@ def bounded(items: Sequence[Item]) -> Iterator:
 
 
 def iterator_of(item: Item) -> tuple[Iterator, list[Fault]]:
+    if isinstance(item, Json):
+        return Iterator((), source=array(item.node), json=True), iterable_faults(item.node)
     if isinstance(item, Iterator):
         return item, []
     if isinstance(item, Generator):
@@ -92,7 +96,7 @@ def indexed(iterator: Iterator, name: str) -> tuple[Node, Element, Item]:
     if source.type.item is None:
         raise Unsupported("comprehension requires a list")
     element = Element(name, source.type.item)
-    return source, element, Value(element)
+    return source, element, Json(element) if iterator.json else Value(element)
 
 
 def constant_range(arguments: Sequence[Item]) -> Opaque:
@@ -171,6 +175,8 @@ def construct(
 ) -> tuple[Item, list[Fault]] | None:
     if callee is dict:
         return construct_dictionary(arguments, keywords), []
+    if callee is frozenset and not keywords:
+        return frozen_set(arguments)
     if keywords or (callee is not list and callee is not tuple):
         return None
     container = list if callee is list else tuple

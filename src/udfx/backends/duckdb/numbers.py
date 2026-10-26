@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+from functools import partial
 
 import duckdb
 from duckdb import Expression, sqltypes
@@ -23,7 +24,7 @@ from udfx.backends.registration import (
     register_int_truediv,
 )
 from udfx.frontend.core.sets import empty_union
-from udfx.semantics.facts import bounded_divisor
+from udfx.semantics.facts import bounded_divisor, integer_fits
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -62,8 +63,9 @@ def cast_float64(value: Expression) -> Expression:
 
 
 def overflow_checked(operation: Binary) -> BinaryRule[Expression]:
-    def rule(left: Expression, right: Expression) -> Lowered[Expression]:
-        return checked_int64(operation(cast_int128(left), cast_int128(right)))
+    def rule(left: Expression, right: Expression, *, bounded: bool = False) -> Lowered[Expression]:
+        result = checked_int64(operation(cast_int128(left), cast_int128(right)))
+        return Lowered(result.expr) if bounded else result
 
     return rule
 
@@ -122,7 +124,9 @@ ORDER = OrderPrimitives(either_nan, Expression.isnull, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
+    RULES(
+        _name, Kind.INT, Kind.INT, facts={"bounded": partial(integer_fits, size_limit=INT64_MAX)}
+    )(overflow_checked(_operation))
     register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():

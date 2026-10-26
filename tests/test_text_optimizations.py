@@ -5,19 +5,24 @@ from typing import Any
 import polars as pl
 import pytest
 from conftest import backend_params
-from corpus.cases_regex import first_number
 
-from bench.speed.timing import fallback_in_plan
+from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
-from udfx.backends.lowering import lower_program
+from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.polars import PolarsBackend
+from udfx.backends.program_lowering import lower_program
 from udfx.backends.spark import SparkBackend
 from udfx.frontend import trace
-from udfx.semantics.text import ANY_CHAR, char_class
+from udfx.frontend.core.text import combined_search
+from udfx.ir import Call, Col, lit
+from udfx.ops import apply
+from udfx.semantics.text import ANY_CHAR, char_class, whitespace
 from udfx.semantics.text_predicates import ascii_free
 from udfx.testing import check_function
+from udfx.testing.text_traps import STRING_TRAPS
 from udfx.types import STR
+from workloads.corpus.cases_regex import first_number
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -86,7 +91,9 @@ def test_spark_case_guard_skips_regex_for_ascii() -> None:
 
 
 @pytest.mark.parametrize("backend", backend_params())
-@pytest.mark.parametrize("function", [lambda text: text.upper(), lambda text: text.lower()])
+@pytest.mark.parametrize(
+    "function", [lambda text: text.upper(), lambda text: text.lower(), lambda text: text.title()]
+)
 def test_spark_case_mapping_stays_native(
     backend: Backend[Any], function: Callable[[str], str]
 ) -> None:
@@ -143,3 +150,63 @@ def test_spark_search_runs_one_regex() -> None:
     assert "regexp_like" not in str(lowered.expr)
     rows = [("a 12 b",), ("none",), ("\u0663\u0664 x",), ("",), (None,)]
     assert check_function(first_number, schema, backend, rows) == []
+
+
+def test_duckdb_case_guard_skips_regex_for_ascii() -> None:
+    def lower(value: str) -> str:
+        return value.lower()
+
+    backend = DuckDBBackend()
+    schema = {"value": STR}
+    lowered = backend.lower(trace(lower, schema).value)
+    assert lowered.exact is not None
+    assert "strlen" in str(lowered.exact)
+    rows = [("AbC",), ("",), ("\x00a\n",)]
+    assert backend.evaluate([lowered.exact], schema, rows) == [[True, True, True]]
+    assert check_function(lower, schema, backend, rows + [(value,) for value in STRING_TRAPS]) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    "function, method",
+    [
+        (lambda value: value.strip().title(), "strip"),
+        (lambda value: value.lstrip().title(), "lstrip"),
+        (lambda value: value.rstrip().title(), "rstrip"),
+    ],
+)
+def test_title_moves_before_whitespace_trim(
+    backend: Backend[Any], function: Callable[[str], str], method: str
+) -> None:
+    schema = {"value": STR}
+    program = trace(function, schema)
+    assert isinstance(program.value, Call)
+    assert program.value.op.name == f".{method}"
+    values = [f"{whitespace()}{value}{whitespace()}" for value in STRING_TRAPS]
+    assert check_function(function, schema, backend, [(value,) for value in values]) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("needle", ["noise", "k", "s", "i", "xi", "ix", "[a]", "", "ABC"])
+def test_lowercase_search_preserves_unicode(backend: Backend[Any], needle: str) -> None:
+    def contains(text: str) -> bool:
+        return needle in text.lower()
+
+    schema = {"text": STR.or_none()}
+    rows = [
+        (value,)
+        for value in (*STRING_TRAPS, None, "NOISE", "Noİse", "xİ", "İx", "\u212a", "\u017f", "[A]")
+    ]
+    assert check_function(contains, schema, backend, rows) == []
+    if needle in {"noise", "k", "s", "ix", "[a]"}:
+        expr = backend.build(trace(contains, {"text": STR}))
+        assert not fallback_in_plan(expr, backend.name)
+        assert "lower(" not in str(expr).lower()
+
+
+@pytest.mark.parametrize("pattern", ["(a)", "(?i)a", "(?P<letter>a)", "["])
+def test_search_union_keeps_capture_and_flag_scope(pattern: str) -> None:
+    text = Col("text", STR)
+    first = apply("re.contains", text, lit(pattern), lit(0))
+    second = apply("re.contains", text, lit("b"), lit(0))
+    assert combined_search(apply("or", first, second)) is None

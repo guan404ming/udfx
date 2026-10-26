@@ -1,8 +1,8 @@
-from tests.corpus.cases_small_gaps import CASES
 from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.polars import PolarsBackend
 from udfx.frontend import trace
 from udfx.types import STR, list_of
+from workloads.corpus.cases_small_gaps import CASES
 
 
 def test_polars_case_chain_checks_unicode_once() -> None:

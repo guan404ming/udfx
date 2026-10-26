@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from conftest import backend_params
 
-from bench.speed.timing import fallback_in_plan
+from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.testing import check_function

@@ -72,7 +72,9 @@ def regex_parts(
     ascii_only: bool,
 ) -> tuple[Any, Any]:
     empty = (
-        None
+        False
+        if name == "contains"
+        else None
         if name in {"search", "match", "fullmatch"}
         else []
         if name in {"findall", "split"}
@@ -95,6 +97,8 @@ def regex_parts(
         if name in {"match", "fullmatch"}:
             source = r"\A(?:" + source + ")" + (r"\z" if name == "fullmatch" else "")
         exact = regex_exact(primitives, translated, text)
+        if name == "contains":
+            return primitives.contains(text, source), exact
         if name in {"search", "match", "fullmatch"}:
             return primitives.extract(text, source, translated.empty), exact
         if name == "findall":
@@ -121,7 +125,7 @@ def regex_parts(
 
 
 def regex_exact(primitives: RegexPrimitives, pattern: Pattern, text: Any) -> Any:
-    exact = primitives.literal(True)
+    exact: Any = True
     if (pattern.boundary and primitives.dialect != "java") or pattern.ignorecase:
         exact = exact & ~primitives.contains(text, r"[^\x{0}-\x{7F}]")
     if pattern.boundary:

@@ -196,15 +196,6 @@ def capitalized(primitives: CasePrimitives, value: Any) -> Any:
     )
 
 
-def title_words(
-    primitives: CasePrimitives,
-    value: Any,
-    transform: Callable[[Any, str, Callable[[Any], Any]], Any],
-) -> Any:
-    pattern = char_class(cased_characters()) + "+|" + char_class(cased_characters(), True) + "+"
-    return transform(value, pattern, lambda word: capitalized(primitives, word))
-
-
 def case_expression(primitives: CasePrimitives, value: Any, method: str) -> Any:
     if method in {"lower", "casefold"}:
         return primitives.lower(value)

@@ -1,7 +1,9 @@
-from collections.abc import Sequence
+import re
+from collections.abc import Callable, Sequence
 from functools import cache
+from typing import Any
 
-from udfx.semantics.text import SIGMA, char_class, code_points
+from udfx.semantics.text import SIGMA, CasePrimitives, cased_characters, char_class, code_points
 
 
 def folded_case(methods: Sequence[str]) -> tuple[tuple[str, str], ...] | None:
@@ -41,6 +43,23 @@ def simple_expansion(
 
 
 @cache
+def lowercase_pattern(needle: str) -> str | None:
+    if not needle or not needle.isascii() or needle.lower() != needle:
+        return None
+    original, replacement, expansions = case_mapping("lower")
+    for _, target in expansions:
+        if needle in target or any(
+            needle.endswith(target[:size]) or needle.startswith(target[-size:])
+            for size in range(1, len(target))
+        ):
+            return None
+    sources: dict[str, str] = {}
+    for point, target in zip(original, replacement, strict=True):
+        sources[target] = sources.get(target, "") + point
+    return "".join("[" + re.escape(point + sources.get(point, "")) + "]" for point in needle)
+
+
+@cache
 def final_sigma_pattern() -> str:
     cased: set[str] = set()
     ignored: set[str] = set()
@@ -57,3 +76,26 @@ def final_sigma_pattern() -> str:
             cased.add(point)
     letters, skipped = char_class(cased), char_class(ignored)
     return f"({letters}{skipped}*){SIGMA}(?!{skipped}*{letters})"
+
+
+def title_words(
+    primitives: CasePrimitives,
+    value: Any,
+    transform: Callable[[Any, str, Callable[[Any], Any]], Any],
+    *,
+    initial: Callable[[Any], Any] | None = None,
+    ascii_only: bool = False,
+) -> Any:
+    pattern = (
+        "[A-Za-z]+|[^A-Za-z]+"
+        if ascii_only
+        else char_class(cased_characters()) + "+|" + char_class(cased_characters(), True) + "+"
+    )
+    first = primitives.upper if initial is None else initial
+    return transform(
+        value,
+        pattern,
+        lambda word: primitives.concat(
+            first(primitives.head(word)), primitives.lower(primitives.tail(word))
+        ),
+    )

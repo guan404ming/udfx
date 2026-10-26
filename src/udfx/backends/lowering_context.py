@@ -6,8 +6,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from udfx.backends.rules import Lowered
-from udfx.ir import Node
+from udfx.backends.rules import Lowered, Scope
+from udfx.ir import Call, Guarded, If, Node
 from udfx.semantics.assumptions import CONDITIONS, Conditions
 
 if TYPE_CHECKING:
@@ -17,22 +17,54 @@ if TYPE_CHECKING:
 @dataclass
 class LoweringContext:
     binds: bool | None = None
+    graph: bool = False
     has_bindings: bool = False
     results: dict[
-        tuple[int, int, int, int], tuple[object, Node, Mapping[Node, Any], Conditions, Lowered[Any]]
+        tuple[int, int, int, int, int],
+        tuple[
+            object, Node, Mapping[Node, Any], Conditions, Mapping[int, Node] | None, Lowered[Any]
+        ],
     ] = field(default_factory=dict)
 
 
 CURRENT: ContextVar[LoweringContext | None] = ContextVar("udfx_lowering", default=None)
+EXACT: ContextVar[Mapping[int, Node] | None] = ContextVar("udfx_exact_inputs", default=None)
+
+
+def evaluated_nodes(node: Node) -> dict[int, Node]:
+    children = (
+        node.arguments
+        if isinstance(node, Call)
+        else (node.condition,)
+        if isinstance(node, If)
+        else (node.value, node.exact)
+        if isinstance(node, Guarded)
+        else ()
+    )
+    found = {id(node): node}
+    for child in children:
+        found.update(evaluated_nodes(child))
+    return found
 
 
 @contextmanager
-def lowering_context(*, binds: bool | None = None) -> Generator[LoweringContext]:
+def assuming_exact(node: Node) -> Generator[None]:
+    token = EXACT.set({**(EXACT.get() or {}), **evaluated_nodes(node)})
+    try:
+        yield
+    finally:
+        EXACT.reset(token)
+
+
+@contextmanager
+def lowering_context(
+    *, binds: bool | None = None, graph: bool = False
+) -> Generator[LoweringContext]:
     current = CURRENT.get()
-    if current is not None and binds is None:
+    if current is not None and binds is None and not graph:
         yield current
         return
-    context = LoweringContext(binds)
+    context = LoweringContext(binds, graph)
     token = CURRENT.set(context)
     try:
         yield context
@@ -45,16 +77,26 @@ def bindings_enabled(default: bool) -> bool:
     return default if context is None or context.binds is None else context.binds
 
 
-def lower_shared[E](backend: Backend[E], node: Node, elements: Mapping[Node, E]) -> Lowered[E]:
+def graph_enabled() -> bool:
+    context = CURRENT.get()
+    return context is not None and context.graph
+
+
+def lower_shared[E](backend: Backend[E], node: Node, elements: Scope[E]) -> Lowered[E]:
     with lowering_context() as context:
         conditions = CONDITIONS.get()
-        key = id(backend), id(node), id(elements), id(conditions)
+        exact = EXACT.get()
+        key = id(backend), id(node), id(elements), id(conditions), id(exact)
         if key not in context.results:
+            lowered = backend.lower_node(node, elements)
+            if exact is not None and id(node) in exact:
+                lowered = Lowered(lowered.expr, overflow=lowered.overflow)
             context.results[key] = (
                 backend,
                 node,
                 elements,
                 conditions,
-                backend.lower_node(node, elements),
+                exact,
+                lowered,
             )
-        return context.results[key][4]
+        return context.results[key][5]

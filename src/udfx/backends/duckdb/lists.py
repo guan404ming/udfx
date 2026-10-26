@@ -9,6 +9,7 @@ from udfx.backends.duckdb.numbers import checked_int64
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, length, when
 from udfx.backends.duckdb.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
+from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
@@ -52,6 +53,39 @@ def float_total(value: Expression) -> Lowered[Expression]:
 @RULES("sorted", Kind.LIST)
 def ordered(value: Expression) -> Expression:
     return function("list_sort", value, constant("ASC"), constant("NULLS LAST"))
+
+
+@RULES("frequency_order", Kind.LIST)
+def frequency_order(value: Expression) -> Expression:
+    return ordered_frequencies(
+        FrequencyPrimitives(
+            literal=constant,
+            distinct=lambda values: function("list_distinct", values),
+            transform=lambda values, transform: function(
+                "list_transform",
+                values,
+                duckdb.LambdaExpression(
+                    "udfx frequency key", transform(column("udfx frequency key"))
+                ),
+            ),
+            count=lambda values, key: length(
+                function(
+                    "list_filter",
+                    values,
+                    duckdb.LambdaExpression(
+                        "udfx frequency item", column("udfx frequency item") == key
+                    ),
+                )
+            ),
+            position=lambda values, key: function("list_position", values, key),
+            record=lambda count, position, key: function(
+                "struct_pack", count.alias("count"), position.alias("position"), key.alias("key")
+            ),
+            sort=ordered,
+            key=lambda record: function("struct_extract", record, constant("key")),
+        ),
+        value,
+    )
 
 
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)

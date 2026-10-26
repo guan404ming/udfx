@@ -12,6 +12,7 @@ from udfx.errors import Unsupported
 from udfx.ir import TRUE, Call, Col, Lit
 from udfx.ops import Fault, Op
 from udfx.testing.allocation import allocation_batches
+from udfx.testing.observation import record
 from udfx.testing.outcome import Outcome, Raised, Returned, run, same
 from udfx.types import BOOL, Type
 
@@ -221,8 +222,10 @@ def _op_mismatches(
             mismatches.append(Mismatch(row, run(op.reference, row), f"predicates {flags_here}"))
             continue
         if not all(flags[index] is True for flags in exacts):
+            record(row, None)
             continue
         expected = run(op.reference, row)
+        record(row, expected)
         raised = [
             fault.kind for fault, flags in zip(faults, hits, strict=True) if flags[index] is True
         ]

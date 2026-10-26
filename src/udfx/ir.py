@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any
 
@@ -119,3 +120,28 @@ def children(node: Node) -> tuple[Node, ...]:
             return node.source, node.value, node.condition, node.fault
         case _:
             return ()
+
+
+def digest(node: Node) -> str:
+    seen: dict[int, str] = {}
+
+    def value(item: object) -> object:
+        if isinstance(item, Node):
+            return "node", visit(item)
+        if isinstance(item, tuple):
+            return "tuple", tuple(value(part) for part in item)
+        return "value", repr(item)
+
+    def visit(current: Node) -> str:
+        identifier = id(current)
+        if identifier not in seen:
+            record = (
+                type(current).__name__,
+                tuple(
+                    (field.name, value(getattr(current, field.name))) for field in fields(current)
+                ),
+            )
+            seen[identifier] = hashlib.sha256(repr(record).encode()).hexdigest()
+        return seen[identifier]
+
+    return visit(node)

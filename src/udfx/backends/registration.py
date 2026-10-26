@@ -7,6 +7,7 @@ from typing import Any
 
 from udfx.backends.registration_datetimes import register_datetime_arithmetic, register_datetimes
 from udfx.backends.registration_text import (
+    register_json,
     register_padding,
     register_regex,
     register_string_predicates,
@@ -50,6 +51,7 @@ __all__ = [
     "RuleSet",
     "register_datetime_arithmetic",
     "register_datetimes",
+    "register_json",
     "register_padding",
     "register_regex",
     "register_string_predicates",

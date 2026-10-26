@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 from conftest import backend_params
-from corpus.cases_lists import indexed_words, unpack_ends
 from pyspark.sql import functions
 
 from udfx import compile
@@ -17,6 +16,7 @@ from udfx.ir import Col, Node
 from udfx.program import Program
 from udfx.testing import check_function
 from udfx.types import BOOL, INT, STR, list_of
+from workloads.corpus.cases_lists import indexed_words, unpack_ends
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -87,7 +87,7 @@ def test_spark_membership_uses_search(backend: Backend[Any]) -> None:
 
 def guarded_counts(text: str) -> list[str]:
     words = text.split(",")
-    return [word.title() + str(len(words)) for word in words]
+    return [word.capitalize() + str(len(words)) for word in words]
 
 
 def faulted_counts(text: str) -> list[str]:
@@ -97,7 +97,7 @@ def faulted_counts(text: str) -> list[str]:
 
 def guarded_outer_counts(text: str) -> list[int]:
     words = text.split(",")
-    return [len(words) for _ in words] if text.title() == text else [0]
+    return [len(words) for _ in words] if text.capitalize() == text else [0]
 
 
 @pytest.mark.parametrize("backend", backend_params())

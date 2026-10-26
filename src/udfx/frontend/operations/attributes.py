@@ -9,8 +9,11 @@ from udfx.frontend.core.evaluation import Evaluation, single
 from udfx.frontend.core.expressions import invoke
 from udfx.frontend.core.values import (
     NULL,
+    Counter,
+    CounterKey,
     Duration,
     Item,
+    Json,
     Match,
     Method,
     Opaque,
@@ -25,19 +28,21 @@ from udfx.frontend.resolve.frozen import Snapshot
 from udfx.semantics.datetimes import ATTRIBUTES
 from udfx.types import Kind
 
+CLASS_METHODS = {(datetime, "strptime"): datetime.strptime, (str, "maketrans"): str.maketrans}
+
 
 def load_attribute(
     owner: Item, name: str, method: bool, snapshot: Snapshot, where: str
 ) -> Evaluation:
     match owner:
+        case Counter() if name == "get" and not method:
+            return single(CounterKey(owner))
         case Row():
             attribute = owner.column(name)
         case Opaque(value=ModuleType() as module) if name in snapshot.members(module):
             attribute = constant(snapshot.attribute(module, name))
-        case Opaque(value=python_type) if python_type is datetime and name == "strptime":
-            attribute = Opaque(datetime.strptime)
-        case Opaque(value=python_type) if python_type is str and name == "maketrans":
-            attribute = Opaque(str.maketrans)
+        case Opaque(value=type() as python_type) if (python_type, name) in CLASS_METHODS:
+            attribute = Opaque(CLASS_METHODS[python_type, name])
         case Opaque(value=dict()) if name in {"get", "keys", "values", "items"} and method:
             return Evaluation((Method(name), owner))
         case Opaque(value=re.Pattern() as pattern):
@@ -50,7 +55,7 @@ def load_attribute(
         case Duration(node=node) if name in {"days", "seconds"} and not method:
             result, faults = duration_attribute(node, name)
             return single(Value(result), faults)
-        case Value() | Match() | Duration() | Set() if method:
+        case Value() | Match() | Duration() | Set() | Json() if method:
             return Evaluation((Method(name), owner))
         case Value():
             raise Unsupported(f"attribute access on a column value (attribute load {name})", where)

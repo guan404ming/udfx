@@ -10,11 +10,13 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.bindings import Bindings
 from udfx.frontend.core.evaluation import Raise, Return, single
 from udfx.frontend.core.expressions import node_of, truth
-from udfx.frontend.core.logic import choose, conjunction, disjunction
+from udfx.frontend.core.logic import choose, conjunction, disjunction, negate
+from udfx.frontend.core.merge import merge
+from udfx.frontend.core.tracing import FOLDED
 from udfx.frontend.core.values import Function, Generator, Item, Null, Opaque, Value
 from udfx.frontend.decode import ops
+from udfx.frontend.flow.comprehensions import comprehension, validate_fault_handlers
 from udfx.frontend.flow.frame import Flow, Frame, Produced, Result
-from udfx.frontend.flow.loops import comprehension, validate_fault_handlers
 from udfx.frontend.flow.machine import evaluates, explore, optional
 from udfx.frontend.operations.builtins import call
 from udfx.frontend.operations.iterables import indexed, iterator_of, source_of
@@ -70,9 +72,22 @@ def inline(
             raise Unsupported("helper with non-constant parameter defaults")
     signature = helper_signature(code, defaults, keyword_defaults)
     names = {**bind_helper(signature, arguments, keywords), **free}
-    start = Flow(callee.decoded.entry, 0, Bindings(names, bindings.path), {})
-    results: list[Result] = []
-    for outcome in explore(callee, start):
+    joining = FOLDED.get() is not None
+    start = Flow(callee.decoded.entry, 0, Bindings(names, TRUE if joining else bindings.path), {})
+    outcomes = explore(callee, start)
+    if joining:
+        returns = [outcome for outcome in outcomes if isinstance(outcome, Return)]
+        failures = [outcome for outcome in outcomes if isinstance(outcome, Raise)]
+        results: list[Result] = [
+            Raise(conjunction(bindings.path, outcome.path), outcome.kind) for outcome in failures
+        ]
+        if returns:
+            faults = [outcome.path for outcome in failures]
+            path = conjunction(bindings.path, negate(reduce(disjunction, faults, FALSE)))
+            results.append(Produced(bindings.under(path), (Value(merge(returns, faults)),)))
+        return results
+    results = []
+    for outcome in outcomes:
         if isinstance(outcome, Return):
             results.append(Produced(bindings.under(outcome.path), (Value(outcome.value),)))
         elif isinstance(outcome, Raise):
@@ -113,11 +128,12 @@ def generator(
     values: dict[int, Item] = dict.fromkeys(block.parameters, Opaque(None))
     values[exit.iterator] = iterator
     start = Flow(block.offset, 0, Bindings(names, bindings.path), values)
-    node = (
-        comprehension(callee, start, exit, iterator, ops.Yield)
-        if iterator.items or iterator.source is not None
-        else source_of(iterator)
-    )
+    if iterator.items or iterator.source is not None:
+        item, faults = comprehension(callee, start, exit, iterator, ops.Yield)
+        node = node_of(item)
+        pending.extend(faults)
+    else:
+        node = source_of(iterator)
     return callee.settle(bindings, single(Generator(node), pending))
 
 

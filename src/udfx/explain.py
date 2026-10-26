@@ -6,7 +6,10 @@ from time import perf_counter
 from udfx.api import compile
 from udfx.backends.base import Backend
 from udfx.backends.diagnostics import LoweringDetails, capture_lowering
-from udfx.ir import Call, Col, Comprehension, Element, Guarded, If, ListValue, Lit, Node
+from udfx.backends.hoisting import size
+from udfx.backends.program_lowering import EXPANDED_LIMIT
+from udfx.graphs import canonicalize
+from udfx.ir import Call, Col, Comprehension, Element, Guarded, If, ListValue, Lit, Node, children
 from udfx.types import Type
 
 
@@ -15,6 +18,35 @@ def render_name(name: str) -> str:
 
 
 def render(node: Node) -> str:
+    if size(node) > EXPANDED_LIMIT:
+        return render_graph(node)
+
+    def visit(part: Node) -> str:
+        return render_node(part, visit)
+
+    return visit(node)
+
+
+def render_graph(node: Node) -> str:
+    references: dict[int, str] = {}
+    definitions: list[str] = []
+
+    def visit(part: Node) -> str:
+        if not children(part):
+            return render_node(part, visit)
+        if id(part) not in references:
+            value = render_node(part, visit)
+            name = f"%{len(definitions)}"
+            references[id(part)] = name
+            definitions.append(f"{name} = {value}")
+        return references[id(part)]
+
+    (canonical,) = canonicalize((node,))
+    value = visit(canonical)
+    return "let " + "; ".join([*definitions, value])
+
+
+def render_node(node: Node, render: Callable[[Node], str]) -> str:
     match node:
         case Col():
             return f"col {render_name(node.name)}"
@@ -62,20 +94,23 @@ def explain[E](
         lines.append("Status: unsupported")
         lines.append(f"Unsupported: {translation.unsupported}")
     elif translation.program is not None:
-        lines.extend(execution_lines(details[-1] if details else None))
+        graph = size(translation.program.value) + size(translation.program.fault) > EXPANDED_LIMIT
+        lines.extend(execution_lines(details[-1] if details else None, graph=graph))
         if translation.program.row_mode:
             lines.append("Mode: row")
         lines.extend(
             (
                 f"Value: {render(translation.program.value)}",
                 f"Fault: {render(translation.program.fault)}",
-                f"Native: {str(translation.expr)!r}",
+                "Native: shared expression graph; inspect translation.expr with the engine"
+                if graph
+                else f"Native: {str(translation.expr)!r}",
             )
         )
     return "\n".join(lines)
 
 
-def execution_lines(details: LoweringDetails | None) -> list[str]:
+def execution_lines(details: LoweringDetails | None, *, graph: bool = False) -> list[str]:
     if details is None:
         return ["Status: compiled", "Python fallback: unknown (backend supplied no diagnostics)"]
     lines = [
@@ -95,7 +130,9 @@ def execution_lines(details: LoweringDetails | None) -> list[str]:
             [
                 "Fallback rows: not measured",
                 "Fallback when: native guard is false or null",
-                f"Native guard: {str(details.exact)!r}",
+                "Native guard: part of the shared expression graph"
+                if graph
+                else f"Native guard: {str(details.exact)!r}",
             ]
         )
         if details.value_guard:

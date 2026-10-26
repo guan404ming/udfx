@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from udfx.backends.hoisting import exact_free, hoist, invariant
 from udfx.backends.indexing import UNROLL_LIMIT, literal_range
 from udfx.backends.lowering_context import bindings_enabled
-from udfx.backends.rules import Lowered
+from udfx.backends.rules import Lowered, Scope
 from udfx.frontend.core.logic import fold
 from udfx.frontend.core.reductions import substitute
-from udfx.ir import FALSE, Call, Comprehension, If, Lit, Node, lit
+from udfx.ir import FALSE, Call, Comprehension, If, Lit, lit
 from udfx.ops import apply
 from udfx.types import INT
 
@@ -17,9 +16,7 @@ if TYPE_CHECKING:
     from udfx.backends.base import Backend
 
 
-def lower_reduction[E](
-    backend: Backend[E], node: Call, elements: Mapping[Node, E]
-) -> Lowered[E] | None:
+def lower_reduction[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowered[E] | None:
     if node.op.name != "sum":
         return None
     source = node.arguments[0]

@@ -21,20 +21,22 @@ uv run pytest
 uv run pytest -m corpus
 ```
 
-All must pass before a pull request. CI runs them on Python 3.12, 3.13, and 3.14 with
-`HYPOTHESIS_PROFILE=ci` (100 examples per test instead of 25).
+All must pass before a pull request. PR CI uses Python 3.12 and 25 examples per test.
+Nightly CI runs Python 3.12, 3.13, and 3.14 with `HYPOTHESIS_PROFILE=ci` (100 examples).
 
-The default run is the fast tier: Spark runs with ANSI on only, and frontend and benchmark tests
-use Polars only. Set `UDFX_TESTS=full` to run every engine configuration, as CI does; run the full
-tier before you open a pull request.
+The default run uses Spark with ANSI on and checks the frontend through Polars.
+Conformance and offline public-data workloads run on all four engines.
+Set `UDFX_TESTS=full` to include all frontend engines and Spark with ANSI off.
+The separate `corpus` and `public` markers select acceptance and downloaded upstream cases.
 
 CI also builds the sdist and then the wheel. It installs the wheel with one extra per clean
 environment and checks native, fallback, and error paths. It uses the lowest declared direct
 dependencies on Python 3.12 and the highest on Python 3.14. The release workflow publishes the
 same artifacts only after these checks pass.
 
-`uv run pytest` runs the tests in parallel with `-n auto` and prints the five slowest with
-`--durations=5`. Pass `-n 0` to run in one process.
+`uv run pytest` uses at most four workers and groups backend cases by engine.
+This reuses engine sessions and avoids starting Spark in every worker.
+It prints the five slowest tests. Pass `-n 0` to use one process.
 
 ## Mine notebook UDFs
 
@@ -44,14 +46,21 @@ output directory.
 
 ## Benchmark performance
 
-Run `uv run python -m bench.speed` from the project root, or select a smaller run with
-`uv run python -m bench.speed --rows 200 --engines polars duckdb --cases lower_strip row_total --repeats 1`.
-The benchmark checks results against Python before timing and reports K2 (each speedup is at
-least 1), K3 (deduplicated geometric mean speedup is at least 3), and K5 (cases with no fallback
-in the plan). Each engine groups cases by the text of the built native expression, with input
-columns renamed by schema position. The report shows case and group counts, both geometric means,
-and duplicate groups with their fingerprint hashes, case names, and speedups. The deduplicated
-mean gives each group equal weight, using the geometric mean of its case speedups.
+Prepare public data explicitly, then run the four engines:
+
+```sh
+uv run python -m workloads.prepare
+uv run python -m bench --threads 8 --output .cache/results/run.json
+uv run python -m bench.report .cache/results/run.json --markdown .cache/results/run.md
+```
+
+The runner validates every result before two warmups and seven paired rounds.
+It retains raw timings, errors, unsupported UDFs, data checksums, and engine settings.
+It does not download data or reuse timing baselines.
+
+See [benchmark methods](docs/benchmarking.md), [public data](docs/datasets.md), and
+[test coverage](docs/testing.md). Notebook mining remains exploratory and does not enter
+the fixed public-workload coverage denominator.
 
 ## Code rules
 

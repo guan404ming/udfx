@@ -23,6 +23,17 @@ class Value:
 
 
 @dataclass(frozen=True)
+class Json:
+    node: Node
+    container: type | None = None
+
+
+@dataclass(frozen=True)
+class JsonType:
+    node: Node
+
+
+@dataclass(frozen=True)
 class Duration:
     node: Node
 
@@ -30,6 +41,11 @@ class Duration:
 @dataclass(frozen=True)
 class Match:
     node: Node
+    source: Node
+    pattern: str
+    flags: int
+    mode: str
+    position: Node
 
 
 @dataclass(frozen=True)
@@ -72,6 +88,7 @@ class Iterator:
     element: Element | None = None
     value: Item | None = None
     requires_native: bool = False
+    json: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,6 +99,17 @@ class Generator:
 @dataclass(frozen=True)
 class Set:
     node: Node
+    dynamic: bool = False
+
+
+@dataclass(frozen=True)
+class Counter:
+    node: Node
+
+
+@dataclass(frozen=True)
+class CounterKey:
+    owner: Counter
 
 
 @dataclass(frozen=True)
@@ -112,6 +140,8 @@ NULL = Null()
 
 Item = (
     Value
+    | Json
+    | JsonType
     | Match
     | Duration
     | Row
@@ -122,6 +152,8 @@ Item = (
     | Iterator
     | Generator
     | Set
+    | Counter
+    | CounterKey
     | Slice
     | Null
     | Function
@@ -160,7 +192,17 @@ def describe(item: Item) -> str:
             return f"type of a {node.type} value"
         case Iterator():
             return "an iterator"
-        case Tuple() | Generator() | Set() | Slice() | Duration():
+        case (
+            Tuple()
+            | Generator()
+            | Set()
+            | Slice()
+            | Duration()
+            | Json()
+            | JsonType()
+            | Counter()
+            | CounterKey()
+        ):
             return f"a {type(item).__name__.lower()}"
         case Function(code=code):
             return f"helper {code.co_qualname}"

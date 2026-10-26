@@ -1,0 +1,10 @@
+{
+  "compiler": {
+    "line_percent": 96,
+    "branch_percent": 90
+  },
+  "framework": {
+    "line_percent": 98,
+    "branch_percent": 93
+  }
+}

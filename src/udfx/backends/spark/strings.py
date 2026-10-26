@@ -14,7 +14,7 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.backends.spark.backend import SparkBackend
-from udfx.backends.spark.casing import exact_case
+from udfx.backends.spark.casing import exact_case, exact_title
 from udfx.backends.spark.conversions import TEXT as TRANSLATION
 from udfx.backends.spark.rules import ASCII, INT32_MAX, RULES, when
 from udfx.frontend.core.text import folded_case_chain
@@ -35,7 +35,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
-from udfx.semantics.text_predicates import ascii_free
+from udfx.semantics.text_predicates import unicode_match
 from udfx.types import STR, Kind
 
 POINT = "point"
@@ -55,13 +55,12 @@ def case_drift(method: str) -> CaseDrift:
 
 
 def contains_class(value: Column, pattern: str) -> Column:
-    found = value.rlike(pattern)
-    if not ascii_free(pattern):
-        return found
-    return functions.when(ASCII.is_ascii(value), functions.lit(False)).otherwise(found)
+    return unicode_match(ASCII, Column.rlike, value, pattern)
 
 
 def recase(value: Column, method: str) -> RuleResult[Column]:
+    if method == "title":
+        return exact_title(value, CASE)
     expr = case_expression(CASE, value, method)
     exact = case_guard(case_drift(method), partial(contains_class, value), value.contains(SIGMA))
     if method in {"lower", "upper", "casefold"}:

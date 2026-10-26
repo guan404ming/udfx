@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "source": {
+    "name": "nyc311",
+    "source": "https://data.cityofnewyork.us/Social-Services/311-Service-Requests-from-2010-to-2019/76ig-c548",
+    "license": "NYC Open Data terms: https://opendata.cityofnewyork.us/overview/#termsofuse",
+    "selection": "January 2019. First 50000 records ordered by unique_key. Select 8 fields with no addresses. Parse naive timestamps at microsecond precision. Retain nulls and every selected row.",
+    "workloads": "Custom udfx workloads on public data, not upstream compiler coverage.",
+    "files": [
+      {
+        "path": "nyc311.csv",
+        "url": "https://data.cityofnewyork.us/resource/76ig-c548.csv?%24select=unique_key%2Ccreated_date%2Cclosed_date%2Cagency%2Ccomplaint_type%2Cdescriptor%2Cincident_zip%2Cborough&%24where=created_date+%3E%3D+%272019-01-01T00%3A00%3A00%27+AND+created_date+%3C+%272019-02-01T00%3A00%3A00%27&%24order=unique_key&%24limit=50000",
+        "sha256": "31d746f18deb333c52d597848f25a67c07fdae7ee43523d0a5edeedd3b905116"
+      }
+    ]
+  },
+  "tables": {
+    "requests": {
+      "sha256": "58f523cf3ef5b5ea6c7fde242128c05c91cf83e567617a6b149a8c0fe155b62a",
+      "rows": 32,
+      "schema": "unique_key: string\ncreated_date: timestamp[us]\nclosed_date: timestamp[us]\nagency: string\ncomplaint_type: string\ndescriptor: string\nincident_zip: string\nborough: string"
+    }
+  },
+  "sampling": {
+    "method": "source prefix",
+    "row_limit": 32
+  }
+}

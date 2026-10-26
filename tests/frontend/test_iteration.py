@@ -161,15 +161,15 @@ def test_comprehension_restores_local() -> None:
     assert check_function(restored, {"text": STR}, PolarsBackend(), [("",), ("a b",)]) == []
 
 
-def test_comprehension_fault_handlers_stay_unsupported() -> None:
+def test_comprehension_fault_handler() -> None:
     def guarded(text: str) -> list[str]:
         try:
             return [word.split("=")[1] for word in text.split(";")]
         except IndexError:
             return ["missing"]
 
-    with pytest.raises(Unsupported, match="comprehension faults with exception handlers"):
-        trace(guarded, {"text": STR})
+    rows = [("a=b;c=d",), ("a=b;missing",), ("missing;a=b",), ("",)]
+    assert check_function(guarded, {"text": STR}, PolarsBackend(), rows) == []
 
 
 def test_constant_loop_accepts_limit() -> None:

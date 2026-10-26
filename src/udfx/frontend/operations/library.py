@@ -6,8 +6,10 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.evaluation import Evaluation, always, single
 from udfx.frontend.core.values import Item, Opaque, Row, Tuple, Value
 from udfx.frontend.operations.builtins import call
+from udfx.frontend.operations.counters import call_counter
 from udfx.frontend.operations.datetimes import call_datetime
 from udfx.frontend.operations.iterables import call_iterable
+from udfx.frontend.operations.json import call_json
 from udfx.frontend.operations.paths import call_path
 from udfx.frontend.operations.regex import call_regex
 from udfx.frontend.resolve.constants import (
@@ -44,6 +46,8 @@ def ordinary_call(
 ) -> Evaluation:
     special = (
         call_datetime(callee, arguments, keywords)
+        or call_counter(callee, arguments, keywords)
+        or call_json(callee, arguments, keywords)
         or call_path(callee, arguments, keywords)
         or call_regex(callee, arguments, keywords, path)
     )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+from collections import Counter
 from functools import partial
 
 from udfx.ir import Node, lit
@@ -17,6 +18,14 @@ from udfx.semantics.lists import (
     sorted_set,
 )
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
+
+
+def frequency_order(values: list[str]) -> list[str]:
+    counts = Counter(values)
+    return sorted(counts, key=counts.__getitem__, reverse=True)
+
+
+register(Op("frequency_order", (list_of(STR),), list_of(STR), frequency_order))
 
 for item in (STR, INT, FLOAT, BOOL):
     sequence = list_of(item)

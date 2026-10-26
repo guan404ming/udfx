@@ -10,6 +10,7 @@ from udfx.backends.duckdb.rules import (
     RULES,
     bind,
     column,
+    concatenate,
     constant,
     function,
     length,
@@ -70,15 +71,13 @@ SPLIT = SplitPrimitives(
     append=lambda values, value: function("list_append", values, value),
     length=length,
     suffix=lambda value, start: function("substring", value, start + constant(1)),
-    word_prefix=lambda value, count: function(
-        "array_to_string",
+    word_prefix=lambda value, count: concatenate(
         function(
             "list_slice",
             function("regexp_extract_all", value, constant(word_prefix_pattern())),
             constant(1),
             count,
         ),
-        constant(""),
     ),
     lstrip=partial(strip_text, method="lstrip"),
     is_null=Expression.isnull,

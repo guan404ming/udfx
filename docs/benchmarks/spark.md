@@ -38,14 +38,17 @@ coverage of arbitrary Python UDFs, first-call compile cost, or distributed produ
 The measured source and benchmark manifest digest was
 `275cc84ee1ca55fa158a3a54437442ddf35401cc3ab80f0117e69629bfb7ed42`.
 
-## Run on your checkout
+## Reproduce the archived method
 
 ```sh
+git checkout 64a5cfe
 uv sync --locked
 uv run python -m bench.speed --engines spark --rows 1000000 --repeats 3
 ```
 
-Run the benchmark three times on an otherwise idle machine to compare with the method above.
+Use a separate checkout for this archived runner. The current public-data runner is described
+in [benchmark methods](../benchmarking.md).
+Run the archived benchmark three times on an otherwise idle machine to compare with the method above.
 Do not reuse a baseline cache when comparing revisions. Keep engine versions, input sizes,
 session settings, and hardware fixed. Report slower cases together with the geometric mean.
 

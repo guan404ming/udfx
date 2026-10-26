@@ -14,7 +14,7 @@ from udfx.backends.duckdb.rules import (
     trim,
     when,
 )
-from udfx.backends.registration import Lowered, register_text_conversions
+from udfx.backends.registration import Lowered, register_json, register_text_conversions
 from udfx.semantics.literals import (
     FLOAT_LITERAL,
     SpellingPrimitives,
@@ -53,6 +53,7 @@ TEXT = TextPrimitives(
     not_null=Expression.isnotnull,
     try_int=try_int,
     try_float=try_float,
+    lazy_coalesce=True,
 )
 
 SPELLING = SpellingPrimitives(constant, when, Expression.isnull, duckdb.CoalesceOperator)
@@ -93,3 +94,9 @@ def bool_str(value: Expression) -> Expression:
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 register_text_conversions(RULES, TEXT)
+register_json(
+    RULES,
+    TEXT,
+    lambda left, right: function("concat", left, right),
+    lambda text, pattern: function("regexp_extract_all", text, constant(pattern)),
+)

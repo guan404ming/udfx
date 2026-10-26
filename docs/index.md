@@ -2,8 +2,8 @@
 
 **An optimizing compiler for Python UDFs**
 
-Run your Python UDFs as native expressions in **Polars, DuckDB, DataFusion, and Spark**,
-without manual rewrites.
+Run your Python UDFs as native expressions in Polars, DuckDB, DataFusion, and Spark,
+without any manual rewrites.
 
 ## How it works
 

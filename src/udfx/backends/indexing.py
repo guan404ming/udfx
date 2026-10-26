@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
 from udfx.backends.hoisting import reads_input
 from udfx.backends.registration import Lowered
+from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Lit, Node, children
 from udfx.ops import OpKey, apply
@@ -105,7 +106,7 @@ def index_offsets(node: Comprehension) -> frozenset[Node]:
 def lower_indexed[E](
     backend: Backend[E],
     node: Comprehension,
-    elements: Mapping[Node, E],
+    elements: Scope[E],
     items: Node,
     bound: Node | None,
 ) -> Lowered[E]:
@@ -146,9 +147,7 @@ def lower_indexed[E](
     )
 
 
-def comprehension_parts[E](
-    backend: Backend[E], node: Comprehension, scope: Mapping[Node, E]
-) -> Parts[E]:
+def comprehension_parts[E](backend: Backend[E], node: Comprehension, scope: Scope[E]) -> Parts[E]:
     condition = backend.lower(node.condition, scope)
     with assuming(node.condition, True):
         value = backend.lower(node.value, scope)

@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 19 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,15 +22,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.12", "3.13", "3.14"]
+        python: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["3.12","3.13","3.14"]' || '["3.12"]') }}
         shard:
           - name: engines
             filter: not spark
           - name: spark
-            filter: spark and not ansi-off
-          - name: spark-ansi-off
-            filter: ansi-off
+            filter: spark
     name: check (${{ matrix.python }}, ${{ matrix.shard.name }})
+    env:
+      UDFX_TESTS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'full' || 'fast' }}
+      HYPOTHESIS_PROFILE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'ci' || 'default' }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.1
@@ -38,16 +42,43 @@ jobs:
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --locked --python ${{ matrix.python }}
       - if: matrix.shard.name == 'engines'
-        run: uv run --python ${{ matrix.python }} ruff check .
-      - if: matrix.shard.name == 'engines'
-        run: uv run --python ${{ matrix.python }} ruff format --check .
-      - if: matrix.shard.name == 'engines'
-        run: uv run --python ${{ matrix.python }} pyright
-      - run: uv run --python ${{ matrix.python }} pytest -k "${{ matrix.shard.filter }}"
-        env:
-          HYPOTHESIS_PROFILE: ci
-          UDFX_TESTS: full
-      - run: uv run --python ${{ matrix.python }} pytest -m corpus -k "${{ matrix.shard.filter }}"
-        env:
-          HYPOTHESIS_PROFILE: ci
-          UDFX_TESTS: full
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pyright
+      - run: uv run pytest -k "${{ matrix.shard.filter }}" --cov --cov-report= --junitxml=reports/tests-${{ matrix.python }}-${{ matrix.shard.name }}.xml
+      - run: uv run pytest -m corpus -k "${{ matrix.shard.filter }}" --cov --cov-append --cov-report= --junitxml=reports/corpus-${{ matrix.python }}-${{ matrix.shard.name }}.xml
+      - if: env.UDFX_TESTS == 'full'
+        run: uv run python -m workloads.prepare --suites udfbench --rows 32
+      - if: env.UDFX_TESTS == 'full'
+        run: uv run pytest -m public -k "${{ matrix.shard.filter }}" --cov --cov-append --cov-report= --junitxml=reports/public-${{ matrix.python }}-${{ matrix.shard.name }}.xml
+      - if: always()
+        run: mv .coverage reports/.coverage.${{ matrix.python }}.${{ matrix.shard.name }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-${{ matrix.python }}-${{ matrix.shard.name }}
+          path: reports/
+          include-hidden-files: true
+
+  coverage:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.1
+      - run: uv sync --locked
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          path: reports
+          merge-multiple: true
+      - run: |
+          uv run coverage combine reports
+          uv run coverage json -o reports/code.json
+          uv run python -m bench.coverage --code reports/code.json --junit reports/tests-*.xml --baseline tests/coverage-baseline.json --output reports/coverage.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-summary
+          path: reports/*.json

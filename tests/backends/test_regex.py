@@ -54,3 +54,5 @@ def test_regex_native_execution(backend: Backend[Any]) -> None:
         )
         assert flags == [True, True]
         assert str(lowered.expr).count("text") <= (6 if backend.name == "spark" else 3)
+        if node.op.name not in {"re.findall", "re.split"}:
+            assert lowered.exact is None

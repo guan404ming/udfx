@@ -10,15 +10,19 @@ from datafusion import Expr, SessionContext, functions, udf
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
+from udfx.backends.datafusion import graphs
 from udfx.backends.datafusion.rules import (
     RULES,
     array_filter,
+    array_lambda,
     array_transform,
     column,
     typed_literal,
 )
+from udfx.backends.lowering_context import graph_enabled
 from udfx.backends.registration import Lowered, RuleSet
-from udfx.ir import Col, Comprehension, Lit, Node
+from udfx.backends.rules import Scope
+from udfx.ir import Col, Comprehension, Element, Lit, Node
 from udfx.program import Program
 from udfx.types import BOOL, Type
 
@@ -31,9 +35,16 @@ FALLBACKS = count()
 class DataFusionBackend(Backend[Expr]):
     name: ClassVar[str] = "datafusion"
     rules: ClassVar[RuleSet[Expr]] = RULES
+    graphs: ClassVar[bool] = True
 
     def __init__(self, context: SessionContext | None = None) -> None:
         self._context = context
+        self._graphs: bool | None = None
+
+    def supports_graphs(self) -> bool:
+        if self._graphs is None:
+            self._graphs = graphs.supported(self.context)
+        return self._graphs
 
     @property
     def context(self) -> SessionContext:
@@ -44,11 +55,11 @@ class DataFusionBackend(Backend[Expr]):
     def column(self, node: Col) -> Expr:
         return column(node.name)
 
-    def lower(self, node: Node, elements: Mapping[Node, Expr] | None = None) -> Lowered[Expr]:
+    def lower(self, node: Node, elements: Scope[Expr] | None = None) -> Lowered[Expr]:
         lowered = super().lower(node, elements)
         return (
             Lowered(lowered.expr.cast(dtype(node.type)), lowered.exact, lowered.overflow)
-            if isinstance(node, Comprehension)
+            if isinstance(node, Comprehension | Element)
             else lowered
         )
 
@@ -58,16 +69,38 @@ class DataFusionBackend(Backend[Expr]):
     def select(self, condition: Expr, then: Expr, orelse: Expr) -> Expr:
         return functions.when(condition, then).otherwise(orelse)
 
+    def select_many(self, cases: Sequence[tuple[Expr, Expr]], orelse: Expr) -> Expr:
+        selected = functions.when(*cases[0])
+        for condition, value in cases[1:]:
+            selected = selected.when(condition, value)
+        return selected.otherwise(orelse)
+
     def list_value(self, items: Sequence[Expr], type: Type) -> Expr:
         return (
             functions.make_array(*items).cast(dtype(type)) if items else self.literal(Lit((), type))
         )
 
     def list_transform(self, source: Expr, transform: Callable[[Expr], Expr]) -> Expr:
+        if graph_enabled():
+            return functions.array_transform(source, array_lambda(transform))
         return array_transform(source, transform)
 
     def list_filter(self, source: Expr, predicate: Callable[[Expr], Expr]) -> Expr:
+        if graph_enabled():
+            return functions.array_filter(source, array_lambda(predicate))
         return array_filter(source, predicate)
+
+    def record(self, values: Sequence[Expr]) -> Expr:
+        return functions.named_struct([(str(index), value) for index, value in enumerate(values)])
+
+    def field(self, value: Expr, index: int) -> Expr:
+        return value[str(index)]
+
+    def bind(self, value: Expr, body: Callable[[Expr], Expr]) -> Expr:
+        return graphs.bind(value, body)
+
+    def bind_sequence(self, value: Expr, steps: Sequence[Callable[[Expr], Expr]]) -> Expr:
+        return graphs.bind_sequence(value, steps)
 
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)

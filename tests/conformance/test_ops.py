@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import Any
 
@@ -14,6 +14,7 @@ from udfx.semantics.scalars import numpy_scalar
 from udfx.testing import batches, values
 from udfx.testing.batching import check_batched
 from udfx.testing.equivalence import check_op_batches
+from udfx.testing.observation import capture
 from udfx.testing.strategies import (
     constant_values,
     extra_traps,
@@ -41,7 +42,11 @@ def test_every_op_has_a_rule(backend: Backend[Any]) -> None:
 
 
 @pytest.mark.parametrize(("backend", "op"), CASES)
-def test_op_matches_python(backend: Backend[Any], op: Op) -> None:
+def test_op_matches_python(
+    backend: Backend[Any], op: Op, record_property: Callable[[str, object], None]
+) -> None:
+    record_property("backend", backend.name)
+    record_property("signature", str(op))
     if isinstance(op.reference, partial) and op.reference.func is numpy_scalar:
         pytest.importorskip("numpy")
     schema = {f"arg{index}": param for index, param in enumerate(op.parameters)}
@@ -68,7 +73,12 @@ def test_op_matches_python(backend: Backend[Any], op: Op) -> None:
         return rows, constants
 
     def check(examples: Sequence[tuple[list[Row], dict[int, object]]]) -> None:
-        assert check_op_batches(op, backend, examples) == []
+        with capture() as dimensions:
+            mismatches = check_op_batches(op, backend, examples)
+        if any(constants for _, constants in examples):
+            dimensions.add("literals")
+        record_property("dimensions", ",".join(sorted(dimensions)))
+        assert mismatches == []
 
     check_batched(draw, check)
 

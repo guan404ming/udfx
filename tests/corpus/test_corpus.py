@@ -13,8 +13,7 @@ from udfx.testing import Raised, batches
 from udfx.testing.batching import check_batched
 from udfx.testing.equivalence import check_translation_batches
 from udfx.types import INT, Type
-
-from .cases import CASES, Case
+from workloads.corpus.cases import CASES, Case
 
 pytestmark = pytest.mark.corpus
 
@@ -23,7 +22,7 @@ pytestmark = pytest.mark.corpus
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.name)
 def test_case(case: Case, backend: Backend[Any]) -> None:
     translation = compile(case.function, case.schema, backend)
-    if case.expect == "native":
+    if case.expect == "supported":
         assert translation.ok, translation.unsupported
     if not translation.ok:
         return

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, cast
 
-from udfx.backends.rules import Lowered
+from udfx.backends.rules import Lowered, Scope
 from udfx.ir import Call, Node
 from udfx.semantics.arithmetic import IntegerRegionPrimitives, integer_region
 
@@ -14,7 +13,7 @@ if TYPE_CHECKING:
 def lower_integer_region[E](
     backend: Backend[E],
     node: Node,
-    elements: Mapping[Node, E],
+    elements: Scope[E],
     primitives: IntegerRegionPrimitives,
 ) -> Lowered[E] | None:
     region = integer_region(node, primitives.maximum, primitives.size_limit)

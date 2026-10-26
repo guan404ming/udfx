@@ -62,6 +62,16 @@ def argument_length(node: Call) -> int | None:
     return maximum_length(node.arguments[0])
 
 
+def integer_is_valid(node: Call) -> bool:
+    return any(
+        truth
+        and isinstance(predicate, Call)
+        and predicate.op.name == "int_parses"
+        and predicate.arguments == node.arguments
+        for predicate, truth in CONDITIONS.get()
+    )
+
+
 def pattern_is_empty(node: Call) -> bool | None:
     pattern = node.arguments[1]
     return (

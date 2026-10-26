@@ -10,6 +10,7 @@ from udfx.frontend.decode.ops import (
     Cell,
     Delete,
     Global,
+    Import,
     Local,
     Store,
 )
@@ -53,6 +54,18 @@ def load_global(builder: Builder, instruction: dis.Instruction) -> None:
 
 def push_null(builder: Builder, instruction: dis.Instruction) -> None:
     builder.push(NULL)
+
+
+def import_name(builder: Builder, instruction: dis.Instruction) -> None:
+    level, names = builder.pop_many(2)
+    builder.push(builder.produce(Import, instruction.argval, level, names))
+
+
+def import_from(builder: Builder, instruction: dis.Instruction) -> None:
+    builder.reach(1)
+    result = builder.new()
+    builder.emit(Attribute, (result,), builder.stack[-1], instruction.argval, False)
+    builder.push(result)
 
 
 def load_attribute(builder: Builder, instruction: dis.Instruction) -> None:

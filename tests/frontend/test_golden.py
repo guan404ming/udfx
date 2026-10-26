@@ -4,11 +4,11 @@ import contextlib
 
 import pytest
 
-from tests.corpus import Case
-from tests.corpus.cases import CASES
 from tests.frontend.snapshot import GOLDEN, RECORDING, key
 from udfx.errors import Unsupported
 from udfx.frontend import trace
+from workloads.corpus import Case
+from workloads.corpus.cases import CASES
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.name)

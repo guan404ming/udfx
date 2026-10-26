@@ -13,6 +13,8 @@ from udfx.frontend.core.values import (
     Function,
     Item,
     Iterator,
+    Json,
+    JsonType,
     Opaque,
     RuntimeType,
     Tuple,
@@ -22,9 +24,9 @@ from udfx.frontend.core.values import (
 )
 from udfx.frontend.resolve.callables import known_op
 from udfx.ir import TRUE, Col, Lit, Node, lit
-from udfx.ops import Fault
+from udfx.ops import Fault, apply
 from udfx.semantics.scalars import PYTHON_TYPES
-from udfx.types import list_of
+from udfx.types import STR, list_of
 
 SCALARS = (str, int, float, bool)
 
@@ -34,6 +36,8 @@ GENERICS = (list, dict, tuple, set, frozenset, type)
 
 
 def runtime_type(item: Item) -> Item:
+    if isinstance(item, Json):
+        return Opaque(item.container) if item.container is not None else JsonType(item.node)
     if isinstance(item, Value) and isinstance(item.node, Col):
         return RuntimeType(item.node)
     return Opaque(type(constant_value(item)))
@@ -45,6 +49,8 @@ def type_test(item: Item, expected: object, subclasses: bool = False) -> Node:
         return negate(reduce(conjunction, map(negate, tests), TRUE))
     if not isinstance(expected, type) or expected not in PYTHON_TYPES.values():
         raise Unsupported(f"type test against {named(expected)}")
+    if isinstance(item, JsonType):
+        return apply("json.is_type", item.node, lit(expected.__name__))
     if not isinstance(item, RuntimeType):
         actual = constant_value(item)
         if not isinstance(actual, type):
@@ -59,9 +65,9 @@ def type_test(item: Item, expected: object, subclasses: bool = False) -> Node:
 
 
 def type_comparison(left: Item, right: Item) -> Node | None:
-    if isinstance(left, RuntimeType):
+    if isinstance(left, RuntimeType | JsonType):
         return type_test(left, constant_value(right))
-    if isinstance(right, RuntimeType):
+    if isinstance(right, RuntimeType | JsonType):
         return type_test(right, constant_value(left))
     if isinstance(left, Opaque) and isinstance(left.value, type):
         return type_test(left, constant_value(right))
@@ -82,6 +88,8 @@ def constant(value: object) -> Item:
     if is_scalar(value):
         return Value(lit(value))
     if isinstance(value, tuple | list | set | frozenset):
+        if not value and isinstance(value, list | tuple):
+            return Value(Lit((), list_of(STR)), type(value))
         present = [item for item in value if item is not None]
         kinds = {type(item) for item in present}
         if len(kinds) == 1 and kinds <= set(SCALARS):

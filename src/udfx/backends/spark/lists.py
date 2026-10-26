@@ -6,6 +6,7 @@ from udfx.backends.registration import Lowered, register_lists
 from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
 from udfx.backends.spark.strings import characters, list_contains
 from udfx.semantics.facts import simple_arguments
+from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
 from udfx.types import Kind
 
@@ -65,6 +66,27 @@ def float_total(value: Column) -> Lowered[Column]:
 @RULES("sorted", Kind.LIST)
 def ordered(value: Column) -> Column:
     return functions.sort_array(value)
+
+
+@RULES("frequency_order", Kind.LIST)
+def frequency_order(value: Column) -> Column:
+    return ordered_frequencies(
+        FrequencyPrimitives(
+            literal=functions.lit,
+            distinct=functions.array_distinct,
+            transform=functions.transform,
+            count=lambda values, key: functions.size(
+                functions.filter(values, lambda item: item == key)
+            ),
+            position=functions.array_position,
+            record=lambda count, position, key: functions.struct(
+                count.alias("count"), position.alias("position"), key.alias("key")
+            ),
+            sort=functions.sort_array,
+            key=lambda record: record.getField("key"),
+        ),
+        value,
+    )
 
 
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)

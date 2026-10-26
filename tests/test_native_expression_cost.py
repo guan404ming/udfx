@@ -30,7 +30,7 @@ def test_reverse_uses_guarded_native_expression(backend: Backend[Any]) -> None:
     expression = str(lowered.expr)
     assert expression.count('"text"') == 1
     if backend.name == "duckdb":
-        assert 'THEN (reverse("udfx item")) ELSE array_to_string' in expression
+        assert 'THEN (reverse("udfx item")) ELSE COALESCE(array_to_string' in expression
         assert lowered.exact is None
     else:
         assert expression == 'col("text").str.reverse()'

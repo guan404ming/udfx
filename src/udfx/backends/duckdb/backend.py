@@ -20,10 +20,11 @@ from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_r
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
+from udfx.backends.lowering_context import lowering_context
 from udfx.backends.registration import RuleSet
-from udfx.ir import Col, Lit
+from udfx.ir import Col, Lit, digest
 from udfx.program import Program
-from udfx.types import Type
+from udfx.types import Kind, Type
 
 EXACT = f"{RESERVED}exact"
 NATIVE = f"{RESERVED}native"
@@ -51,20 +52,37 @@ def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> st
         code.co_consts,
         code.co_names,
         schema,
-        program.value,
-        program.fault,
+        digest(program.value),
+        digest(program.fault),
     )
-    digest = hashlib.sha256(repr(parts).encode()).hexdigest()
-    return f"{FALLBACK} {digest} {connection_number(connection)}"
+    key = hashlib.sha256(repr(parts).encode()).hexdigest()
+    return f"{FALLBACK} {key} {connection_number(connection)}"
 
 
 class DuckDBBackend(Backend[Expression]):
     name: ClassVar[str] = "duckdb"
     rules: ClassVar[RuleSet[Expression]] = RULES
     binds: ClassVar[bool] = True
+    graphs: ClassVar[bool] = True
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self._connection = connection
+
+    def build(self, program: Program) -> Expression:
+        with lowering_context() as context:
+            expr = super().build(program)
+        if (
+            context.has_bindings
+            and program.schema
+            and all(type.kind not in {Kind.FLOAT, Kind.LIST} for type in program.schema.values())
+        ):
+            arguments = ", ".join(
+                str(self.column(Col(name, type))) for name, type in program.schema.items()
+            )
+            return duckdb.SQLExpression(
+                f'(SELECT {expr} FROM (SELECT {arguments}) AS "udfx input")'
+            )
+        return expr
 
     @property
     def connection(self) -> duckdb.DuckDBPyConnection:
@@ -82,8 +100,24 @@ class DuckDBBackend(Backend[Expression]):
     def select(self, condition: Expression, then: Expression, orelse: Expression) -> Expression:
         return when(condition, then, orelse)
 
+    def select_many(
+        self, cases: Sequence[tuple[Expression, Expression]], orelse: Expression
+    ) -> Expression:
+        selected = duckdb.CaseExpression(*cases[0])
+        for condition, value in cases[1:]:
+            selected = selected.when(condition, value)
+        return selected.otherwise(orelse)
+
     def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
         return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")
+
+    def record(self, values: Sequence[Expression]) -> Expression:
+        return function(
+            "struct_pack", *(value.alias(str(index)) for index, value in enumerate(values))
+        )
+
+    def field(self, value: Expression, index: int) -> Expression:
+        return function("struct_extract", value, constant(str(index)))
 
     def list_value(self, items: Sequence[Expression], type: Type) -> Expression:
         return function("list_value", *items).cast(dtype(type))

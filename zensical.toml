@@ -37,6 +37,9 @@ nav = [
     { "Contributor Guide" = [
         { "Development" = "contributing.md" },
         { "Compiler Structure" = "architecture.md" },
+        { "Tests and Coverage" = "testing.md" },
+        { "Benchmarking" = "benchmarking.md" },
+        { "Public Datasets" = "datasets.md" },
     ] },
 ]
 

@@ -4,6 +4,7 @@ import operator
 from collections.abc import Callable
 
 from udfx.ir import Call, Col, Comprehension, Element, If, ListValue, Lit, Node
+from udfx.ops.registry import apply
 from udfx.semantics.assumptions import (
     CONDITIONS,
     NEGATED,
@@ -103,7 +104,11 @@ def intrinsic_bounds(node: Node, size_limit: int, conditions: Conditions) -> tup
 
 def call_bounds(node: Call, size_limit: int, conditions: Conditions) -> tuple[int, int] | None:
     if node.op.name in LENGTH_OPS:
-        return 0, size_limit
+        return (
+            split_length(node.arguments[0], size_limit, conditions)
+            if node.op.name == "len"
+            else None
+        ) or (0, size_limit)
     if node.op.name in {".find", ".rfind"}:
         return -1, size_limit
     if node.op.name == ".count":
@@ -139,6 +144,20 @@ def call_bounds(node: Call, size_limit: int, conditions: Conditions) -> tuple[in
     values = [operation(first, second) for first in left for second in right]
     lower, upper = min(values), max(values)
     return (lower, upper) if INT64_MIN <= lower <= upper <= INT64_MAX else None
+
+
+def split_length(node: Node, size_limit: int, conditions: Conditions) -> tuple[int, int] | None:
+    if not isinstance(node, Call) or node.op.name != ".split" or len(node.arguments) != 2:
+        return None
+    source, separator = node.arguments
+    if (
+        not isinstance(separator, Lit)
+        or not isinstance(separator.value, str)
+        or not separator.value
+    ):
+        return None
+    count = integer_bounds(apply(".count", source, separator), size_limit, conditions)
+    return (count[0] + 1, min(count[1] + 1, size_limit)) if count is not None else None
 
 
 def combine(left: tuple[int, int] | None, right: tuple[int, int] | None) -> tuple[int, int] | None:
@@ -181,5 +200,28 @@ def proven(node: Node) -> bool | None:
             return truth
     if not isinstance(node, Call) or node.op.name not in NEGATED:
         return None
+    constant = constant_comparison(node)
+    if constant is not None:
+        return constant
     left, right = (integer_bounds(argument, INT64_MAX) for argument in node.arguments)
     return compare(node.op.name, left, right) if left is not None and right is not None else None
+
+
+def constant_comparison(node: Call) -> bool | None:
+    left, right = node.arguments
+    for index, argument in enumerate(node.arguments):
+        if isinstance(argument, If) and isinstance(node.arguments[1 - index], Lit):
+            results = [
+                constant_comparison(
+                    Call(node.op, (branch, right) if index == 0 else (left, branch))
+                )
+                for branch in (argument.then, argument.orelse)
+            ]
+            return results[0] if results[0] is not None and results[0] == results[1] else None
+    if not isinstance(left, Lit) or not isinstance(right, Lit):
+        return None
+    try:
+        result = node.op.reference(left.value, right.value)
+        return result if isinstance(result, bool) else None
+    except (TypeError, ValueError):
+        return None

@@ -1,0 +1,587 @@
+diff --git a/datafusion/core/tests/dataframe/mod.rs b/datafusion/core/tests/dataframe/mod.rs
+index 4966c7a..c28e9ff 100644
+--- a/datafusion/core/tests/dataframe/mod.rs
++++ b/datafusion/core/tests/dataframe/mod.rs
+@@ -18,6 +18,7 @@
+ // Include tests in dataframe_functions
+ mod dataframe_functions;
+ mod describe;
++mod lambda_planning;
+ 
+ use arrow::array::{
+     Array, ArrayRef, BooleanArray, DictionaryArray, FixedSizeListArray,
+diff --git a/datafusion/expr/src/expr.rs b/datafusion/expr/src/expr.rs
+index f9c0662..1c0108a 100644
+--- a/datafusion/expr/src/expr.rs
++++ b/datafusion/expr/src/expr.rs
+@@ -2325,7 +2325,18 @@ impl Expr {
+         self,
+         schema: &DFSchema,
+     ) -> Result<Transformed<Expr>> {
+-        resolve_lambda_variables(self, schema, &mut HashMap::new())
++        self.rewrite_with_lambda_variables(schema, |expr| Ok(Transformed::no(expr)))
++    }
++
++    pub fn rewrite_with_lambda_variables<F>(
++        self,
++        schema: &DFSchema,
++        mut rewrite: F,
++    ) -> Result<Transformed<Expr>>
++    where
++        F: FnMut(Expr) -> Result<Transformed<Expr>>,
++    {
++        resolve_lambda_variables(self, schema, &mut HashMap::new(), &mut rewrite)
+     }
+ }
+ 
+diff --git a/datafusion/expr/src/higher_order_function.rs b/datafusion/expr/src/higher_order_function.rs
+index c300be8..84f471f 100644
+--- a/datafusion/expr/src/higher_order_function.rs
++++ b/datafusion/expr/src/higher_order_function.rs
+@@ -1174,16 +1174,21 @@ impl HigherOrderUDFImpl for AliasedHigherOrderUDFImpl {
+     }
+ }
+ 
+-pub(crate) fn resolve_lambda_variables(
++#[cfg_attr(feature = "recursive_protection", recursive::recursive)]
++pub(crate) fn resolve_lambda_variables<F>(
+     expr: Expr,
+     schema: &DFSchema,
+     // a map of lambda variable name => a never empty stack of fields [ [..shadowed], in_scope ]
+     vars: &mut HashMap<String, Vec<FieldRef>>,
+-) -> Result<Transformed<Expr>> {
+-    expr.transform_down(|expr| match expr {
++    rewrite: &mut F,
++) -> Result<Transformed<Expr>>
++where
++    F: FnMut(Expr) -> Result<Transformed<Expr>>,
++{
++    let resolved = match expr {
+         Expr::HigherOrderFunction(HigherOrderFunction { func, args }) => {
+             // not inlined to reduce nesting
+-            resolve_higher_order_function(func, args, schema, vars)
++            resolve_higher_order_function(func, args, schema, vars, rewrite)
+         }
+         Expr::LambdaVariable(mut var) => {
+             let field_stack = vars.get(&var.name).ok_or_else(|| {
+@@ -1208,35 +1213,27 @@ pub(crate) fn resolve_lambda_variables(
+                 transformed,
+             ))
+         }
+-        _ => Ok(Transformed::no(expr)),
+-    })
++        expr => expr
++            .map_children(|child| resolve_lambda_variables(child, schema, vars, rewrite)),
++    }?;
++    resolved.transform_data(rewrite)
+ }
+ 
+-fn resolve_higher_order_function(
++fn resolve_higher_order_function<F>(
+     func: Arc<HigherOrderUDF>,
+     args: Vec<Expr>,
+     schema: &DFSchema,
+     // a map of lambda variable name => a never empty stack of fields [ [..shadowed], in_scope ]
+     vars: &mut HashMap<String, Vec<FieldRef>>,
+-) -> Result<Transformed<Expr>> {
+-    let args = if !vars.is_empty() {
+-        /*  if this is a nested lambda, we must resolve non-lambda args before invoking
+-            lambda_parameters because it will invoke ExprSchemable::to_field for every
+-            non-lambda parameter, and if one them contains a lambda variable, it will fail
+-            due to it being unresolved. Example query:
+-
+-            array_transform([[1, 2]], a -> array_transform(a, b -> b+1))
+-
+-            the nested array_transform's lambda_parameters will call Lambdavariable::to_field
+-            on it's first argument, the variable `a`, which must be resolved
+-        */
+-        args.map_elements(|arg| match arg {
+-            Expr::Lambda(_) => Ok(Transformed::no(arg)),
+-            _ => resolve_lambda_variables(arg, schema, vars),
+-        })?
+-    } else {
+-        Transformed::no(args)
+-    };
++    rewrite: &mut F,
++) -> Result<Transformed<Expr>>
++where
++    F: FnMut(Expr) -> Result<Transformed<Expr>>,
++{
++    let args = args.map_elements(|arg| match arg {
++        Expr::Lambda(_) => Ok(Transformed::no(arg)),
++        _ => resolve_lambda_variables(arg, schema, vars, rewrite),
++    })?;
+ 
+     let transformed = args.transformed;
+     let mut args = args.data;
+@@ -1291,6 +1288,7 @@ fn resolve_higher_order_function(
+                                     mem::take(lambda.body.as_mut()),
+                                     schema,
+                                     vars,
++                                    rewrite,
+                                 )?;
+ 
+                                 remove_scope(vars, &lambda.params)?;
+@@ -1369,8 +1367,12 @@ fn resolve_higher_order_function(
+                     .push(field.renamed(param.as_str()));
+             }
+ 
+-            let transformed =
+-                resolve_lambda_variables(mem::take(lambda.body.as_mut()), schema, vars)?;
++            let transformed = resolve_lambda_variables(
++                mem::take(lambda.body.as_mut()),
++                schema,
++                vars,
++                rewrite,
++            )?;
+ 
+             *lambda.body = transformed.data;
+ 
+@@ -1379,7 +1381,7 @@ fn resolve_higher_order_function(
+             Ok(Transformed::new(
+                 Expr::Lambda(lambda),
+                 transformed.transformed,
+-                TreeNodeRecursion::Jump,
++                TreeNodeRecursion::Continue,
+             ))
+         }
+         arg => Ok(Transformed::no(arg)), // resolved at the start of the function
+@@ -1388,7 +1390,7 @@ fn resolve_higher_order_function(
+     Ok(Transformed::new(
+         Expr::HigherOrderFunction(HigherOrderFunction::new(func, args.data)),
+         transformed || args.transformed,
+-        TreeNodeRecursion::Jump,
++        TreeNodeRecursion::Continue,
+     ))
+ }
+ 
+diff --git a/datafusion/expr/src/logical_plan/plan.rs b/datafusion/expr/src/logical_plan/plan.rs
+index 1a141ea..e8068fb 100644
+--- a/datafusion/expr/src/logical_plan/plan.rs
++++ b/datafusion/expr/src/logical_plan/plan.rs
+@@ -2257,10 +2257,11 @@ impl LogicalPlan {
+     ///
+     /// [`LambdaVariable`]: crate::expr::LambdaVariable
+     pub fn resolve_lambda_variables(self) -> Result<Transformed<LogicalPlan>> {
+-        self.transform_with_subqueries(|plan| {
++        self.transform_up_with_subqueries(|plan| {
+             let schema = merge_schema(&plan.inputs());
+ 
+-            plan.map_expressions(|expr| expr.resolve_lambda_variables(&schema))
++            plan.map_expressions(|expr| expr.resolve_lambda_variables(&schema))?
++                .map_data(|plan| plan.recompute_schema())
+         })
+     }
+ }
+@@ -4809,9 +4810,49 @@ impl Unnest {
+ 
+         let metadata = input_schema.metadata().clone();
+         let df_schema = DFSchema::new_with_metadata(fields, metadata)?;
+-        // We can use the existing functional dependencies:
+-        let deps = input_schema.functional_dependencies().clone();
+-        let schema = Arc::new(df_schema.with_functional_dependencies(deps)?);
++        let dependencies = input_schema
++            .functional_dependencies()
++            .iter()
++            .filter_map(|dependency| {
++                let source_indices = dependency
++                    .source_indices
++                    .iter()
++                    .map(|index| {
++                        if indices_to_unnest.contains_key(index) {
++                            None
++                        } else {
++                            dependency_indices.iter().position(|input| input == index)
++                        }
++                    })
++                    .collect::<Option<Vec<_>>>()?;
++                let target_indices = dependency_indices
++                    .iter()
++                    .enumerate()
++                    .filter(|(_, input)| {
++                        dependency.target_indices.contains(input)
++                            && !list_columns.iter().any(|(index, _)| index == *input)
++                    })
++                    .map(|(output, _)| output)
++                    .collect();
++                let mode = if list_columns.is_empty() {
++                    dependency.mode
++                } else {
++                    Dependency::Multi
++                };
++                Some(
++                    FunctionalDependence::new(
++                        source_indices,
++                        target_indices,
++                        dependency.nullable,
++                    )
++                    .with_mode(mode),
++                )
++            })
++            .collect();
++        let schema =
++            Arc::new(df_schema.with_functional_dependencies(
++                FunctionalDependencies::new(dependencies),
++            )?);
+ 
+         Ok(Unnest {
+             input,
+diff --git a/datafusion/optimizer/src/analyzer/type_coercion.rs b/datafusion/optimizer/src/analyzer/type_coercion.rs
+index d11c3e7..bf544ce 100644
+--- a/datafusion/optimizer/src/analyzer/type_coercion.rs
++++ b/datafusion/optimizer/src/analyzer/type_coercion.rs
+@@ -28,7 +28,7 @@ use crate::utils::NamePreserver;
+ use arrow::datatypes::{DataType, Field, IntervalUnit, Schema, TimeUnit};
+ use arrow::temporal_conversions::SECONDS_IN_DAY;
+ use datafusion_common::config::ConfigOptions;
+-use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
++use datafusion_common::tree_node::{Transformed, TreeNodeRewriter};
+ use datafusion_common::{
+     Column, DFSchema, DFSchemaRef, DataFusionError, Result, ScalarValue, TableReference,
+     exec_err, internal_datafusion_err, internal_err, not_impl_err, plan_datafusion_err,
+@@ -163,7 +163,7 @@ fn analyze_internal(
+     // apply coercion rewrite all expressions in the plan individually
+     plan.map_expressions(|expr| {
+         let original_name = name_preserver.save(&expr);
+-        expr.rewrite(&mut expr_rewrite)
++        expr.rewrite_with_lambda_variables(&schema, |expr| expr_rewrite.f_up(expr))
+             .map(|transformed| transformed.update_data(|e| original_name.restore(e)))
+     })?
+     // some plans need extra coercion after their expressions are coerced
+diff --git a/datafusion/optimizer/src/simplify_expressions/expr_simplifier.rs b/datafusion/optimizer/src/simplify_expressions/expr_simplifier.rs
+index 2b60668..8467004 100644
+--- a/datafusion/optimizer/src/simplify_expressions/expr_simplifier.rs
++++ b/datafusion/optimizer/src/simplify_expressions/expr_simplifier.rs
+@@ -494,6 +494,7 @@ struct ConstEvaluator {
+     /// means there were no non evaluatable siblings (or their
+     /// descendants) so this `Expr` can be evaluated
+     can_evaluate: Vec<bool>,
++    lambda_scopes: Vec<(usize, Vec<String>)>,
+     /// Execution properties needed to call [`create_physical_expr`].
+     /// `ConstEvaluator` only evaluates expressions without column references
+     /// (i.e. constant expressions) and doesn't use the variable binding features
+@@ -517,24 +518,22 @@ impl TreeNodeRewriter for ConstEvaluator {
+     type Node = Expr;
+ 
+     fn f_down(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
+-        // Default to being able to evaluate this node
+         self.can_evaluate.push(true);
+-
+-        // if this expr is not ok to evaluate, mark entire parent
+-        // stack as not ok (as all parents have at least one child or
+-        // descendant that can not be evaluated
+-
++        if let Expr::Lambda(lambda) = &expr {
++            self.lambda_scopes
++                .push((self.can_evaluate.len() - 1, lambda.params.clone()));
++        }
+         if !Self::can_evaluate(&expr) {
+-            // walk back up stack, marking first parent that is not mutable
+-            let parent_iter = self.can_evaluate.iter_mut().rev();
+-            for p in parent_iter {
+-                if !*p {
+-                    // optimization: if we find an element on the
+-                    // stack already marked, know all elements above are also marked
+-                    break;
+-                }
+-                *p = false;
+-            }
++            let boundary = match &expr {
++                Expr::LambdaVariable(variable) => self
++                    .lambda_scopes
++                    .iter()
++                    .rev()
++                    .find(|(_, parameters)| parameters.contains(&variable.name))
++                    .map_or(0, |(index, _)| *index),
++                _ => 0,
++            };
++            self.can_evaluate[boundary..].fill(false);
+         }
+ 
+         // NB: do not short circuit recursion even if we find a non
+@@ -544,6 +543,11 @@ impl TreeNodeRewriter for ConstEvaluator {
+     }
+ 
+     fn f_up(&mut self, expr: Expr) -> Result<Transformed<Expr>> {
++        if matches!(expr, Expr::Lambda(_)) {
++            self.lambda_scopes.pop();
++            self.can_evaluate.pop();
++            return Ok(Transformed::no(expr));
++        }
+         match self.can_evaluate.pop() {
+             // Certain expressions such as `CASE` and `COALESCE` are short-circuiting
+             // and may not evaluate all their sub expressions. Thus, if
+@@ -567,7 +571,7 @@ impl TreeNodeRewriter for ConstEvaluator {
+                     }
+                     // For other expressions (like CASE, COALESCE), preserve the original
+                     // to allow short-circuit evaluation at execution time
+-                    Ok(Transformed::yes(expr))
++                    Ok(Transformed::no(expr))
+                 }
+             },
+             Some(false) => Ok(Transformed::no(expr)),
+@@ -607,6 +611,7 @@ impl ConstEvaluator {
+ 
+         Ok(Self {
+             can_evaluate: vec![],
++            lambda_scopes: vec![],
+             execution_props,
+         })
+     }
+@@ -643,7 +648,8 @@ impl ConstEvaluator {
+             | Expr::WindowFunction { .. }
+             | Expr::GroupingSet(_)
+             | Expr::Wildcard { .. }
+-            | Expr::Placeholder(_) => false,
++            | Expr::Placeholder(_)
++            | Expr::LambdaVariable(_) => false,
+             Expr::ScalarFunction(ScalarFunction { func, .. }) => {
+                 Self::volatility_ok(func.signature().volatility)
+             }
+@@ -697,8 +703,7 @@ impl ConstEvaluator {
+             | Expr::SimilarTo { .. }
+             | Expr::Case(_)
+             | Expr::InList { .. }
+-            | Expr::Lambda(_)
+-            | Expr::LambdaVariable(_) => true,
++            | Expr::Lambda(_) => true,
+         }
+     }
+ 
+diff --git a/datafusion/core/tests/dataframe/lambda_planning.rs b/datafusion/core/tests/dataframe/lambda_planning.rs
+new file mode 100644
+index 0000000..9187ed0
+--- /dev/null
++++ b/datafusion/core/tests/dataframe/lambda_planning.rs
+@@ -0,0 +1,231 @@
++// Licensed to the Apache Software Foundation (ASF) under one
++// or more contributor license agreements.  See the NOTICE file
++// distributed with this work for additional information
++// regarding copyright ownership.  The ASF licenses this file
++// to you under the Apache License, Version 2.0 (the
++// "License"); you may not use this file except in compliance
++// with the License.  You may obtain a copy of the License at
++//
++//   http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing,
++// software distributed under the License is distributed on an
++// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++// KIND, either express or implied.  See the License for the
++// specific language governing permissions and limitations
++// under the License.
++
++use std::sync::Arc;
++
++use arrow::array::RecordBatch;
++use arrow::datatypes::{DataType, Field, Schema};
++use datafusion::assert_batches_eq;
++use datafusion::dataframe::DataFrame;
++use datafusion::prelude::SessionContext;
++use datafusion_common::{Result, ToDFSchema};
++use datafusion_expr::simplify::SimplifyContext;
++use datafusion_expr::{Expr, col, lambda, lambda_var, lit};
++use datafusion_functions::core::expr_fn::{get_field, named_struct};
++use datafusion_functions_aggregate::expr_fn::array_agg;
++use datafusion_functions_nested::expr_fn::{array_element, array_transform, make_array};
++use datafusion_functions_window::expr_fn::row_number;
++use datafusion_optimizer::simplify_expressions::ExprSimplifier;
++
++async fn execute(frame: DataFrame) -> Result<Vec<RecordBatch>> {
++    let (state, plan) = frame.into_parts();
++    let plan = plan.resolve_lambda_variables()?.data;
++    DataFrame::new(state, plan).collect().await
++}
++
++#[tokio::test]
++async fn successive_lambda_bindings() -> Result<()> {
++    let context = SessionContext::new();
++    let frame = context.sql("SELECT 1 AS value UNION ALL SELECT 2").await?;
++    let mut value = col("value");
++    for index in 0..32 {
++        let name = format!("element{index}");
++        value = array_element(
++            array_transform(
++                make_array(vec![value]),
++                lambda([name.as_str()], lambda_var(name.as_str()) + lit(1)),
++            ),
++            lit(1),
++        );
++    }
++    let result = execute(frame.select(vec![value.alias("value")])?).await?;
++    assert_batches_eq!(
++        [
++            "+-------+",
++            "| value |",
++            "+-------+",
++            "| 33    |",
++            "| 34    |",
++            "+-------+"
++        ],
++        &result
++    );
++    Ok(())
++}
++
++#[tokio::test]
++async fn fields_follow_child_projection_types() -> Result<()> {
++    let context = SessionContext::new();
++    let frame = context.sql("SELECT [1, 2] AS values").await?;
++    let first = array_transform(
++        col("values"),
++        lambda(
++            ["first"],
++            named_struct(vec![lit("value"), lambda_var("first")]),
++        ),
++    );
++    let second = array_transform(
++        col("first"),
++        lambda(
++            ["second"],
++            named_struct(vec![lit("value"), get_field(lambda_var("second"), "value")]),
++        ),
++    );
++    let third = array_transform(
++        col("second"),
++        lambda(["third"], get_field(lambda_var("third"), "value")),
++    );
++    let frame = frame
++        .with_column("first", first)?
++        .with_column("second", second)?;
++    let result = execute(frame.select(vec![third.alias("values")])?).await?;
++    assert_batches_eq!(
++        [
++            "+--------+",
++            "| values |",
++            "+--------+",
++            "| [1, 2] |",
++            "+--------+"
++        ],
++        &result
++    );
++    Ok(())
++}
++
++#[test]
++fn bound_variables_do_not_repeat_constant_evaluation() -> Result<()> {
++    let schema = Schema::new(vec![Field::new(
++        "values",
++        DataType::List(Arc::new(Field::new("item", DataType::Int64, true))),
++        true,
++    )])
++    .to_dfschema_ref()?;
++    let expression = array_transform(
++        col("values"),
++        lambda(["element"], lambda_var("element") + lit(1_i64)),
++    )
++    .resolve_lambda_variables(&schema)?
++    .data;
++    let simplifier =
++        ExprSimplifier::new(SimplifyContext::builder().with_schema(schema).build());
++    let (result, cycles) =
++        simplifier.simplify_with_cycle_count_transformed(expression)?;
++    assert!(!result.transformed);
++    assert_eq!(cycles, 1);
++    Ok(())
++}
++
++#[tokio::test]
++async fn constant_lambdas_keep_captures_and_shadowing() -> Result<()> {
++    let context = SessionContext::new();
++    context
++        .sql("SET datafusion.sql_parser.dialect = databricks")
++        .await?;
++    for (query, expected) in [
++        (
++            "SELECT array_transform([1, 2], x -> x + 1) AS value",
++            "| [2, 3]               |",
++        ),
++        (
++            "SELECT array_transform([1, 2], x -> array_transform([10], y -> x + y)) AS value",
++            "| [[11], [12]]         |",
++        ),
++        (
++            "SELECT array_transform([1, 2], x -> x + array_element(array_transform([10], x -> x + 1), 1)) AS value",
++            "| [12, 13]             |",
++        ),
++    ] {
++        let frame = context.sql(query).await?;
++        let plan = frame.into_optimized_plan()?;
++        assert!(plan.expressions().iter().all(|expression| {
++            matches!(expression.clone().unalias(), Expr::Literal(_, _))
++        }));
++        let result = DataFrame::new(context.state(), plan).collect().await?;
++        let text = arrow::util::pretty::pretty_format_batches(&result)?.to_string();
++        assert!(text.contains(expected.trim_matches('|').trim()));
++    }
++    Ok(())
++}
++
++#[tokio::test]
++async fn unnest_removes_unique_row_dependence() -> Result<()> {
++    let context = SessionContext::new();
++    let frame = context
++        .sql("SELECT [1, 2] AS items UNION ALL SELECT [1, 2]")
++        .await?;
++    let frame = frame
++        .with_column("row", row_number())?
++        .unnest_columns(&["items"])?;
++    let result = frame
++        .aggregate(
++            vec![col("row")],
++            vec![array_agg(col("items")).alias("items")],
++        )?
++        .select_columns(&["items"])?
++        .collect()
++        .await?;
++    assert_batches_eq!(
++        [
++            "+--------+",
++            "| items  |",
++            "+--------+",
++            "| [1, 2] |",
++            "| [1, 2] |",
++            "+--------+"
++        ],
++        &result
++    );
++    Ok(())
++}
++
++#[tokio::test]
++async fn nested_list_binding_resolves_before_type_coercion() -> Result<()> {
++    let context = SessionContext::new();
++    let frame = context.sql("SELECT [1, 2] AS items").await?;
++    let records = array_transform(
++        col("items"),
++        lambda(
++            ["item"],
++            named_struct(vec![lit("number"), lambda_var("item")]),
++        ),
++    );
++    let values = array_transform(
++        make_array(vec![records]),
++        lambda(
++            ["records"],
++            array_transform(
++                lambda_var("records"),
++                lambda(["record"], get_field(lambda_var("record"), "number")),
++            ),
++        ),
++    );
++    let result = frame
++        .select(vec![array_element(values, lit(1)).alias("items")])?
++        .collect()
++        .await?;
++    assert_batches_eq!(
++        [
++            "+--------+",
++            "| items  |",
++            "+--------+",
++            "| [1, 2] |",
++            "+--------+"
++        ],
++        &result
++    );
++    Ok(())
++}

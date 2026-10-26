@@ -11,7 +11,6 @@ FEATURES: dict[str, str] = {
     "LIST_EXTEND": "list and set literals",
     "STORE_GLOBAL": "global assignment",
     "DELETE_GLOBAL": "global assignment",
-    "IMPORT_NAME": "imports",
     "BEFORE_WITH": "with blocks",
     "LOAD_SPECIAL": "with blocks",
     "WITH_EXCEPT_START": "with blocks",

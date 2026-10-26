@@ -4,7 +4,7 @@ import polars as pl
 
 from udfx.backends.polars.numbers import cast_float64
 from udfx.backends.polars.rules import RULES, when
-from udfx.backends.registration import Lowered, register_text_conversions
+from udfx.backends.registration import Lowered, register_json, register_text_conversions
 from udfx.semantics.literals import (
     SpellingPrimitives,
     TextPrimitives,
@@ -71,3 +71,9 @@ def bool_str(value: pl.Expr) -> pl.Expr:
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 register_text_conversions(RULES, TEXT)
+register_json(
+    RULES,
+    TEXT,
+    lambda left, right: left + right,
+    lambda text, pattern: text.str.extract_all(pattern),
+)

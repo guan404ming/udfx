@@ -226,5 +226,9 @@ def test_shared_values_lower_once(backend: Backend[Any]) -> None:
     rows = [(1.0,), (-1.0,), (0.5,), (1.0000001,)]
     assert check_function(twelve_squares, {"value": FLOAT}, backend, rows) == []
     translation = compile(forty_squares, {"value": FLOAT}, backend)
+    if backend.supports_graphs():
+        assert translation.ok
+        assert check_function(forty_squares, {"value": FLOAT}, backend, rows) == []
+        return
     assert not translation.ok
     assert "once shared values are expanded" in str(translation.unsupported)

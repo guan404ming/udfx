@@ -70,12 +70,11 @@ def backends() -> list[tuple[str, Backend[Any]]]:
 
 
 def backend_params() -> list[ParameterSet]:
-    return [pytest.param(backend, id=label) for label, backend in backends()]
+    return [
+        pytest.param(backend, id=label, marks=pytest.mark.xdist_group(label))
+        for label, backend in backends()
+    ]
 
 
 def frontend_backend_params() -> list[ParameterSet]:
     return [param for param in backend_params() if FULL or param.id == "polars"]
-
-
-def engine_names() -> list[str]:
-    return [backend.name for backend in installed() if FULL or backend.name == "polars"]

@@ -1,0 +1,274 @@
+diff --git a/crates/core/src/analyzer.rs b/crates/core/src/analyzer.rs
+deleted file mode 100644
+index 3a77e08..0000000
+--- a/crates/core/src/analyzer.rs
++++ /dev/null
+@@ -1,59 +0,0 @@
+-// Licensed to the Apache Software Foundation (ASF) under one
+-// or more contributor license agreements.  See the NOTICE file
+-// distributed with this work for additional information
+-// regarding copyright ownership.  The ASF licenses this file
+-// to you under the Apache License, Version 2.0 (the
+-// "License"); you may not use this file except in compliance
+-// with the License.  You may obtain a copy of the License at
+-//
+-//   http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing,
+-// software distributed under the License is distributed on an
+-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+-// KIND, either express or implied.  See the License for the
+-// specific language governing permissions and limitations
+-// under the License.
+-
+-//! Analyzer rules layered on top of DataFusion's defaults.
+-
+-use datafusion::common::Result;
+-use datafusion::common::config::ConfigOptions;
+-use datafusion::logical_expr::LogicalPlan;
+-use datafusion::optimizer::AnalyzerRule;
+-
+-/// Resolve [`LambdaVariable`] references into bound lambda parameters.
+-///
+-/// DataFusion's SQL planner resolves lambda variables inline as it plans a
+-/// higher-order function call, so SQL-built plans never carry unresolved
+-/// variables. Plans assembled programmatically through the Python expression
+-/// builder (e.g. `array_transform(col("xs"), lambda_(["v"], lambda_var("v")))`)
+-/// do carry them, and nothing in the default analyzer resolves them. This rule
+-/// runs [`LogicalPlan::resolve_lambda_variables`] so both construction paths
+-/// reach the optimizer with bound lambdas.
+-///
+-/// [`LambdaVariable`]: datafusion::logical_expr::expr::LambdaVariable
+-#[derive(Debug)]
+-pub struct ResolveLambdaVariables {}
+-
+-impl ResolveLambdaVariables {
+-    pub fn new() -> Self {
+-        Self {}
+-    }
+-}
+-
+-impl Default for ResolveLambdaVariables {
+-    fn default() -> Self {
+-        Self::new()
+-    }
+-}
+-
+-impl AnalyzerRule for ResolveLambdaVariables {
+-    fn analyze(&self, plan: LogicalPlan, _config: &ConfigOptions) -> Result<LogicalPlan> {
+-        plan.resolve_lambda_variables().map(|t| t.data)
+-    }
+-
+-    fn name(&self) -> &str {
+-        "resolve_lambda_variables"
+-    }
+-}
+diff --git a/crates/core/src/context.rs b/crates/core/src/context.rs
+index fe75668..f3bbc92 100644
+--- a/crates/core/src/context.rs
++++ b/crates/core/src/context.rs
+@@ -441,7 +441,6 @@ impl PySessionContext {
+             .with_config(config)
+             .with_runtime_env(runtime)
+             .with_default_features()
+-            .with_analyzer_rule(Arc::new(crate::analyzer::ResolveLambdaVariables::new()))
+             .build();
+         let ctx = Arc::new(SessionContext::new_with_state(session_state));
+         Ok(PySessionContext {
+diff --git a/crates/core/src/lib.rs b/crates/core/src/lib.rs
+index 492d576..8137cd2 100644
+--- a/crates/core/src/lib.rs
++++ b/crates/core/src/lib.rs
+@@ -26,7 +26,6 @@ pub use datafusion_substrait;
+ use mimalloc::MiMalloc;
+ use pyo3::prelude::*;
+ 
+-pub mod analyzer;
+ pub mod catalog;
+ pub mod codec;
+ pub mod common;
+diff --git a/python/tests/test_lambda_planning.py b/python/tests/test_lambda_planning.py
+new file mode 100644
+index 0000000..c8987df
+--- /dev/null
++++ b/python/tests/test_lambda_planning.py
+@@ -0,0 +1,179 @@
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#   http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing,
++# software distributed under the License is distributed on an
++# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++# KIND, either express or implied.  See the License for the
++# specific language governing permissions and limitations
++# under the License.
++
++import pytest
++from datafusion import SessionContext, col, functions, lit
++
++
++@pytest.mark.parametrize("depth", [2, 12, 32])
++def test_successive_lambda_bindings(depth):
++    frame = SessionContext().from_pydict({"value": [1, 2, None]})
++    value = col("value")
++    for index in range(depth):
++        name = f"value{index}"
++        value = functions.array_element(
++            functions.array_transform(
++                functions.make_array(value),
++                functions.lambda_([name], functions.lambda_var(name) + lit(1)),
++            ),
++            1,
++        )
++    assert frame.select(value.alias("result")).to_pydict() == {
++        "result": [1 + depth, 2 + depth, None]
++    }
++
++
++def test_lambda_fields_follow_projection_types():
++    frame = SessionContext().from_pydict({"words": [["ab", "c", None], []]})
++    value = functions.lambda_var("first")
++    frame = frame.with_column(
++        "first",
++        functions.array_transform(
++            col("words"),
++            functions.lambda_(
++                ["first"],
++                functions.named_struct(
++                    [
++                        ("flag", functions.character_length(value) > lit(1)),
++                        ("word", value),
++                    ]
++                ),
++            ),
++        ),
++    )
++    value = functions.lambda_var("second")
++    frame = frame.with_column(
++        "second",
++        functions.array_transform(
++            col("first"),
++            functions.lambda_(
++                ["second"],
++                functions.named_struct(
++                    [("flag", value["flag"]), ("word", value["word"])]
++                ),
++            ),
++        ),
++    )
++    value = functions.lambda_var("third")
++    result = functions.array_transform(
++        col("second"), functions.lambda_(["third"], value["flag"])
++    )
++    assert frame.select(result.alias("result")).to_pydict() == {
++        "result": [[True, False, None], []]
++    }
++
++
++def test_nested_lambdas_preserve_captured_values():
++    frame = SessionContext().from_pydict({"offset": [1, 10]})
++    expression = functions.array_transform(
++        functions.make_array(lit(1), lit(2)),
++        functions.lambda_(
++            ["outer"],
++            functions.array_transform(
++                functions.make_array(lit(10), lit(20)),
++                functions.lambda_(
++                    ["inner"],
++                    functions.lambda_var("outer")
++                    + functions.lambda_var("inner")
++                    + col("offset"),
++                ),
++            ),
++        ),
++    )
++    assert frame.select(expression.alias("result")).to_pydict() == {
++        "result": [[[12, 22], [13, 23]], [[21, 31], [22, 32]]]
++    }
++
++
++def test_nested_lambdas_keep_shadowed_names_separate():
++    frame = SessionContext().from_pydict({"value": [1, 10]})
++    inner = functions.array_transform(
++        functions.make_array(lit(2)),
++        functions.lambda_(["item"], functions.lambda_var("item") + lit(1)),
++    )
++    expression = functions.array_transform(
++        functions.make_array(col("value")),
++        functions.lambda_(
++            ["item"], functions.lambda_var("item") + functions.array_element(inner, 1)
++        ),
++    )
++    assert frame.select(expression.alias("result")).to_pydict() == {
++        "result": [[4], [13]]
++    }
++
++
++def test_unnest_does_not_keep_row_number_unique():
++    frame = SessionContext().from_pydict({"items": [[1, 2], [1, 2], [3, 4]]})
++    frame = frame.with_column("row", functions.row_number()).unnest_columns("items")
++    frame = frame.aggregate(
++        [col("row")], [functions.array_agg(col("items")).alias("items_out")]
++    )
++    actual = sorted(
++        sorted(row["items_out"]) for row in frame.to_arrow_table().to_pylist()
++    )
++    assert actual == [[1, 2], [1, 2], [3, 4]]
++
++
++def test_nested_list_binding_resolves_before_type_coercion():
++    frame = SessionContext().from_pydict({"items": [[1, 2], []]})
++    records = functions.array_transform(
++        col("items"),
++        functions.lambda_(
++            ["item"],
++            functions.named_struct(
++                [
++                    ("number", functions.lambda_var("item")),
++                ]
++            ),
++        ),
++    )
++    values = functions.array_transform(
++        functions.make_array(records),
++        functions.lambda_(
++            ["records"],
++            functions.array_transform(
++                functions.lambda_var("records"),
++                functions.lambda_(["record"], functions.lambda_var("record")["number"]),
++            ),
++        ),
++    )
++    result = functions.array_element(values, 1)
++    assert frame.select(result.alias("result")).to_pydict() == {"result": [[1, 2], []]}
++
++
++@pytest.mark.parametrize("project", [False, True])
++def test_lambda_fields_follow_coerced_decimal_precision(project):
++    frame = SessionContext().from_pydict({"items": [[1, 2], []]})
++    records = functions.array_transform(
++        col("items"),
++        functions.lambda_(
++            ["item"],
++            functions.named_struct(
++                [("count", lit(0) - functions.cardinality(col("items")))]
++            ),
++        ),
++    )
++    if project:
++        frame = frame.with_column("records", records)
++        records = col("records")
++    result = functions.array_transform(
++        records,
++        functions.lambda_(["record"], functions.lambda_var("record")["count"]),
++    )
++    assert frame.select(result.alias("result")).to_pydict() == {
++        "result": [[-2, -2], []]
++    }

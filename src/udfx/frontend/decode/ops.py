@@ -71,6 +71,14 @@ class Global(Op):
 
 
 @dataclass(frozen=True)
+class Import(Op):
+    result: int
+    name: str
+    level: int
+    names: int
+
+
+@dataclass(frozen=True)
 class Placeholder(Op):
     result: int
 
@@ -169,6 +177,14 @@ class Extend(Op):
     kind: str
     container: int
     source: int
+
+
+@dataclass(frozen=True)
+class MapAdd(Op):
+    result: int
+    container: int
+    key: int
+    value: int
 
 
 @dataclass(frozen=True)

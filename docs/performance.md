@@ -33,8 +33,14 @@ and [Spark](https://github.com/guan404ming/udfx/blob/main/docs/benchmarks/spark.
 From a checkout:
 
 ```sh
-uv run python -m bench.speed --rows 1000000 --repeats 3
+uv run python -m workloads.prepare
+uv run python -m bench --output .cache/results/run.json
+uv run python -m bench.report .cache/results/run.json
 ```
 
 Check correctness before timing. Keep versions, input, hardware, and session settings fixed.
 Report slower cases alongside averages.
+
+The current runner uses [three public datasets](datasets.md) and paired median timings.
+Its results are separate from the archived synthetic results above.
+See the [measurement method](benchmarking.md).

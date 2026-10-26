@@ -89,7 +89,7 @@ def test_regex_none_guard() -> None:
     trace(first, {"text": STR})
 
 
-@pytest.mark.parametrize("flag", [re.I, re.M, re.S, re.I | re.M | re.S])
+@pytest.mark.parametrize("flag", [re.I, re.M, re.S, re.U, re.I | re.M | re.S | re.U])
 @pytest.mark.parametrize("backend", frontend_backend_params())
 def test_regex_flags(flag: int, backend: Backend[Any]) -> None:
     def substitute(text: str) -> str:
@@ -150,13 +150,12 @@ def test_regex_flag_expression() -> None:
         (lambda text: re.sub("(?P<name>a)", "", text), "named groups"),
         (lambda text: re.sub("a", "", text, flags=re.X), "flags"),
         (lambda text: re.sub("a", "", text, flags=re.A), "flags"),
-        (lambda text: re.sub("a", "", text, flags=re.U), "flags"),
         (lambda text: re.sub("(?x)a", "", text), "flags"),
         (lambda text: re.findall("(a)(b)", text), "at most one"),
         (lambda text: re.split("(a)", text), "capture groups"),
         (lambda text: re.search("a", text), "regex match"),
         (lambda text: re.search("a", text).group(), "proves"),  # pyright: ignore[reportOptionalMemberAccess]
-        (lambda text: COMPILED.search(text, 1), "pos"),
+        (lambda text: re.compile(r"^a").search(text, 1), "positions"),
         (lambda text: re.sub("[", "", text), "invalid regex"),
         (lambda text: re.sub("a", r"\1", text), "replacement"),
     ],

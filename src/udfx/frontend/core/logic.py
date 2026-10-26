@@ -8,6 +8,7 @@ from udfx.frontend.core.numbers import simplify_number
 from udfx.frontend.core.sequences import simplify_sequence
 from udfx.frontend.core.sets import simplify_set
 from udfx.frontend.core.text import simplify_text
+from udfx.frontend.core.tracing import FOLDED
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, ListValue, Lit, Node
 from udfx.ops import apply
 from udfx.types import Kind, Type, fits, unify
@@ -16,7 +17,8 @@ EXCLUSIVE = frozenset({"bool", "is_none"})
 
 
 def fold(node: Node) -> Node:
-    return fold_shared(node, {})
+    seen = FOLDED.get()
+    return fold_shared(node, {} if seen is None else seen)
 
 
 def fold_shared(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:

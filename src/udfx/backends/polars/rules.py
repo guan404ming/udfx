@@ -16,7 +16,7 @@ def broadcast(value: pl.Expr) -> pl.Expr:
     try:
         if value.meta.is_length_preserving():
             return value
-    except pl.exceptions.ColumnNotFoundError:
+    except (pl.exceptions.ColumnNotFoundError, pl.exceptions.InvalidOperationError):
         pass
     return when(pl.int_range(pl.len()) % 2 == 0, value, value)
 

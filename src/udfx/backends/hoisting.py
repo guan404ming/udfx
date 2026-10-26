@@ -1,32 +1,47 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
-from functools import cache
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, cast
 
-from udfx.backends.rules import Lowered
+from udfx.backends.rules import Lowered, Scope
 from udfx.errors import Unsupported
-from udfx.ir import Call, Col, Comprehension, Element, Node, children
+from udfx.ir import Call, Col, Comprehension, Element, If, Node, children
 from udfx.types import Kind
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
 
 
-@cache
 def free(node: Node) -> frozenset[Element]:
-    if isinstance(node, Element):
-        return frozenset({node})
-    if isinstance(node, Comprehension):
-        inner = free(node.value) | free(node.condition) | free(node.fault)
-        return free(node.source) | (inner - {node.element})
-    return frozenset().union(*(free(part) for part in children(node)))
+    seen: dict[int, frozenset[Element]] = {}
+
+    def visit(part: Node) -> frozenset[Element]:
+        if id(part) not in seen:
+            if isinstance(part, Element):
+                result = frozenset({part})
+            elif isinstance(part, Comprehension):
+                inner = visit(part.value) | visit(part.condition) | visit(part.fault)
+                result = visit(part.source) | (inner - {part.element})
+            else:
+                result = frozenset().union(*(visit(child) for child in children(part)))
+            seen[id(part)] = result
+        return seen[id(part)]
+
+    return visit(node)
 
 
-@cache
 def reads_input(node: Node) -> bool:
-    return isinstance(node, Col | Element) or any(reads_input(part) for part in children(node))
+    seen: dict[int, bool] = {}
+
+    def visit(part: Node) -> bool:
+        if id(part) not in seen:
+            seen[id(part)] = isinstance(part, Col | Element) or any(
+                visit(child) for child in children(part)
+            )
+        return seen[id(part)]
+
+    return visit(node)
 
 
 def size(node: Node) -> int:
@@ -62,7 +77,7 @@ def invariant(node: Comprehension, elements: Mapping[Node, object]) -> Node | No
     return max(found, key=lambda part: (found[part], size(part)), default=None)
 
 
-def exact_free[E](backend: Backend[E], node: Node, elements: Mapping[Node, E]) -> bool:
+def exact_free[E](backend: Backend[E], node: Node, elements: Scope[E]) -> bool:
     try:
         lowered = backend.lower(node, elements)
     except Unsupported:
@@ -70,17 +85,71 @@ def exact_free[E](backend: Backend[E], node: Node, elements: Mapping[Node, E]) -
     return lowered.exact is None and lowered.overflow is None
 
 
+def repeated_condition(node: If, elements: Mapping[Node, object]) -> Node | None:
+    try:
+        hash(node)
+    except TypeError:
+        return None
+    candidates: dict[Node, None] = {}
+
+    def collect(part: Node) -> None:
+        if part in elements:
+            return
+        if (
+            isinstance(part, Call | If)
+            and part.type.kind is Kind.STR
+            and free(part) <= free(node)
+            and reads_input(part)
+        ):
+            candidates[part] = None
+        for child in children(part):
+            collect(child)
+
+    collect(node.condition)
+    counts: Counter[Node] = Counter()
+
+    def count(part: Node) -> None:
+        if part in elements:
+            return
+        if part in candidates:
+            counts[part] += 1
+        for child in children(part):
+            count(child)
+
+    count(node)
+    repeated = [part for part in candidates if worth_binding(part, counts[part])]
+    return max(repeated, key=lambda part: (size(part), counts[part]), default=None)
+
+
 def hoist[E](
-    backend: Backend[E], node: Node, elements: Mapping[Node, E], hoisted: Node
+    backend: Backend[E],
+    node: Node,
+    elements: Scope[E],
+    hoisted: Node,
+    lower: Callable[[Node, Scope[E]], Lowered[E]] | None = None,
 ) -> Lowered[E]:
     definition = backend.lower(hoisted, elements).expr
     found: list[Lowered[E]] = []
 
-    def inner(reference: E, pick: bool) -> E:
-        found.append(backend.lower(node, {**elements, hoisted: reference}))
-        return cast("E", backend.exact(found[-1]) if pick else found[-1].expr)
+    def inner(reference: E) -> Lowered[E]:
+        found.append((lower or backend.lower)(node, {**elements, hoisted: reference}))
+        return found[-1]
 
-    expr = backend.bind(definition, lambda reference: inner(reference, False))
-    if backend.exact(found[0]) is None:
-        return Lowered(expr)
-    return Lowered(expr, backend.bind(definition, lambda reference: inner(reference, True)))
+    expr = backend.bind(definition, lambda reference: inner(reference).expr)
+
+    def bound(field: str) -> E | None:
+        if getattr(found[0], field) is None:
+            return None
+        return backend.bind(
+            definition, lambda reference: cast("E", getattr(inner(reference), field))
+        )
+
+    return Lowered(expr, bound("exact"), bound("overflow"))
+
+
+def worth_binding(node: Node, occurrences: int) -> bool:
+    def cost(part: Node) -> int:
+        parts = children(part)
+        return int(bool(parts)) + sum(cost(child) for child in parts)
+
+    return cost(node) * (occurrences - 1) > 3

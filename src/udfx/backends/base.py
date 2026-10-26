@@ -7,35 +7,26 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import reduce
 from typing import Any, ClassVar, cast
 
-from udfx.backends.faults import FALLBACK_MARKER, NativeFaults, decode_fallback_error
-from udfx.backends.lowering import (
-    lower_call,
-    lower_comprehension,
-    lower_if,
-    lower_program,
-)
+from udfx.backends.faults import NativeFaults, decode_fallback_error, encode_fallback_error
 from udfx.backends.lowering_context import lower_shared
+from udfx.backends.nodes import lower_node
+from udfx.backends.program_lowering import lower_program
 from udfx.backends.registration import Lowered, RuleSet
-from udfx.backends.rules import fold_predicate
+from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
 from udfx.ir import (
     FALSE,
     TRUE,
-    Call,
     Col,
-    Comprehension,
-    Element,
-    Guarded,
-    If,
-    ListValue,
     Lit,
     Node,
 )
 from udfx.program import Program
-from udfx.types import Kind, Type, fits
+from udfx.types import Type
 
 RESERVED = "udfx "
 OUTPUT = f"{RESERVED}out"
+RAISED = threading.local()
 Row = tuple[object, ...]
 Gather = Callable[[list[int]], Sequence[Sequence[object]]]
 
@@ -48,21 +39,20 @@ def output_names(count: int) -> list[str]:
     return [f"{OUTPUT} {index}" for index in range(count)]
 
 
-RAISED = threading.local()
-
-
 class FallbackError(RuntimeError):
     def __init__(self, error: Exception | str) -> None:
-        super().__init__(
-            error if isinstance(error, str) else f"{FALLBACK_MARKER}{type(error).__name__}: {error}"
-        )
+        super().__init__(error if isinstance(error, str) else encode_fallback_error(error))
 
 
 class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
+    graphs: ClassVar[bool] = False
     binds: ClassVar[bool] = False
     indexes: ClassVar[bool] = False
+
+    def supports_graphs(self) -> bool:
+        return self.graphs
 
     def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
         try:
@@ -123,8 +113,20 @@ class Backend[E](ABC):
     @abstractmethod
     def select(self, condition: E, then: E, orelse: E) -> E: ...
 
+    def select_many(self, cases: Sequence[tuple[E, E]], orelse: E) -> E:
+        return reduce(lambda value, case: self.select(*case, value), reversed(cases), orelse)
+
     def bind(self, value: E, body: Callable[[E], E]) -> E:
         raise Unsupported(f"{self.name} cannot bind expressions")
+
+    def bind_sequence(self, value: E, steps: Sequence[Callable[[E], E]]) -> E:
+        return reduce(self.bind, steps, value)
+
+    def record(self, values: Sequence[E]) -> E:
+        raise Unsupported(f"{self.name} cannot construct expression records")
+
+    def field(self, value: E, index: int) -> E:
+        raise Unsupported(f"{self.name} cannot read expression records")
 
     def both(self, left: E, right: E) -> E:
         return cast("Any", left) & right
@@ -154,53 +156,11 @@ class Backend[E](ABC):
         self, exprs: Sequence[E], schema: Mapping[str, Type], rows: Sequence[Row]
     ) -> list[list[object]]: ...
 
-    def lower(self, node: Node, elements: Mapping[Node, E] | None = None) -> Lowered[E]:
+    def lower(self, node: Node, elements: Scope[E] | None = None) -> Lowered[E]:
         return lower_shared(self, node, {} if elements is None else elements)
 
-    def lower_node(self, node: Node, elements: Mapping[Node, E]) -> Lowered[E]:
-        if elements and node in elements:
-            return Lowered(elements[node])
-        match node:
-            case Guarded():
-                value = self.lower(node.value, elements)
-                predicate = fold_predicate(node.exact, self.rules.rewrite_call)
-                if predicate == TRUE:
-                    return value
-                exact = self.lower(predicate, elements)
-                return Lowered(
-                    value.expr,
-                    self.conjunction(value.exact, self.exact(exact), exact.expr),
-                    value.overflow,
-                )
-            case Element():
-                return Lowered(elements[node])
-            case ListValue():
-                items = [self.lower(item, elements) for item in node.items]
-                return Lowered(
-                    self.list_value([item.expr for item in items], node.type),
-                    self.conjunction(*(self.exact(item) for item in items)),
-                )
-            case Comprehension():
-                return lower_comprehension(self, node, elements)
-            case Col():
-                return Lowered(self.column(node))
-            case Lit() if (
-                node.type.kind is Kind.LIST
-                and node.type.item is not None
-                and isinstance(node.value, tuple | list)
-            ):
-                return self.lower(
-                    ListValue(tuple(Lit(item, node.type.item) for item in node.value), node.type),
-                    elements,
-                )
-            case Lit() if node.type.kind is Kind.INT and not fits(node.value, node.type):
-                return Lowered(self.literal(Lit(0, node.type)), overflow=self.literal(TRUE))
-            case Lit():
-                return Lowered(self.literal(node))
-            case If():
-                return lower_if(self, node, elements)
-            case Call():
-                return lower_call(self, node, elements)
+    def lower_node(self, node: Node, elements: Scope[E]) -> Lowered[E]:
+        return lower_node(self, node, elements)
 
     def fold_name(self, name: str) -> str:
         return name

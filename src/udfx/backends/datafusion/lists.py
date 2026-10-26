@@ -3,10 +3,11 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
-from udfx.backends.datafusion.rules import RULES, when
+from udfx.backends.datafusion.rules import RULES, array_filter, array_transform, when
 from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import characters, list_contains, list_len
 from udfx.backends.registration import Lowered, register_lists
+from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
 from udfx.semantics.lists import ListPrimitives, SetPrimitives, SumPrimitives, integer_sum_exact
 from udfx.types import BOOL, INT, Kind
 
@@ -71,6 +72,27 @@ def float_total(value: Expr) -> Lowered[Expr]:
 @RULES("sorted", Kind.LIST)
 def ordered(value: Expr) -> Expr:
     return functions.array_sort(value)
+
+
+@RULES("frequency_order", Kind.LIST)
+def frequency_order(value: Expr) -> Expr:
+    return ordered_frequencies(
+        FrequencyPrimitives(
+            literal=lit,
+            distinct=functions.array_distinct,
+            transform=array_transform,
+            count=lambda values, key: functions.cardinality(
+                array_filter(values, lambda item: item == key)
+            ),
+            position=functions.array_position,
+            record=lambda count, position, key: functions.named_struct(
+                [("count", count), ("position", position), ("key", key)]
+            ),
+            sort=functions.array_sort,
+            key=lambda record: functions.get_field(record, "key"),
+        ),
+        value,
+    )
 
 
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)

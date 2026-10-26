@@ -46,6 +46,7 @@ dev = [
     "pyright>=1.1.390",
     "pyarrow-stubs>=20.0.0.20260819",
     "pytest-xdist>=3.8.0",
+    "pytest-cov>=7",
 ]
 docs = [
     "zensical>=0.0.72",
@@ -65,6 +66,8 @@ exclude = [
     "CLAUDE.md",
     "bench",
     "tests",
+    "workloads",
+    "patches",
     "uv.lock",
 ]
 
@@ -88,12 +91,26 @@ reportUnknownVariableType = "none"
 reportUnknownLambdaType = "none"
 reportMissingTypeArgument = "none"
 reportUnknownParameterType = "none"
-include = ["src", "tests"]
+include = ["src", "tests", "bench", "workloads"]
 extraPaths = ["tests"]
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-n auto --dist loadgroup -m \"not corpus\" --durations=5"
-markers = ["corpus: acceptance corpus, run with -m corpus"]
+addopts = "-n auto --maxprocesses=4 --dist loadgroup -m \"not corpus and not public\" --durations=5"
+markers = [
+    "corpus: acceptance corpus, run with -m corpus",
+    "public: external UDFBench correctness, requires explicit data preparation",
+]
+junit_family = "xunit1"
+
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["src/udfx", "bench", "workloads"]
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

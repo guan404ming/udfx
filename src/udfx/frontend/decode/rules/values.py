@@ -16,6 +16,7 @@ from udfx.frontend.decode.ops import (
     Format,
     Iterate,
     MakeFunction,
+    MapAdd,
     Merge,
     Negate,
     Slice,
@@ -119,6 +120,13 @@ def extend(kind: str) -> Rule:
 
 def list_append(builder: Builder, instruction: dis.Instruction) -> None:
     builder.emit(Append, builder.pop())
+
+
+def map_add(builder: Builder, instruction: dis.Instruction) -> None:
+    key, value = builder.pop_many(2)
+    builder.reach(instruction.argval)
+    position = len(builder.stack) - instruction.argval
+    builder.stack[position] = builder.produce(MapAdd, builder.stack[position], key, value)
 
 
 def unpack(builder: Builder, instruction: dis.Instruction) -> None:

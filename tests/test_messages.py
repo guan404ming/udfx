@@ -49,12 +49,6 @@ def global_deletion(a: int) -> int:
     return a
 
 
-def local_import(a: int) -> int:
-    import math  # noqa: PLC0415
-
-    return math.floor(a)
-
-
 def with_block(s: str) -> str:
     with NOTHING:
         return s
@@ -96,16 +90,15 @@ def unpacking(s: str) -> str:
         (
             list_literal,
             {"text": STR},
-            r"list and set literal extension requires constants at list_literal\+\d+",
+            r"container literal extension requires constants at list_literal\+\d+",
         ),
         (
             set_literal,
             {"text": STR},
-            r"list and set literal extension requires constants at set_literal\+\d+",
+            r"container literal extension requires constants at set_literal\+\d+",
         ),
         (global_assignment, {"a": INT}, r"global assignment at global_assignment\+\d+"),
         (global_deletion, {"a": INT}, r"global assignment at global_deletion\+\d+"),
-        (local_import, {"a": INT}, r"imports at local_import\+\d+"),
         (with_block, {"s": STR}, r"with blocks at with_block\+\d+"),
         (raise_statement, {"s": STR}, r"raise statements at raise_statement\+\d+"),
         (generator, {"s": STR}, r"generators at generator\+\d+"),

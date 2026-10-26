@@ -21,7 +21,7 @@ from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.spark import SparkBackend
 from udfx.ir import Lit
 from udfx.testing import check_function
-from udfx.types import INT, STR
+from udfx.types import INT, INT64_MAX, STR
 
 from .functions import inverse
 
@@ -32,7 +32,7 @@ FALLBACKS = "SELECT count(*) FROM duckdb_functions() WHERE function_name LIKE 'u
 
 
 def guarded_year(text: str) -> int:
-    return (int(text[:4]) + 2) - 1
+    return (int(text[:4]) + INT64_MAX) - (INT64_MAX - 1)
 
 
 def exclaim(s: str) -> str:

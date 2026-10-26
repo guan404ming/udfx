@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests.corpus.cases import CASES
 from udfx.frontend.decode import DecodeError, decode
 from udfx.frontend.decode.builder import Builder
 from udfx.frontend.decode.decoder import attach_handler
@@ -25,6 +24,7 @@ from udfx.frontend.decode.ops import (
     Yield,
 )
 from udfx.frontend.decode.rules.control import return_value
+from workloads.corpus.cases import CASES
 
 
 def method_call(text):
@@ -137,18 +137,19 @@ def test_branch_reads_a_bool() -> None:
 
 
 def test_comprehension_is_a_foreach_region() -> None:
+    decoded = decode(comprehension.__code__)
     loop = next(exit for exit in exits(comprehension) if isinstance(exit, ForEach))
     assert loop.accumulator is not None
     assert any(isinstance(op, Append) for op in operations(comprehension))
-
-
-def test_comprehension_cleanup_is_transparent() -> None:
-    assert all(op.handler is None for op in operations(comprehension))
-    assert not any(isinstance(exit, Fail) for exit in exits(comprehension))
+    assert loop.handler is not None
+    cleanup = decoded.blocks[loop.handler.edge.target]
+    assert any(isinstance(op, Store) and op.name == "item" for op in cleanup.ops)
+    assert isinstance(cleanup.exit, Fail)
 
 
 def test_unreachable_code_is_still_scanned() -> None:
-    decoded = decode(comprehension.__code__)
+    code = next(code for code in codes(generator.__code__) if code.co_name == "<genexpr>")
+    decoded = decode(code)
     assert any(isinstance(block.exit, Fail) for block in decoded.orphans.values())
     assert any(isinstance(op, Fail) for op in decoded.operations(0))
     assert not any(isinstance(block.exit, Fail) for block in decoded.blocks.values())
