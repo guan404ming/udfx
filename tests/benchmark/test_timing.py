@@ -1,9 +1,23 @@
 import gc
+from collections import Counter
 from collections.abc import Callable
+from itertools import pairwise, permutations
 
 import pytest
 
-from bench.timing import Settings, elapsed, paired, summarize
+from bench.timing import Settings, balanced_orders, elapsed, paired, summarize
+
+
+@pytest.mark.parametrize("count", [2, 3, 4, 5])
+def test_orders_balance_positions_and_preceding_actions(count: int) -> None:
+    names = [str(index) for index in range(count)]
+    orders = balanced_orders(names)
+    assert all(sorted(order) == names for order in orders)
+    for position in zip(*orders, strict=True):
+        assert len(set(Counter(position).values())) == 1
+    predecessors = Counter(pair for order in orders for pair in pairwise(order))
+    assert set(predecessors) == set(permutations(names, 2))
+    assert len(set(predecessors.values())) == 1
 
 
 @pytest.mark.parametrize("names", [("python", "udfx"), ("python", "udfx", "native")])

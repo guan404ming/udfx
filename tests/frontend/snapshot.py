@@ -8,6 +8,7 @@ import sys
 from collections.abc import Callable, Mapping
 from dataclasses import fields, is_dataclass
 from pathlib import Path
+from typing import Protocol
 
 from udfx.errors import Unsupported
 from udfx.ir import Element
@@ -18,7 +19,16 @@ from udfx.types import Type
 ROOT = Path(__file__).resolve().parents[2]
 PATH = Path(__file__).with_name(f"golden_{sys.version_info.major}_{sys.version_info.minor}.json")
 RECORDING = bool(os.environ.get("UDFX_GOLDEN_RECORD"))
-Tracer = Callable[[Callable[..., object], Mapping[str, Type]], Program]
+
+
+class Tracer(Protocol):
+    def __call__(
+        self,
+        function: Callable[..., object],
+        schema: Mapping[str, Type],
+        *,
+        result: Type | None = None,
+    ) -> Program: ...
 
 
 def render(value: object, names: dict[str, int]) -> str:
@@ -92,10 +102,14 @@ GOLDEN = Golden()
 
 
 def guarded(tracer: Tracer) -> Tracer:
-    def traced(function: Callable[..., object], schema: Mapping[str, Type]) -> Program:
+    def traced(
+        function: Callable[..., object], schema: Mapping[str, Type], *, result: Type | None = None
+    ) -> Program:
         identifier = key(function, schema)
+        if result is not None:
+            identifier += f"|result:{result}"
         try:
-            program = tracer(function, schema)
+            program = tracer(function, schema, result=result)
         except Unsupported as error:
             GOLDEN.observe(identifier, describe(error))
             raise

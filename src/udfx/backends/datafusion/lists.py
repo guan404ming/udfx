@@ -3,16 +3,36 @@ from __future__ import annotations
 import pyarrow as pa
 from datafusion import Expr, functions, lit
 
+from udfx.backends.datafusion.graphs import bind
 from udfx.backends.datafusion.rules import RULES, array_filter, array_transform, when
 from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import characters, list_contains, list_len
+from udfx.backends.lowering_context import bindings_enabled
 from udfx.backends.registration import Lowered, register_lists
-from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
+from udfx.frontend.core.comprehensions import lowercase_words
+from udfx.semantics.facts import nullable_arguments
+from udfx.semantics.frequencies import (
+    FrequencyPrimitives,
+    FrequencyRunPrimitives,
+    ordered_frequencies,
+    sorted_frequencies,
+)
 from udfx.semantics.lists import ListPrimitives, SetPrimitives, SumPrimitives, integer_sum_exact
+from udfx.semantics.sequences import take_prefix
 from udfx.types import BOOL, INT, Kind
 
 for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
+
+
+@RULES("__contains__", Kind.LIST, Kind.STR, literals=(0,), facts={"nullable": nullable_arguments})
+def contains_strings(container: Expr | list | tuple, item: Expr, *, nullable: bool = True) -> Expr:
+    if isinstance(container, list | tuple):
+        found = functions.in_list(item, [lit(value) for value in container if value is not None])
+        if not nullable:
+            return found
+        return functions.coalesce(found, lit(False)) | (item.is_null() & lit(None in container))
+    return list_contains(container, item)
 
 
 @RULES("list", Kind.LIST)
@@ -74,16 +94,47 @@ def ordered(value: Expr) -> Expr:
     return functions.array_sort(value)
 
 
-@RULES("frequency_order", Kind.LIST)
-def frequency_order(value: Expr) -> Expr:
+@RULES("frequency_order", Kind.LIST, Kind.INT)
+def frequency_order(value: Expr, count: Expr) -> Expr:
+    ranked = (
+        bind(value, lambda source: sorted_frequencies(FREQUENCY_RUNS, source))
+        if bindings_enabled(False)
+        else ordered_frequencies_value(value)
+    )
+    return take_prefix(SEQUENCE, ranked, count)
+
+
+RULES.rewrite("frequency_order", Kind.LIST, Kind.INT)(lowercase_words)
+
+
+FREQUENCY_RUNS = FrequencyRunPrimitives(
+    literal=lit,
+    length=lambda value: functions.cardinality(value).cast(pa.int64()),
+    indices=lambda count: functions.range(lit(0), count),
+    zip=functions.arrays_zip,
+    field=lambda value, index: functions.get_field(value, str(index + 1)),
+    record=lambda *values: functions.named_struct(
+        [(str(index + 1), value) for index, value in enumerate(values)]
+    ),
+    sort=functions.array_sort,
+    head=lambda value: functions.array_slice(value, 1, 1),
+    tail=lambda value: functions.array_slice(value, 2, 2**31 - 1),
+    concatenate=functions.array_concat,
+    append=functions.array_append,
+    transform=array_transform,
+    filter=array_filter,
+    bind=bind,
+)
+
+
+def ordered_frequencies_value(value: Expr) -> Expr:
     return ordered_frequencies(
         FrequencyPrimitives(
             literal=lit,
-            distinct=functions.array_distinct,
+            entries=functions.array_distinct,
+            entry_key=lambda value: value,
             transform=array_transform,
-            count=lambda values, key: functions.cardinality(
-                array_filter(values, lambda item: item == key)
-            ),
+            count=lambda values, key: functions.cardinality(functions.array_positions(values, key)),
             position=functions.array_position,
             record=lambda count, position, key: functions.named_struct(
                 [("count", count), ("position", position), ("key", key)]

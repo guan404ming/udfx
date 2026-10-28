@@ -138,14 +138,18 @@ def replace(
     return when(old == constant(""), between, function("replace", text, old, new))
 
 
-def join(separator: Expression, words: Expression) -> Expression:
+def join(separator: Expression | str | None, words: Expression) -> Expression:
+    if not isinstance(separator, Expression):
+        return duckdb.CoalesceOperator(
+            function("array_to_string", words, constant(separator)), constant("")
+        )
     first = column(INDEX) == constant(1)
     prefixed = when(first, column(ITEM), function("concat", separator, column(ITEM)))
     pieces = function("list_transform", words, duckdb.LambdaExpression((ITEM, INDEX), prefixed))
     return concatenate(pieces)
 
 
-RULES(".join", Kind.STR, Kind.LIST)(join)
+RULES(".join", Kind.STR, Kind.LIST, literals=(0,))(join)
 
 
 @RULES(".join", Kind.STR, Kind.STR)
@@ -156,7 +160,7 @@ def join_characters(separator: Expression, text: Expression) -> Expression:
 RULES("coalesce", Kind.STR, Kind.STR)(duckdb.CoalesceOperator)
 
 
-@RULES("__add__", Kind.STR, Kind.STR)
+@RULES("__add__", Kind.STR, Kind.STR, linear=True)
 def str_add(left: Expression, right: Expression) -> Expression:
     return function("concat", left, right)
 
@@ -178,10 +182,7 @@ def list_contains(container: Expression, item: Expression) -> Expression:
     return function("list_position", container, item).isnotnull()
 
 
-RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
-
-
-RULES("len", Kind.STR)(length)
+RULES("len", Kind.STR, linear=True)(length)
 RULES("len", Kind.LIST)(length)
 
 

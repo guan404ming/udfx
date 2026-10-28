@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from udfx.backends.rules import Lowered, Scope
 from udfx.graphs import substitute
 from udfx.ir import FALSE, TRUE, Col, Comprehension, Element, Lit, Node, children
+from udfx.semantics.bindings import bound_sources
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
@@ -95,12 +96,21 @@ def lower_block[E](
         )
     }
     metadata: list[tuple[bool, bool]] = []
+    sources = {
+        symbols[id(node)]: substitute(
+            node, {key: symbol for key, symbol in symbols.items() if key != id(node)}
+        )
+        for node in (*incoming, *order)
+        if id(node) in symbols
+    }
 
     def lower(node: Node, local: dict[int, Lowered[E]]) -> Lowered[E]:
         replacements = {key: symbols[key] for key in local}
-        return backend.lower(
-            substitute(node, replacements), {symbols[key]: value for key, value in local.items()}
-        )
+        with bound_sources(sources):
+            return backend.lower(
+                substitute(node, replacements),
+                {symbols[key]: value for key, value in local.items()},
+            )
 
     def pack(local: dict[int, Lowered[E]]) -> tuple[E, dict[int, tuple[int, bool, bool]]]:
         values: list[E] = []

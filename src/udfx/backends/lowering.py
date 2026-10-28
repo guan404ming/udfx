@@ -89,9 +89,14 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowere
         else backend.lower(argument, elements)
         for index, argument in enumerate(node.arguments)
     ]
+    expressions = {
+        name: None if (source := expression(node)) is None else backend.lower(source, elements)
+        for name, expression in options.expressions.items()
+    }
     result: RuleResult[E] = rule(
         *(argument.expr for argument in arguments),
         **{name: fact(node) for name, fact in options.facts.items()},
+        **{name: None if value is None else value.expr for name, value in expressions.items()},
     )
     lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
     guards = [
@@ -102,7 +107,10 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowere
     return Lowered(
         lowered.expr,
         backend.conjunction(
-            *(backend.exact(argument) for argument in arguments), lowered.exact, *guards
+            *(backend.exact(argument) for argument in arguments),
+            *(backend.exact(value) for value in expressions.values() if value is not None),
+            lowered.exact,
+            *guards,
         ),
         lowered.overflow,
     )

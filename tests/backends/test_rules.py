@@ -8,7 +8,7 @@ from udfx.backends.base import Backend
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.registration import RuleSet
 from udfx.backends.rules import fold_predicate
-from udfx.ir import Call, Col, Node, lit
+from udfx.ir import Call, Col, Guarded, Node, lit
 from udfx.ops.registry import Op, apply, register, scoped
 from udfx.semantics.facts import argument_length, result_type
 from udfx.types import BOOL, INT, STR, Kind, Type, list_of
@@ -84,3 +84,34 @@ def test_rewrite_runs_before_predicate_folding() -> None:
         node = apply("and", first, Call(pair, (second, third)))
         expected = apply("and", apply("and", first, second), third)
         assert fold_predicate(node, rules.rewrite_call) == expected
+
+
+@pytest.mark.parametrize("include_source", [False, True])
+def test_rule_expressions_preserve_all_guards(
+    monkeypatch: pytest.MonkeyPatch, include_source: bool
+) -> None:
+    backend = PolarsBackend()
+    rules = RuleSet[pl.Expr]()
+    monkeypatch.setattr(backend, "rules", rules)
+    text = Col("text", STR)
+    source = Guarded(text, Col("source", BOOL))
+
+    @rules(
+        "custom_source",
+        Kind.STR,
+        expressions={"source": lambda node: source if include_source else None},
+    )
+    def native(value: pl.Expr, *, source: pl.Expr | None) -> pl.Expr:
+        return value if source is None else source
+
+    with scoped():
+        op = register(Op("custom_source", (STR,), STR, lambda value: value))
+        node = Call(op, (Guarded(text, Col("original", BOOL)),))
+        lowered = backend.lower(node, {text: pl.col("bound")})
+        assert lowered.exact is not None
+        schema = {"bound": STR, "original": BOOL, "source": BOOL}
+        rows = [("a", True, True), ("b", False, True), ("c", True, False)]
+        assert backend.evaluate([lowered.expr, lowered.exact], schema, rows) == [
+            ["a", "b", "c"],
+            [True, False, not include_source],
+        ]

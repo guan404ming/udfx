@@ -11,6 +11,7 @@ from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Lit, Node, children
 from udfx.ops import OpKey, apply
 from udfx.semantics.assumptions import assuming
+from udfx.semantics.facts import element_predicate
 from udfx.types import INT, Kind
 
 if TYPE_CHECKING:
@@ -63,8 +64,12 @@ def indexed_source(node: Comprehension) -> tuple[Node, Node | None] | None:
 
 def matching(node: Comprehension, accept: Callable[[Node], bool]) -> frozenset[Node]:
     found: set[Node] = set()
+    seen: set[int] = set()
 
     def visit(part: Node) -> None:
+        if id(part) in seen:
+            return
+        seen.add(id(part))
         if accept(part):
             found.add(part)
             return
@@ -148,10 +153,11 @@ def lower_indexed[E](
 
 
 def comprehension_parts[E](backend: Backend[E], node: Comprehension, scope: Scope[E]) -> Parts[E]:
-    condition = backend.lower(node.condition, scope)
-    with assuming(node.condition, True):
-        value = backend.lower(node.value, scope)
-    fault = backend.lower(node.fault, scope)
+    with assuming(element_predicate(node.source, node.element), True):
+        condition = backend.lower(node.condition, scope)
+        with assuming(node.condition, True):
+            value = backend.lower(node.value, scope)
+        fault = backend.lower(node.fault, scope)
     value_exact = backend.exact(value)
     if node.condition != TRUE and value_exact is not None:
         value_exact = backend.select(condition.expr, value_exact, backend.literal(TRUE))

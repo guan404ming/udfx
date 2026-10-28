@@ -19,6 +19,7 @@ from udfx.backends.program_lowering import lower_program
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.results import ResultLowering
 from udfx.backends.rules import Scope
+from udfx.backends.spark.bindings import bind, binding_scope, reading
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.numbers import WIDE_INTEGERS
 from udfx.backends.spark.rules import RULES
@@ -52,14 +53,15 @@ class SparkBackend(Backend[Column]):
         self._session = session
 
     def lower_program(self, program: Program) -> Lowered[Column]:
-        with lowering_context(binds=True) as context:
+        with binding_scope() as scope, lowering_context(binds=True) as context:
             lowered = lower_program(self, program, ResultLowering(self, program))
-        if lowered.exact is not None and context.has_bindings:
+        if lowered.exact is not None and context.has_bindings and scope.requires_unbound:
             return lower_program(self, program, ResultLowering(self, program))
         return lowered
 
     def lower(self, node: Node, elements: Scope[Column] | None = None) -> Lowered[Column]:
-        lowered = super().lower(node, elements)
+        with reading(node, elements):
+            lowered = super().lower(node, elements)
         if isinstance(node, Comprehension) and elements and self.exact(lowered) is not None:
             captured = free(node.value) | free(node.condition) | free(node.fault)
             if captured - {node.element}:
@@ -123,10 +125,7 @@ class SparkBackend(Backend[Column]):
         return functions.filter(source, predicate)
 
     def bind(self, value: Column, body: Callable[[Column], Column]) -> Column:
-        expr = functions.transform(functions.array(value), body)[0]
-        with lowering_context() as context:
-            context.has_bindings = True
-        return expr
+        return bind(value, body, tracked=True)
 
     def bind_sequence(self, value: Column, steps: Sequence[Callable[[Column], Column]]) -> Column:
         for step in steps:
@@ -184,15 +183,23 @@ class SparkBackend(Backend[Column]):
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
         result = dtype(program.result)
         flag = functions.coalesce(exact, functions.lit(False))
-        packed = functions.struct(
-            flag.alias(EXACT),
-            functions.when(flag, native.cast(result)).alias(NATIVE),
+        completed = functions.struct(
+            functions.lit(True).alias(EXACT),
+            native.cast(result).alias(NATIVE),
             *(
-                functions.when(~flag, self.column(Col(name, type))).alias(name)
+                functions.lit(None).cast(dtype(type)).alias(name)
                 for name, type in program.schema.items()
             ),
         )
-        return functions.arrow_udf(fallback_patch(program), result)(packed)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        pending = functions.struct(
+            functions.lit(False).alias(EXACT),
+            functions.lit(None).cast(result).alias(NATIVE),
+            *(self.column(Col(name, type)).alias(name) for name, type in program.schema.items()),
+        )
+        function = functions.arrow_udf(fallback_patch(program), result)  # pyright: ignore[reportCallIssue, reportArgumentType]
+        if not program.deterministic:
+            function = function.asNondeterministic()
+        return function(functions.when(flag, completed).otherwise(pending))
 
     def evaluate(
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]

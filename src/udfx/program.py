@@ -34,6 +34,7 @@ class Program:
     value: Node
     fault: Node = FALSE
     row_mode: bool = False
+    deterministic: bool = True
 
     @property
     def result(self) -> Type:
@@ -51,9 +52,7 @@ class Program:
         plain = PLAIN.get(result.kind)
         for row in rows:
             value = function(*row)
-            if type(value) is not plain or (
-                isinstance(value, int) and not INT64_MIN <= value <= INT64_MAX
-            ):
+            if type(value) is not plain or (plain is int and not INT64_MIN <= value <= INT64_MAX):  # pyright: ignore[reportOperatorIssue]
                 value = python_scalar(value)
                 if not fits(value, result):
                     raise OverflowError(f"udfx result {value!r} does not fit {result}")

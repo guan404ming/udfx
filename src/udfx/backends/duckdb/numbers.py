@@ -23,7 +23,7 @@ from udfx.backends.registration import (
     register_float_variants,
     register_int_truediv,
 )
-from udfx.frontend.core.sets import empty_union
+from udfx.frontend.core.sets import disjoint_ratio, empty_union
 from udfx.semantics.facts import bounded_divisor, integer_fits
 from udfx.semantics.numbers import (
     ARITHMETIC,
@@ -185,3 +185,6 @@ def int_log10(value: Expression) -> Expression:
 
 for name in ("__eq__", "__ne__"):
     RULES.rewrite(name, Kind.INT, Kind.INT)(empty_union)
+
+for kind in (Kind.INT, Kind.FLOAT):
+    RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)

@@ -70,7 +70,7 @@ def test_missing_upstream_source_is_an_error_not_unsupported(tmp_path: Path) -> 
     workloads = udfbench.load(tmp_path)
     assert len(workloads) == 25
     assert all(workload.error for workload in workloads)
-    assert sum(workload.exclusion is not None for workload in workloads) == 1
+    assert sum(not workload.deterministic for workload in workloads) == 1
 
 
 def test_upstream_loader_preserves_source_and_checks_signature(

@@ -1,4 +1,6 @@
 import importlib
+import json
+import random
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -12,7 +14,7 @@ from bench.runner import ENGINES, run
 from bench.timing import Settings
 from bench.validation import validate
 from udfx.frontend import trace
-from udfx.types import STR
+from udfx.types import FLOAT, INT, STR
 from workloads.catalog import load
 from workloads.models import Workload
 from workloads.storage import FIXTURES
@@ -95,3 +97,59 @@ def test_input_names_cannot_collide_with_harness_columns(engine: str, tmp_path: 
     )
     results = run(workload, [engine], Settings(warmups=0, rounds=1), tmp_path / "inputs")
     assert all(result["status"] == "native" for result in results), results
+
+
+def test_datafusion_baseline_preserves_column_case(tmp_path: Path) -> None:
+    path = tmp_path / "source.parquet"
+    parquet.write_table(pyarrow.table({"source": [1, 2]}), path)
+    workload = Workload(
+        "test",
+        "column_case",
+        lambda Value: Value + 1,  # noqa: N803
+        {"Value": INT},
+        INT,
+        path,
+        {"Value": "source"},
+    )
+    results = run(workload, ["datafusion"], Settings(warmups=0, rounds=1), tmp_path / "inputs")
+    assert all(result["status"] in {"native", "guarded"} for result in results), results
+
+
+@pytest.mark.parametrize("engine", PARAMETERS)
+def test_nondeterministic_benchmark_reports_python_execution(engine: str, tmp_path: Path) -> None:
+    path = tmp_path / "source.parquet"
+    parquet.write_table(pyarrow.table({"value": [1.0] * 2000, "group": ["a"] * 2000}), path)
+    workload = Workload(
+        "test",
+        "noise",
+        lambda value: value + random.gauss(),
+        {"value": FLOAT},
+        FLOAT,
+        path,
+        {"value": "value"},
+        category="group",
+        deterministic=False,
+    )
+    results = run(workload, [engine], Settings(warmups=0, rounds=1), tmp_path / "inputs")
+    assert all(result["status"] == "python" for result in results), results
+    assert all(result["validation"] == "distribution" for result in results)
+    assert all(result["native_rows"] == result["compiled_udfs"] == 0 for result in results)
+
+
+@pytest.mark.parametrize("engine", PARAMETERS)
+def test_all_fallback_benchmark_reports_python_execution(engine: str, tmp_path: Path) -> None:
+    path = tmp_path / "source.parquet"
+    parquet.write_table(pyarrow.table({"value": ['{"key": "one"}', '{"key": "two"}']}), path)
+    workload = Workload(
+        "test",
+        "objects",
+        lambda value: json.dumps(json.loads(value or "{}").get("key")),
+        {"value": STR.or_none()},
+        STR.or_none(),
+        path,
+        {"value": "value"},
+    )
+    results = run(workload, [engine], Settings(warmups=0, rounds=1), tmp_path / "inputs")
+    assert all(result["status"] == "python" for result in results), results
+    assert all(result["validation"] == "exact" for result in results)
+    assert all(result["native_rows"] == result["compiled_udfs"] == 0 for result in results)

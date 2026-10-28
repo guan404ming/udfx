@@ -7,6 +7,7 @@ from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, sqltypes.DuckDBPyType] = {
     Kind.DATETIME: sqltypes.TIMESTAMP,
+    Kind.JSON: sqltypes.VARCHAR,
     Kind.STR: sqltypes.VARCHAR,
     Kind.INT: sqltypes.BIGINT,
     Kind.FLOAT: sqltypes.DOUBLE,

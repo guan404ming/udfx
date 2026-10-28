@@ -28,6 +28,16 @@ def findall(text: pl.Expr, pattern: str, group: int) -> pl.Expr:
     )
 
 
+def first(text: pl.Expr, pattern: str, group: int, nonempty: bool) -> pl.Expr:
+    if nonempty:
+        return text.str.extract(pattern, group)
+    return (
+        pl.when(text.str.contains(pattern))
+        .then(text.str.extract(pattern, group).fill_null(""))
+        .otherwise(None)
+    )
+
+
 register_regex(
     RULES,
     RegexPrimitives(
@@ -38,6 +48,8 @@ register_regex(
         replace=replace,
         split=lambda text, separator: text.str.split(separator),
         findall=findall,
+        first=first,
+        count_matches=lambda text, pattern: text.str.count_matches(pattern).cast(pl.Int64),
         maximum_count=1,
     ),
 )

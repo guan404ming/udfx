@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import re._constants as constants
 import re._parser as parser
 from functools import cache
 from typing import Any
@@ -10,11 +11,29 @@ from udfx.semantics.regex_translation import Translator
 from udfx.semantics.text import code_points
 
 
+def literal_union(values: tuple[str, ...]) -> str | None:
+    groups: dict[str, set[str]] = {}
+    for value in values:
+        if value:
+            groups.setdefault(value[1:], set()).add(value[0])
+    alternatives = [""] if "" in values else []
+    for suffix, first in sorted(groups.items()):
+        characters = re.escape("".join(sorted(first)))
+        prefix = "[" + characters + "]" if len(first) > 1 else characters
+        alternatives.append(prefix + re.escape(suffix))
+    return "(?:" + "|".join(alternatives) + ")" if alternatives else None
+
+
 def source(tokens: Any, flags: int) -> str:
-    translated = Translator(flags, "rust", False).sequence(tokens)
+    translated = Translator(flags, "rust", False, python_category).sequence(tokens)
     return re.sub(
         r"\\x\{([0-9A-F]+)\}", lambda match: f"\\U{int(match[1], 16):08x}", translated
     ).replace(r"\z", r"\Z")
+
+
+def python_category(name: str) -> str:
+    category = {"DIGIT": "d", "SPACE": "s", "WORD": "w"}[name.rsplit("_", 1)[1]]
+    return "\\" + (category.upper() if "_NOT_" in name else category)
 
 
 def group_prefix(pattern: str, flags: int, group: int, mode: str) -> str:
@@ -55,6 +74,32 @@ def position_safe(pattern: str, flags: int) -> bool:
     return True
 
 
+def literal_suffix(pattern: str, flags: int) -> str | None:
+    try:
+        parsed: Any = parser.parse(pattern, flags)
+    except (re.error, ValueError, OverflowError, RecursionError):
+        return None
+    if parsed.state.flags & ~(re.UNICODE | re.DOTALL) or len(parsed) < 3:
+        return None
+    *prefix, (name, repeated), ending = parsed
+    if (
+        any(str(name) != "LITERAL" or 0xD800 <= value <= 0xDFFF for name, value in prefix)
+        or str(name) != "MAX_REPEAT"
+        or repeated[:2] != (0, constants.MAXREPEAT)
+        or len(repeated[2]) != 1
+        or tuple(map(str, ending)) != ("AT", "AT_END_STRING")
+    ):
+        return None
+    name, body = repeated[2][0]
+    complete = str(name) == "ANY" and parsed.state.flags & re.DOTALL
+    if str(name) == "IN":
+        complete = {(str(name), str(value)) for name, value in body} == {
+            ("CATEGORY", "CATEGORY_SPACE"),
+            ("CATEGORY", "CATEGORY_NOT_SPACE"),
+        }
+    return "".join(chr(value) for _, value in prefix) if complete else None
+
+
 @cache
 def bounded_runs(pattern: str, flags: int) -> tuple[str, str] | None:
     if flags & ~re.UNICODE:
@@ -86,3 +131,29 @@ def bounded_runs(pattern: str, flags: int) -> tuple[str, str] | None:
     if any(member.fullmatch(point) and not excluded.fullmatch(point) for point in code_points()):
         return None
     return f"(?:{boundary})+", source([(body_name, body)], flags)
+
+
+@cache
+def first_run(run: str, member: str, flags: int) -> str | None:
+    try:
+        parsed: Any = parser.parse(run, flags)
+    except (re.error, ValueError, OverflowError, RecursionError):
+        return None
+    if len(parsed) != 1 or str(parsed[0][0]) != "MAX_REPEAT":
+        return None
+    minimum, maximum, repeated = parsed[0][1]
+    if minimum != 1 or maximum != constants.MAXREPEAT or len(repeated) != 1:
+        return None
+    name, body = repeated[0]
+    if str(name) == "IN":
+        inverted = body[1:] if str(body[0][0]) == "NEGATE" else [("NEGATE", None), *body]
+        outside = source([("IN", inverted)], flags)
+    elif str(name) in {"LITERAL", "NOT_LITERAL"}:
+        opposite = "NOT_LITERAL" if str(name) == "LITERAL" else "LITERAL"
+        outside = source([(opposite, body)], flags)
+    else:
+        return None
+    boundary = source(repeated, flags)
+    if bounded_runs(f"(?<!{boundary}){member}(?!{boundary})", flags) is None:
+        return None
+    return rf"(?:\A|{outside})({member})(?:{outside}|\Z)"

@@ -32,12 +32,13 @@ CASES = [
     pytest.param(backend, op, id=f"{label}-{op}", marks=pytest.mark.xdist_group(label))
     for label, backend in backends()
     for op in all_ops()
+    if op.deterministic
 ]
 
 
 @pytest.mark.parametrize("backend", backend_params())
 def test_every_op_has_a_rule(backend: Backend[Any]) -> None:
-    missing = {op.key for op in all_ops()} - backend.rules.keys()
+    missing = {op.key for op in all_ops() if op.deterministic} - backend.rules.keys()
     assert not missing
 
 

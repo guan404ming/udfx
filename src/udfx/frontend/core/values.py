@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import builtins
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import CodeType, ModuleType
 
 from udfx.errors import Unsupported
 from udfx.ir import Col, Element, Lit, Node
+from udfx.types import Kind
 
 MAX_UNROLL = 64
 
@@ -14,6 +15,11 @@ MAX_UNROLL = 64
 def require_bounded(count: int) -> None:
     if count > MAX_UNROLL:
         raise Unsupported(f"loops and comprehensions exceed {MAX_UNROLL} unrolled items")
+
+
+def bounded_iterator(items: Sequence[Item]) -> Iterator:
+    require_bounded(len(items))
+    return Iterator(tuple(items))
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,10 @@ class Json:
 @dataclass(frozen=True)
 class JsonType:
     node: Node
+
+
+def wrapped(node: Node) -> Value | Json:
+    return Json(node) if node.type.kind is Kind.JSON else Value(node)
 
 
 @dataclass(frozen=True)

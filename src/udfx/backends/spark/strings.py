@@ -175,7 +175,7 @@ def join_characters(separator: Column, text: Column) -> Column:
 RULES("coalesce", Kind.STR, Kind.STR)(functions.coalesce)
 
 
-@RULES("__add__", Kind.STR, Kind.STR)
+@RULES("__add__", Kind.STR, Kind.STR, linear=True)
 def str_add(left: Column, right: Column) -> Column:
     return functions.concat(left, right)
 
@@ -201,10 +201,7 @@ def list_contains(container: Column, item: Column) -> Column:
     ).otherwise(functions.coalesce(functions.array_contains(container, item), functions.lit(False)))
 
 
-RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
-
-
-@RULES("len", Kind.STR)
+@RULES("len", Kind.STR, linear=True)
 def str_len(text: Column) -> Column:
     return length(text)
 

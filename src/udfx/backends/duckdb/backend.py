@@ -21,7 +21,9 @@ from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.lowering_context import lowering_context
-from udfx.backends.registration import RuleSet
+from udfx.backends.program_lowering import lower_program
+from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.results import FallbackLowering, ResultLowering, fallback_result
 from udfx.ir import Col, Lit, digest
 from udfx.program import Program
 from udfx.types import Kind, Type
@@ -68,6 +70,17 @@ class DuckDBBackend(Backend[Expression]):
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self._connection = connection
 
+    def lower_program(self, program: Program) -> Lowered[Expression]:
+        return lower_program(self, program, ResultLowering(self, program))
+
+    def compose(self, value: Lowered[Expression], program: Program) -> Expression:
+        value = fallback_result(
+            value,
+            FallbackLowering(self, program),
+            lambda results: lower_program(self, program, results),
+        )
+        return super().compose(value, program)
+
     def build(self, program: Program) -> Expression:
         with lowering_context() as context:
             expr = super().build(program)
@@ -110,6 +123,17 @@ class DuckDBBackend(Backend[Expression]):
 
     def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
         return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")
+
+    def select_value(
+        self,
+        value: Expression,
+        cases: Sequence[tuple[Expression, Expression]],
+        orelse: Expression,
+    ) -> Expression:
+        keys = function("list_value", *(key for key, _ in cases))
+        values = function("list_value", *(result for _, result in cases))
+        selected = function("map_extract_value", function("map", keys, values), value)
+        return duckdb.CoalesceOperator(selected, orelse)
 
     def record(self, values: Sequence[Expression]) -> Expression:
         return function(
@@ -179,6 +203,7 @@ class DuckDBBackend(Backend[Expression]):
                 dtype(program.result),
                 type=ARROW,
                 null_handling=SPECIAL,
+                side_effects=not program.deterministic,
             )
         packed = function(
             "struct_pack",

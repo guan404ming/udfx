@@ -14,6 +14,7 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.frontend.core.sequences import join_words, word_item
+from udfx.frontend.core.splitting import join_filtered_words
 from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import text
 from udfx.semantics.clusters import CLUSTER_JOINERS
@@ -166,7 +167,7 @@ def join_characters(separator: pl.Expr, text: pl.Expr) -> pl.Expr:
     return join(separator, text.str.split(""), column=True)
 
 
-@RULES("__add__", Kind.STR, Kind.STR)
+@RULES("__add__", Kind.STR, Kind.STR, linear=True)
 def str_add(left: pl.Expr, right: pl.Expr) -> pl.Expr:
     return left + right
 
@@ -196,7 +197,7 @@ def list_contains(container: pl.Expr, item: pl.Expr) -> pl.Expr:
 RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
 
 
-@RULES("len", Kind.STR)
+@RULES("len", Kind.STR, linear=True)
 def str_len(text: pl.Expr) -> pl.Expr:
     return length(text)
 
@@ -217,7 +218,9 @@ def list_getitem(container: pl.Expr, index: pl.Expr) -> pl.Expr:
 
 
 register_string_predicates(RULES, lambda value, pattern: value.str.contains(pattern))
-RULES.rewrite(".join", Kind.STR, Kind.LIST)(join_words)
+RULES.rewrite(".join", Kind.STR, Kind.LIST)(
+    lambda node: join_filtered_words(node) or join_words(node)
+)
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(word_item)
 RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from functools import partial
+
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import Lowered, register_json, register_text_conversions
 from udfx.backends.spark.numbers import cast_float64, float_isinf
+from udfx.backends.spark.regex_categories import category
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.literals import (
+    ASCII_SPACE,
     SpellingPrimitives,
     TextPrimitives,
     bool_text,
@@ -27,9 +31,11 @@ TEXT = TextPrimitives(
     replace=lambda text, old, new: functions.replace(text, functions.lit(old), functions.lit(new)),
     char_length=functions.length,
     not_null=Column.isNotNull,
-    try_int=lambda text: text.try_cast("bigint"),
+    try_int=lambda text: functions.btrim(text, functions.lit(ASCII_SPACE)).try_cast("bigint"),
     try_float=lambda text: text.try_cast("double"),
     lazy_coalesce=True,
+    possessive=True,
+    decimal_pattern=partial(category, "CATEGORY_DIGIT"),
 )
 
 SPELLING = SpellingPrimitives(functions.lit, when, Column.isNull, functions.coalesce)

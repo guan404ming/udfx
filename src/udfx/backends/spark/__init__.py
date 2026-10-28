@@ -4,6 +4,7 @@ from udfx.backends.spark import (  # noqa: F401
     conversions,
     core,
     datetimes,
+    json,
     lists,
     math,
     numbers,

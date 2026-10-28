@@ -35,20 +35,31 @@ def markdown(artifact: dict) -> str:
         "",
         "Speedups use the declared Python baseline and the median of paired rounds.",
         "Native and guarded counts require correct output. Errors remain in the denominator.",
+        "Overall includes every timed case, including Python-only cases.",
+        "Compiler and Dedup include only native and guarded cases.",
+        "Nondeterministic cases use distribution checks, not exact output comparison.",
         "",
-        "| Suite | Engine | Mode | Native | Guarded | Unsupported | Errors | Excluded |"
-        " Pending | Geomean | Dedup | Slower |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Suite | Engine | Mode | Native | Guarded | Python | Unsupported | Errors | Excluded |"
+        " Pending | Overall | Compiler | Dedup | Slower (compiler) |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        " ---: |",
     ]
     for (suite, engine, mode), results in sorted(groups.items()):
         counts = Counter(result["status"] for result in results)
+        measured = [
+            result["comparisons"][result["primary_baseline"]]["median_speedup"]
+            for result in results
+            if result["status"] in {"native", "guarded", "python"}
+        ]
+        overall = f"{geometric_mean(measured):.2f}x" if measured else "N/A"
         ratios, dedup = speedups(results)
         mean = f"{geometric_mean(ratios):.2f}x" if ratios else "N/A"
         grouped = f"{dedup:.2f}x" if dedup is not None else "N/A"
         lines.append(
             f"| {suite} | {engine} | {mode} | {counts['native']} | {counts['guarded']} | "
-            f"{counts['unsupported']} | {counts['error']} | {counts['excluded']} | "
-            f"{counts['pending']} | {mean} | {grouped} | "
+            f"{counts['python']} | {counts['unsupported']} | {counts['error']} | "
+            f"{counts['excluded']} | "
+            f"{counts['pending']} | {overall} | {mean} | {grouped} | "
             f"{sum(ratio < 1 for ratio in ratios)}/{len(ratios)} |"
         )
     lines.extend(
@@ -56,8 +67,8 @@ def markdown(artifact: dict) -> str:
             "",
             "## Cases",
             "",
-            "| Workload | Engine | Mode | Status | Baseline | Speedup | Native rows |",
-            "| --- | --- | --- | --- | --- | ---: | ---: |",
+            "| Workload | Engine | Mode | Status | Validation | Baseline | Speedup | Native rows |",
+            "| --- | --- | --- | --- | --- | --- | ---: | ---: |",
         ]
     )
     for result in artifact["results"]:
@@ -67,7 +78,8 @@ def markdown(artifact: dict) -> str:
             speedup = f"{comparison['median_speedup']:.2f}x" if comparison else "N/A"
             lines.append(
                 f"| {result['workload']} | {result['engine']} | {result['mode']} | "
-                f"{result['status']} | {baseline} | {speedup} | {share} |"
+                f"{result['status']} | {result.get('validation', 'exact')} | "
+                f"{baseline} | {speedup} | {share} |"
             )
     failures = [result for result in artifact["results"] if "reason" in result]
     if failures:
@@ -88,6 +100,7 @@ def export_csv(artifact: dict, path: Path) -> None:
         "engine",
         "mode",
         "status",
+        "validation",
         "baseline",
         "median_speedup",
         "median_absolute_deviation",

@@ -97,7 +97,7 @@ def repeated_condition(node: If, elements: Mapping[Node, object]) -> Node | None
             return
         if (
             isinstance(part, Call | If)
-            and part.type.kind is Kind.STR
+            and part.type.kind in {Kind.STR, Kind.INT, Kind.LIST}
             and free(part) <= free(node)
             and reads_input(part)
         ):
@@ -118,7 +118,9 @@ def repeated_condition(node: If, elements: Mapping[Node, object]) -> Node | None
 
     count(node)
     repeated = [part for part in candidates if worth_binding(part, counts[part])]
-    return max(repeated, key=lambda part: (size(part), counts[part]), default=None)
+    return max(
+        repeated, key=lambda part: (size(part) * (counts[part] - 1), size(part)), default=None
+    )
 
 
 def hoist[E](

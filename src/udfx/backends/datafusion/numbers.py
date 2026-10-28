@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+from functools import partial
 
 import pyarrow as pa
 from datafusion import Expr, functions, lit
@@ -14,7 +15,8 @@ from udfx.backends.registration import (
     register_float_variants,
     register_int_truediv,
 )
-from udfx.semantics.facts import bounded_divisor
+from udfx.frontend.core.sets import disjoint_ratio
+from udfx.semantics.facts import bounded_divisor, integer_fits
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -45,7 +47,9 @@ def cast_float64(value: Expr) -> Expr:
 
 
 def overflow_checked(operation: Binary) -> BinaryRule[Expr]:
-    def rule(left: Expr, right: Expr) -> Lowered[Expr]:
+    def rule(left: Expr, right: Expr, *, bounded: bool = False) -> Lowered[Expr]:
+        if bounded:
+            return Lowered(operation(left, right))
         wide = operation(left.cast(WIDE), right.cast(WIDE))
         return Lowered(operation(left, right), overflow=~fits_int64(wide))
 
@@ -86,7 +90,9 @@ ORDER = OrderPrimitives(either_nan, Expr.is_null, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
+    RULES(
+        _name, Kind.INT, Kind.INT, facts={"bounded": partial(integer_fits, size_limit=INT64_MAX)}
+    )(overflow_checked(_operation))
     register_float_variants(RULES, _name, _operation, cast_float64)
 
 for _name, _compare in COMPARISONS.items():
@@ -150,3 +156,7 @@ RULES("math.log10", Kind.FLOAT)(functions.log10)
 @RULES("math.log10", Kind.INT)
 def int_log10(value: Expr) -> Expr:
     return functions.log10(cast_float64(value))
+
+
+for kind in (Kind.INT, Kind.FLOAT):
+    RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)

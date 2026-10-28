@@ -7,6 +7,7 @@ from udfx.backends.lowering import lower_call, lower_comprehension, lower_if
 from udfx.backends.lowering_context import graph_enabled
 from udfx.backends.rules import Lowered, Scope, fold_predicate
 from udfx.errors import Unsupported
+from udfx.frontend.core.comprehensions import compose
 from udfx.ir import TRUE, Call, Col, Comprehension, Element, Guarded, If, ListValue, Lit, Node
 from udfx.types import Kind, fits
 
@@ -40,7 +41,7 @@ def lower_node[E](backend: Backend[E], node: Node, elements: Scope[E]) -> Lowere
             )
         case Comprehension():
             lower = lower_graph_comprehension if graph_enabled() else lower_comprehension
-            return lower(backend, node, elements)
+            return lower(backend, compose(node, backend.rules.linear), elements)
         case Col():
             return Lowered(backend.column(node))
         case Lit() if (

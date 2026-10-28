@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from udfx import compile, explain
@@ -47,6 +49,13 @@ def test_row_report() -> None:
     assert "Mode: row" in report
     assert "Schema: {image: str}" in report
     assert "Value: .lower(col image)" in report
+
+
+def test_nondeterministic_report() -> None:
+    report = explain(lambda value: value + random.gauss(), {"value": FLOAT})
+    assert "Status: Python" in report
+    assert "Python fallback: all rows" in report
+    assert "Reason: function uses nondeterministic operations" in report
 
 
 def test_render() -> None:

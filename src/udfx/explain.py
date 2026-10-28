@@ -75,10 +75,12 @@ def explain[E](
     function: Callable[..., object],
     schema: Mapping[str, Type],
     backend: Backend[E] | str = "polars",
+    *,
+    result: Type | None = None,
 ) -> str:
     start = perf_counter()
     with capture_lowering() as details:
-        translation = compile(function, schema, backend)
+        translation = compile(function, schema, backend, result=result)
     elapsed = perf_counter() - start
     name = getattr(function, "__name__", repr(function))
     columns = ", ".join(
@@ -95,7 +97,15 @@ def explain[E](
         lines.append(f"Unsupported: {translation.unsupported}")
     elif translation.program is not None:
         graph = size(translation.program.value) + size(translation.program.fault) > EXPANDED_LIMIT
-        lines.extend(execution_lines(details[-1] if details else None, graph=graph))
+        lines.extend(
+            execution_lines(details[-1] if details else None, graph=graph)
+            if translation.program.deterministic
+            else [
+                "Status: Python",
+                "Python fallback: all rows",
+                "Reason: function uses nondeterministic operations",
+            ]
+        )
         if translation.program.row_mode:
             lines.append("Mode: row")
         lines.extend(

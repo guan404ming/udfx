@@ -15,7 +15,8 @@ counter = 0
 
 def for_loop(s: str) -> str:
     for character in s:
-        return character
+        if character == "x":
+            return character
     return s
 
 

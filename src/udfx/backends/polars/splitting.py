@@ -4,8 +4,14 @@ import polars as pl
 
 from udfx.backends.polars.rules import RULES, when
 from udfx.backends.polars.slicing import SEQUENCE
-from udfx.backends.polars.strings import join, length, lstrip, single_code_point_clusters
-from udfx.backends.registration import Lowered
+from udfx.backends.polars.strings import (
+    join,
+    length,
+    list_getitem,
+    lstrip,
+    single_code_point_clusters,
+)
+from udfx.backends.registration import Lowered, RuleResult
 from udfx.semantics.facts import separator_is_none, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
 from udfx.semantics.text import (
@@ -38,6 +44,11 @@ RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split
 @RULES("last_split", Kind.STR, Kind.STR)
 def last_split(text: pl.Expr, separator: pl.Expr) -> pl.Expr:
     return text.str.split(separator).list.last()
+
+
+@RULES("split_item", Kind.STR, Kind.STR, Kind.INT)
+def split_item(text: pl.Expr, separator: pl.Expr, index: pl.Expr) -> RuleResult[pl.Expr]:
+    return list_getitem(text.str.split(separator), index)
 
 
 SPLIT = SplitPrimitives(

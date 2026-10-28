@@ -47,10 +47,16 @@ def type_test(item: Item, expected: object, subclasses: bool = False) -> Node:
     if isinstance(expected, tuple) and subclasses:
         tests = [type_test(item, member, True) for member in expected]
         return negate(reduce(conjunction, map(negate, tests), TRUE))
-    if not isinstance(expected, type) or expected not in PYTHON_TYPES.values():
+    allowed = (
+        (*PYTHON_TYPES.values(), dict) if isinstance(item, JsonType) else PYTHON_TYPES.values()
+    )
+    if not isinstance(expected, type) or expected not in allowed:
         raise Unsupported(f"type test against {named(expected)}")
     if isinstance(item, JsonType):
-        return apply("json.is_type", item.node, lit(expected.__name__))
+        result = apply("json.is_type", item.node, lit(expected.__name__))
+        if subclasses and expected is int:
+            return apply("or", result, apply("json.is_type", item.node, lit("bool")))
+        return result
     if not isinstance(item, RuntimeType):
         actual = constant_value(item)
         if not isinstance(actual, type):

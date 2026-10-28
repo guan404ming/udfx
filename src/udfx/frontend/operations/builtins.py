@@ -25,7 +25,7 @@ from udfx.frontend.operations.formatting import format_template
 from udfx.frontend.resolve.callables import op_name
 from udfx.frontend.resolve.functions import bind
 from udfx.ir import FALSE, TRUE, Comprehension, Element, Lit, Node, lit
-from udfx.ops import Fault
+from udfx.ops import Fault, resolve
 from udfx.semantics.datetimes import MICROSECONDS_PER_SECOND
 from udfx.semantics.translation import translation_table
 from udfx.types import BOOL, INT, STR, Kind, list_of
@@ -129,10 +129,19 @@ def call(
             if name in {"min", "max"} and len(nodes) > 2:
                 return extremum(name, nodes)
             function = cast("Callable[..., object]", value)
-            folded = evaluated(nodes, lambda values: function(*values))
-            return (folded, []) if folded is not None else invoke(name, nodes, TypeError)
+            return function_call(name, function, nodes)
         case _:
             raise Unsupported(f"cannot call {describe(callee)}")
+
+
+def function_call(
+    name: str, function: Callable[..., object], nodes: Sequence[Node]
+) -> tuple[Node, list[Fault]]:
+    operation = resolve(name, [node.type for node in nodes])
+    if operation is not None and not operation.deterministic:
+        return invoke(name, nodes, TypeError)
+    folded = evaluated(nodes, lambda values: function(*values))
+    return (folded, []) if folded is not None else invoke(name, nodes, TypeError)
 
 
 def method_call(name: str, arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:

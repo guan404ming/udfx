@@ -12,7 +12,8 @@ from conftest import backend_params
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
-from udfx.ir import TRUE, Lit
+from udfx.ir import TRUE, Col, Guarded, If, Lit, lit
+from udfx.ops import apply
 from udfx.program import Program
 from udfx.types import BOOL, DATETIME, FLOAT, INT, INT64_MAX, INT64_MIN, STR, Type, list_of
 
@@ -187,3 +188,16 @@ def test_fallback_rows_check_list_items() -> None:
         else:
             with pytest.raises(OverflowError, match="does not fit"):
                 program.run([("a",)])
+
+
+@pytest.mark.parametrize("backend", [value for value in backend_params() if value.id == "duckdb"])
+def test_guarded_branch_preserves_native_overflow(backend: Backend[Any]) -> None:
+    schema = {"active": BOOL, "value": INT, "valid": BOOL}
+    total = apply("__add__", Col("value", INT), lit(1))
+    value = If(Col("active", BOOL), Guarded(total, Col("valid", BOOL)), lit(0), INT)
+    program = Program(lambda active, value, valid: value + 1 if active else 0, schema, value)
+    expr = backend.build(program)
+    with patch("udfx.backends.arrow.fallback", side_effect=AssertionError("unexpected fallback")):
+        assert backend.evaluate([expr], schema, [(False, INT64_MAX, True)]) == [[0]]
+        with pytest.raises(OverflowError, match="does not fit int"):
+            backend.evaluate([expr], schema, [(True, INT64_MAX, True)])

@@ -25,7 +25,7 @@ from udfx.semantics.text import (
     non_whitespace_pattern,
     word_prefix_pattern,
 )
-from udfx.types import Kind
+from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 
 def split_words(text: Expression) -> Expression:
@@ -51,6 +51,16 @@ RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split
 @RULES("last_split", Kind.STR, Kind.STR)
 def last_split(text: Expression, separator: Expression) -> Expression:
     return function("split_part", text, separator, constant(-1))
+
+
+@RULES("split_item", Kind.STR, Kind.STR, Kind.INT)
+def split_item(text: Expression, separator: Expression, index: Expression) -> Expression:
+    position = when(
+        index < constant(0),
+        function("nullif", index, constant(INT64_MIN)),
+        function("nullif", index, constant(INT64_MAX)) + constant(1),
+    )
+    return function("split_part", text, separator, position)
 
 
 SPLIT = SplitPrimitives(

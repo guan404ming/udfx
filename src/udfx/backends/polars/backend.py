@@ -122,9 +122,12 @@ class PolarsBackend(Backend[pl.Expr]):
             )
             pending = (~flags.fill_null(False)).arg_true().to_list()
 
-            def gather(rows: list[int]) -> list[list[object]]:
+            def gather(rows: Sequence[int]) -> list[list[object]]:
+                indices = rows if isinstance(rows, list) else list(rows)
                 return (
-                    [column.gather(rows).to_list() for column in series] if program.schema else []
+                    [column.gather(indices).to_list() for column in series]
+                    if program.schema
+                    else []
                 )
 
             if not pending:
@@ -133,7 +136,9 @@ class PolarsBackend(Backend[pl.Expr]):
             return values.zip_with(flags.fill_null(False), pl.Series(patched, dtype=result))
 
         inputs = [pl.col(name) for name in program.schema] or [pl.int_range(pl.len()).alias(ROW)]
-        return pl.map_batches(inputs, patch, return_dtype=result, is_elementwise=True)
+        return pl.map_batches(
+            inputs, patch, return_dtype=result, is_elementwise=program.deterministic
+        )
 
     def evaluate(
         self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]

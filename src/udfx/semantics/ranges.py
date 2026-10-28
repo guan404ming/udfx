@@ -14,6 +14,7 @@ from udfx.semantics.assumptions import (
     constrain,
     predicates,
 )
+from udfx.semantics.bindings import SOURCES, source
 from udfx.semantics.lists import SET_OPERATIONS
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -38,6 +39,7 @@ OPERATIONS: dict[str, Callable[[int, int], int]] = {
 
 
 def maximum_length(node: Node) -> int | None:
+    node = source(node)
     if isinstance(node, Lit) and isinstance(node.value, str):
         return len(node.value)
     if not isinstance(node, Call):
@@ -63,7 +65,14 @@ def integer_bounds(
     node: Node, size_limit: int, conditions: Conditions | None = None
 ) -> tuple[int, int] | None:
     conditions = CONDITIONS.get() if conditions is None else conditions
-    bounds = intrinsic_bounds(node, size_limit, conditions)
+    bindings = SOURCES.get()
+    if bindings is not None and isinstance(node, Element) and node in bindings.values:
+        key = node, size_limit
+        if key not in bindings.ranges:
+            bindings.ranges[key] = integer_bounds(bindings.values[node], size_limit, ())
+        bounds = bindings.ranges[key]
+    else:
+        bounds = intrinsic_bounds(node, size_limit, conditions)
     for predicate, truth in conditions:
         if bounds is None or not isinstance(predicate, Call) or predicate.op.name not in NEGATED:
             continue
@@ -165,6 +174,7 @@ def combine(left: tuple[int, int] | None, right: tuple[int, int] | None) -> tupl
 
 
 def element_bounds(node: Node, size_limit: int, conditions: Conditions) -> tuple[int, int] | None:
+    node = source(node)
     if isinstance(node, Comprehension):
         return integer_bounds(node.value, size_limit, conditions)
     if isinstance(node, Lit) and isinstance(node.value, tuple | list):

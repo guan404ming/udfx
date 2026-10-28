@@ -4,7 +4,15 @@ from collections.abc import Sequence
 from functools import reduce
 
 from udfx.frontend.core.evaluation import Return
-from udfx.frontend.core.logic import choose, conjunction, conjuncts, negate, retype, unified
+from udfx.frontend.core.logic import (
+    choose,
+    coalesce_branch,
+    conjunction,
+    conjuncts,
+    negate,
+    retype,
+    unified,
+)
 from udfx.ir import TRUE, Call, If, Node
 from udfx.types import Type
 
@@ -70,4 +78,4 @@ def _build(cases: list[Case], result: Type) -> Node:
         return retype(choose(chain), result)
     positive = _build(_side(cases, atom, True), result)
     negative = _build(_side(cases, atom, False), result)
-    return If(atom, positive, negative, result)
+    return coalesce_branch(If(atom, positive, negative, result))

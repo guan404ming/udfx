@@ -28,7 +28,7 @@ RESERVED = "udfx "
 OUTPUT = f"{RESERVED}out"
 RAISED = threading.local()
 Row = tuple[object, ...]
-Gather = Callable[[list[int]], Sequence[Sequence[object]]]
+Gather = Callable[[Sequence[int]], Sequence[Sequence[object]]]
 
 
 def transpose_rows(rows: Sequence[Row], width: int) -> list[tuple[object, ...]]:
@@ -62,7 +62,7 @@ class Backend[E](ABC):
             raise FallbackError(error) from error
 
     def evaluate_pending_rows(
-        self, program: Program, pending: list[int], gather: Gather
+        self, program: Program, pending: Sequence[int], gather: Gather
     ) -> list[object]:
         if not pending:
             return []
@@ -71,7 +71,7 @@ class Backend[E](ABC):
         return self.run_fallback_rows(program, rows)
 
     def fallback_values(
-        self, program: Program, length: int, pending: list[int], gather: Gather
+        self, program: Program, length: int, pending: Sequence[int], gather: Gather
     ) -> list[object]:
         values: list[object] = [None] * length
         for index, value in zip(
@@ -115,6 +115,9 @@ class Backend[E](ABC):
 
     def select_many(self, cases: Sequence[tuple[E, E]], orelse: E) -> E:
         return reduce(lambda value, case: self.select(*case, value), reversed(cases), orelse)
+
+    def select_value(self, value: E, cases: Sequence[tuple[E, E]], orelse: E) -> E | None:
+        return None
 
     def bind(self, value: E, body: Callable[[E], E]) -> E:
         raise Unsupported(f"{self.name} cannot bind expressions")
@@ -180,6 +183,9 @@ class Backend[E](ABC):
     def build(self, program: Program) -> E:
         self.check_names(program.schema)
         value = self.lower_program(program)
+        return self.compose(value, program)
+
+    def compose(self, value: Lowered[E], program: Program) -> E:
         return (
             value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
         )

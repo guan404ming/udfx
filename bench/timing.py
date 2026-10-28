@@ -30,13 +30,21 @@ def elapsed[Result](action: Callable[[], Result]) -> tuple[Result, float]:
     return result, duration
 
 
+def balanced_orders(names: list[str]) -> list[list[str]]:
+    count = len(names)
+    positions = [0] + [
+        (index + 1) // 2 if index % 2 else count - index // 2 for index in range(1, count)
+    ]
+    orders = [[names[(index + offset) % count] for index in positions] for offset in range(count)]
+    return orders if count % 2 == 0 else orders + [order[::-1] for order in orders]
+
+
 def paired(actions: Mapping[str, Callable[[], object]], settings: Settings) -> dict:
-    names = list(actions)
+    schedule = balanced_orders(list(actions))
     samples = []
     orders = []
     for iteration in range(settings.warmups + settings.rounds):
-        offset = iteration % len(names)
-        order = names[offset:] + names[:offset]
+        order = schedule[(iteration - settings.warmups) % len(schedule)]
         sample = {name: elapsed(actions[name])[1] for name in order}
         if iteration >= settings.warmups:
             samples.append(sample)

@@ -36,10 +36,12 @@ def compile[E](
     function: Callable[..., object],
     schema: Mapping[str, Type],
     backend: Backend[E] | str = "polars",
+    *,
+    result: Type | None = None,
 ) -> Translation[E]:
     target: Backend[E] = named(backend) if isinstance(backend, str) else backend
     try:
-        program = trace(function, schema)
+        program = trace(function, schema, result=result)
         return Translation(function, target.build(program), program, None, target.name)
     except Unsupported as reason:
         return Translation(function, None, None, reason, target.name)

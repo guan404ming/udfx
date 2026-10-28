@@ -49,18 +49,19 @@ def measure(
         if exact is None
         else sum(value is True for value in adapter.execute(exact, "memory").column(1).to_pylist())
     )
-    status = "native" if exact is None else "guarded"
+    status = "python" if native_rows == 0 else "native" if exact is None else "guarded"
     expressions = {**adapter.python(), "udfx": expr}
     native = adapter.native()
     if native is not None:
         expressions["native"] = native
     common = {
+        "validation": "exact" if workload.deterministic else "distribution",
         "compile_seconds": compile_seconds,
         "frontend_seconds": frontend_seconds,
         "native_rows": native_rows,
         "total_rows": data.table.num_rows,
         "native_row_fraction": native_rows / data.table.num_rows,
-        "compiled_udfs": 1,
+        "compiled_udfs": int(native_rows > 0),
         "total_udfs": 1,
         "data": data.metadata,
         "settings": adapter.settings(),
@@ -149,7 +150,9 @@ def run(
         if workload.function is None:
             raise ValueError("Missing Python function")
         start = perf_counter()
-        program = trace(workload.function, workload.schema)
+        program = trace(workload.function, workload.schema, result=workload.result)
+        if not program.deterministic and workload.deterministic:
+            raise ValueError("Nondeterministic workloads require distribution validation")
         frontend_seconds = perf_counter() - start
         data = prepare(workload, directory, rows)
     except Exception as error:

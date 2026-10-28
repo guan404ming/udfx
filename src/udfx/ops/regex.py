@@ -24,6 +24,14 @@ def findall(text: str, pattern: str, flags: int) -> list[str]:
     return re.findall(pattern, text, flags)
 
 
+def first(text: str, pattern: str, flags: int) -> object:
+    return next(iter(re.findall(pattern, text, flags)), None)
+
+
+def count_matches(text: str, pattern: str, flags: int) -> int:
+    return len(re.findall(pattern, text, flags))
+
+
 def split(text: str, pattern: str, flags: int, count: int) -> list[str]:
     return re.split(pattern, text, maxsplit=count, flags=flags)
 
@@ -33,4 +41,6 @@ for name in ("search", "match", "fullmatch"):
 register(Op("re.contains", (STR, STR, INT), BOOL, contains))
 register(Op("re.sub", (STR, STR, INT, STR, INT), STR, substitute))
 register(Op("re.findall", (STR, STR, INT), list_of(STR), findall))
+register(Op("re.first", (STR, STR, INT), STR.or_none(), first))
+register(Op("re.count", (STR, STR, INT), INT, count_matches))
 register(Op("re.split", (STR, STR, INT, INT), list_of(STR), split))

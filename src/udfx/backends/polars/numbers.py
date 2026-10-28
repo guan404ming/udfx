@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+from functools import partial
 
 import polars as pl
 
@@ -14,7 +15,7 @@ from udfx.backends.registration import (
     register_int_truediv,
 )
 from udfx.frontend.core.sets import empty_union
-from udfx.semantics.facts import bounded_divisor
+from udfx.semantics.facts import bounded_divisor, integer_fits
 from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
@@ -41,7 +42,9 @@ def within_exact_float_range(value: pl.Expr) -> pl.Expr:
 
 
 def overflow_checked(operation: Binary) -> BinaryRule[pl.Expr]:
-    def rule(left: pl.Expr, right: pl.Expr) -> Lowered[pl.Expr]:
+    def rule(left: pl.Expr, right: pl.Expr, *, bounded: bool = False) -> Lowered[pl.Expr]:
+        if bounded:
+            return Lowered(operation(left, right))
         wide = operation(left.cast(pl.Int128), right.cast(pl.Int128))
         return Lowered(operation(left, right), overflow=~fits_int64(wide))
 
@@ -86,7 +89,9 @@ ORDER = OrderPrimitives(either_nan, pl.Expr.is_null, within_exact_float_range)
 
 
 for _name, _operation in ARITHMETIC.items():
-    RULES(_name, Kind.INT, Kind.INT)(overflow_checked(_operation))
+    RULES(
+        _name, Kind.INT, Kind.INT, facts={"bounded": partial(integer_fits, size_limit=2**32 - 1)}
+    )(overflow_checked(_operation))
     register_float_variants(RULES, _name, broadcast_arguments(_operation), cast_float64)
 
 for _name, _compare in COMPARISONS.items():

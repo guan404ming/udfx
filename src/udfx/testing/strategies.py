@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import struct
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from hypothesis import strategies as st
 
+from udfx.testing.json_traps import JSON_TEXT_TRAPS, JSON_TRAPS
 from udfx.testing.text_traps import REGEX_PATTERNS, STRING_TRAPS
 from udfx.types import INT64_MAX, INT64_MIN, Kind, Type
 
@@ -33,7 +35,7 @@ FLOAT_LIST_TRAPS = (
 )
 
 PREDICATE_TRAPS = ("Aa " * 10000,)
-INTEGER_TEXT_TRAPS = ("\u0660_" * 4300 + "\u0660",)
+INTEGER_TEXT_TRAPS = ("\u0660_" * 4300 + "\u0660", "0_" * 2048 + "0", "0_" * 2048 + "x")
 CHARACTER_TRAPS = ("\ud7ff\ue000\U00010000😀\U0010ffff\n", r"\ud800\udfff\ud83d\ude00")
 SPLIT_TRAPS = (r"\E", r"\Q\E", r"\.^$|?*+()[]{}", "[", ".")
 CLUSTER_TRAPS = (
@@ -167,6 +169,8 @@ def constant_values(type: Type) -> st.SearchStrategy[object]:
 
 
 def extra_traps(type: Type) -> Sequence[object]:
+    if type.kind is Kind.JSON:
+        return JSON_TRAPS
     if type.kind is Kind.STR:
         return (
             *PREDICATE_TRAPS,
@@ -175,6 +179,7 @@ def extra_traps(type: Type) -> Sequence[object]:
             *SPLIT_TRAPS,
             *CLUSTER_TRAPS,
             *DATETIME_TEXT_TRAPS,
+            *JSON_TEXT_TRAPS,
         )
     if type.kind is Kind.DATETIME:
         return DATETIME_TRAPS
@@ -197,6 +202,16 @@ def batches(
 
 def _base(type: Type) -> st.SearchStrategy[object]:
     match type.kind:
+        case Kind.JSON:
+            scalars = st.one_of(st.none(), st.booleans(), st.integers(), st.floats(), st.text())
+            documents = st.recursive(
+                scalars,
+                lambda inner: st.one_of(
+                    st.lists(inner, max_size=3), st.dictionaries(st.text(), inner, max_size=3)
+                ),
+                max_leaves=8,
+            )
+            return documents.map(json.dumps)
         case Kind.DATETIME:
             return st.one_of(st.sampled_from(DATETIME_TRAPS), st.datetimes())
         case Kind.STR:

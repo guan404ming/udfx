@@ -44,6 +44,6 @@ def test_spark_unrolled_sum_skips_array_aggregation() -> None:
     expression = str(backend.build(trace(weighted, schema)))
     assert "aggregate(" not in expression
     assert expression.count("transform(") == 1
-    assert expression.count("regexp_extract_all(") == 2
+    assert expression.count("regexp_extract_all(") == 1
     assert "patch(" not in expression
     assert check_function(weighted, schema, backend, [("",), ("one",), ("a bb ccc",)]) == []

@@ -1,4 +1,5 @@
 import os
+import sys
 from functools import cache
 from pathlib import Path
 from random import Random
@@ -16,6 +17,7 @@ from udfx.backends.spark import SparkBackend
 TESTS = str(Path(__file__).resolve().parent)
 FULL = os.environ.get("UDFX_TESTS") == "full"
 os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [TESTS, os.environ.get("PYTHONPATH")]))
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
 os.environ.setdefault(
     "PYSPARK_SUBMIT_ARGS",
     "--master local[1] --driver-memory 2g --conf spark.ui.enabled=false"

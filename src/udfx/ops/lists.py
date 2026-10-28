@@ -20,12 +20,12 @@ from udfx.semantics.lists import (
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
 
 
-def frequency_order(values: list[str]) -> list[str]:
+def frequency_order(values: list[str], count: int) -> list[str]:
     counts = Counter(values)
-    return sorted(counts, key=counts.__getitem__, reverse=True)
+    return sorted(counts, key=counts.__getitem__, reverse=True)[: max(0, count)]
 
 
-register(Op("frequency_order", (list_of(STR),), list_of(STR), frequency_order))
+register(Op("frequency_order", (list_of(STR), INT), list_of(STR), frequency_order))
 
 for item in (STR, INT, FLOAT, BOOL):
     sequence = list_of(item)

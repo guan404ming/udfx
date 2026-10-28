@@ -15,6 +15,7 @@ from udfx.frontend.resolve.imports import (
     capture_imports,
 )
 from udfx.semantics.functions import code_names
+from udfx.semantics.randomness import GAUSS, gauss
 
 
 class Snapshot:
@@ -62,6 +63,8 @@ class Snapshot:
         return value
 
     def value(self, value: object) -> object:
+        if value is GAUSS:
+            return gauss
         if id(value) in self.values:
             return self.values[id(value)]
         if isinstance(value, FunctionType) and known_op(value) is None:

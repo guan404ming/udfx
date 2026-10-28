@@ -13,7 +13,7 @@ from udfx.ir import TRUE, Call, Col, Lit
 from udfx.ops import Fault, Op
 from udfx.testing.allocation import allocation_batches
 from udfx.testing.observation import record
-from udfx.testing.outcome import Outcome, Raised, Returned, run, same
+from udfx.testing.outcome import Outcome, Raised, Returned, run, same, same_typed
 from udfx.types import BOOL, Type
 
 
@@ -234,7 +234,7 @@ def _op_mismatches(
                 mismatches.append(Mismatch(row, expected, f"faults {raised}"))
         elif raised:
             mismatches.append(Mismatch(row, expected, f"spurious faults {raised}"))
-        elif not same(expected.value, values[index]):
+        elif not same_typed(expected.value, values[index], op.result):
             mismatches.append(Mismatch(row, expected, repr(values[index])))
     return mismatches
 

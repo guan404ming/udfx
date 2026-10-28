@@ -9,6 +9,7 @@ from bench.data import CATEGORY, JOIN_KEY, LOOKUP_KEY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
 from udfx.backends.datafusion import DataFusionBackend
+from udfx.backends.datafusion.rules import column
 from workloads.models import Workload
 
 
@@ -30,12 +31,10 @@ class Engine(Adapter):
             batched(function, arrow.dtype(self.workload.result), len(self.workload.schema)),
             [arrow.dtype(type) for type in self.workload.schema.values()],
             arrow.dtype(self.workload.result),
-            "immutable",
+            "immutable" if self.workload.deterministic else "volatile",
             "python_arrow",
         )
-        return {
-            self.primary: implementation(*(datafusion.col(name) for name in self.workload.schema))
-        }
+        return {self.primary: implementation(*(column(name) for name in self.workload.schema))}
 
     def execute(self, expr: Any, mode: str) -> pyarrow.Table:
         frame = self.context.read_parquet(str(self.data.path)) if mode == "query" else self.frame
@@ -50,13 +49,13 @@ class Engine(Adapter):
             self.data.lookup is not None or CATEGORY in self.data.table.column_names
         )
         if grouped:
-            projected = frame.select(datafusion.col(CATEGORY), expr.alias("value"))
+            projected = frame.select(column(CATEGORY), expr.alias("value"))
             return (
-                projected.filter(datafusion.col("value").is_not_null())
+                projected.filter(column("value").is_not_null())
                 .aggregate(
-                    [datafusion.col(CATEGORY), datafusion.col("value")],
+                    [column(CATEGORY), column("value")],
                     [functions.count(datafusion.lit(1)).alias("count")],
                 )
                 .to_arrow_table()
             )
-        return frame.select(datafusion.col(POSITION), expr.alias("value")).to_arrow_table()
+        return frame.select(column(POSITION), expr.alias("value")).to_arrow_table()

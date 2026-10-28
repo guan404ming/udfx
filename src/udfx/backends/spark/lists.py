@@ -2,16 +2,39 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
+from udfx.backends.lowering_context import bindings_enabled
 from udfx.backends.registration import Lowered, register_lists
+from udfx.backends.spark.bindings import bind
 from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
+from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import characters, list_contains
-from udfx.semantics.facts import simple_arguments
-from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
+from udfx.semantics.facts import nullable_arguments, simple_arguments
+from udfx.semantics.frequencies import (
+    FrequencyOffsetPrimitives,
+    FrequencyPrimitives,
+    offset_frequencies,
+    ordered_frequencies,
+)
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
+from udfx.semantics.sequences import take_prefix
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
+
+
+@RULES("__contains__", Kind.LIST, Kind.STR, literals=(0,), facts={"nullable": nullable_arguments})
+def contains_strings(
+    container: Column | list | tuple, item: Column, *, nullable: bool = True
+) -> Column:
+    if isinstance(container, list | tuple):
+        found = item.isin([value for value in container if value is not None])
+        if not nullable:
+            return found
+        return functions.coalesce(found, functions.lit(False)) | (
+            item.isNull() & functions.lit(None in container)
+        )
+    return list_contains(container, item)
 
 
 @RULES("list", Kind.LIST)
@@ -68,12 +91,49 @@ def ordered(value: Column) -> Column:
     return functions.sort_array(value)
 
 
-@RULES("frequency_order", Kind.LIST)
-def frequency_order(value: Column) -> Column:
+@RULES("frequency_order", Kind.LIST, Kind.INT)
+def frequency_order(value: Column, count: Column) -> Column:
+    if bindings_enabled(False):
+        return bind(value, lambda source: offset_frequencies(FREQUENCY_OFFSETS, source, count))
+    return take_prefix(SEQUENCE, ordered_frequencies_value(value), count)
+
+
+FREQUENCY_OFFSETS = FrequencyOffsetPrimitives(
+    literal=functions.lit,
+    length=functions.size,
+    indices=lambda count: functions.slice(
+        functions.sequence(functions.lit(0), functions.greatest(count - 1, functions.lit(0))),
+        1,
+        count,
+    ),
+    field=lambda value, index: value.getField(str(index)),
+    record=lambda *values: functions.struct(
+        *(value.alias(str(index)) for index, value in enumerate(values))
+    ),
+    sort=functions.sort_array,
+    transform=functions.transform,
+    filter=functions.filter,
+    bind=bind,
+    get=functions.get,
+    coalesce=functions.coalesce,
+    position=functions.array_position,
+    maximum=functions.array_max,
+    prefix=lambda values, count: take_prefix(SEQUENCE, values, count),
+    distinct=functions.array_distinct,
+    indexed=lambda values, transform: functions.transform(
+        values, lambda item, index: transform(item, index.cast("long"))
+    ),
+    logarithm=functions.log2,
+    select=when,
+)
+
+
+def ordered_frequencies_value(value: Column) -> Column:
     return ordered_frequencies(
         FrequencyPrimitives(
             literal=functions.lit,
-            distinct=functions.array_distinct,
+            entries=functions.array_distinct,
+            entry_key=lambda value: value,
             transform=functions.transform,
             count=lambda values, key: functions.size(
                 functions.filter(values, lambda item: item == key)

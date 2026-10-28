@@ -50,7 +50,7 @@ def test_original_udfbench_sources(backend: Backend[Any], tmp_path: Path) -> Non
     assert len(workloads) == 25
     supported = set()
     for workload in workloads:
-        if workload.exclusion:
+        if workload.exclusion or not workload.deterministic:
             continue
         assert workload.function is not None, workload.error
         translation = compile(workload.function, workload.schema, backend)
@@ -68,4 +68,17 @@ def test_original_udfbench_sources(backend: Backend[Any], tmp_path: Path) -> Non
     assert supported >= SUPPORTED
     if backend.supports_graphs():
         assert "stem" in supported
-    assert sum(workload.exclusion is not None for workload in workloads) == 1
+    assert sum(not workload.deterministic for workload in workloads) == 1
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_original_jsonparse_with_result_contract(backend: Backend[Any], tmp_path: Path) -> None:
+    if not (DEFAULT_CACHE / "udfbench/manifest.json").exists():
+        pytest.skip("Prepare UDFBench with python -m workloads.prepare --suites udfbench")
+    workload = next(workload for workload in load(DEFAULT_CACHE) if workload.name == "jsonparse")
+    assert workload.function is not None, workload.error
+    translation = compile(workload.function, workload.schema, backend, result=workload.result)
+    assert translation.ok, translation.unsupported
+    data = prepare(workload, tmp_path, rows=1000)
+    rows = list(zip(*(data.table[name].to_pylist() for name in workload.schema), strict=True))
+    assert check_translation(translation, backend, rows) == []

@@ -7,7 +7,7 @@ udfx supports a subset of Python. Always check `translation.ok` before using its
 - Arithmetic, comparisons, conversions, and selected `math` and NumPy scalar functions.
 - String operations, literal regex patterns, lists, string sets, and naive datetimes.
 - `json.dumps` for strings, nulls, and nested string lists, with default formatting.
-- `json.loads` followed by supported string, list, type, or set operations.
+- `json.loads`, nested JSON indexing, dictionary `get`, type checks, and scalar conversions.
 - Branches, exception handlers, helpers, and constant container lookups.
 - Local imports of loaded modules, constant dictionary merges, and constant `frozenset` values.
 - `heapq.nlargest` over a string `Counter`, with `counter.get` as its key.
@@ -33,8 +33,14 @@ A raising row fails the query. This behavior is checked by tests, not a formal p
 JSON output supports `ensure_ascii=False`. With the default `ensure_ascii=True`, non-ASCII
 strings use Python fallback to preserve Unicode escapes.
 
-JSON parsing has native paths for strings and string arrays. Other JSON shapes, malformed
-input, and `\u` escapes use Python fallback. Returning an untyped parsed value is unsupported.
+DuckDB and Spark also lower JSON object lookups, array indexing, and typed scalar results
+natively. Keys can come from columns. Other engines retain the native string and string-array
+paths and use Python for dynamic objects.
+
+Rows use fallback when an engine cannot preserve Python semantics. This includes duplicate
+keys, some numeric values, and unsupported JSON paths. Spark currently keeps JSON documents
+with floating-point numbers on Python. Set a [result type](api.md#json-results) for a dynamic
+JSON return. Native coverage does not guarantee a speedup.
 
 `backend.execute(run)` restores Python exceptions. DuckDB and Spark restore builtin exception
 types and `JSONDecodeError` through engine error messages.

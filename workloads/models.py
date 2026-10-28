@@ -30,6 +30,7 @@ class Workload:
     origin: str = "custom"
     exclusion: str | None = None
     error: str | None = None
+    deterministic: bool = True
 
     @property
     def identifier(self) -> str:

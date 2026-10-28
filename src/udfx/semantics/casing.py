@@ -60,6 +60,26 @@ def lowercase_pattern(needle: str) -> str | None:
 
 
 @cache
+def initial_lowercase_values(values: tuple[str, ...]) -> tuple[str, ...]:
+    original, replacement, expansions = case_mapping("lower")
+    sources: dict[str, str] = {}
+    for point, target in zip(original, replacement, strict=True):
+        sources[target] = sources.get(target, "") + point
+    alternatives: set[str] = set()
+    for value in dict.fromkeys(values):
+        if not value:
+            continue
+        first = value[0]
+        unchanged = first if first.lower() == first else ""
+        characters = unchanged + sources.get(first, "")
+        alternatives.update(point + value[1:] for point in characters)
+        alternatives.update(
+            point + value[len(target) :] for point, target in expansions if value.startswith(target)
+        )
+    return tuple(sorted(alternatives))
+
+
+@cache
 def final_sigma_pattern() -> str:
     cased: set[str] = set()
     ignored: set[str] = set()

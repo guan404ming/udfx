@@ -13,8 +13,11 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.values import (
     named,
 )
+from udfx.semantics.randomness import GAUSS, gauss
 
 CALLABLES: tuple[tuple[object, str], ...] = (
+    (GAUSS, "random.gauss"),
+    (gauss, "random.gauss"),
     (Counter, "collections.Counter"),
     (heapq.nlargest, "heapq.nlargest"),
     (json.dumps, "json.dumps"),

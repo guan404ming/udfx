@@ -7,6 +7,8 @@ from udfx.backends.graph import lower_block
 from udfx.backends.indexing import every
 from udfx.backends.rules import Lowered, Scope
 from udfx.ir import FALSE, TRUE, Comprehension
+from udfx.semantics.assumptions import assuming
+from udfx.semantics.facts import element_predicate
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
@@ -30,12 +32,13 @@ def lower_graph_comprehension[E](
 
     def body(element: E) -> E:
         nonlocal guarded
-        output = lower_block(
-            backend,
-            (node.condition, node.value, node.fault),
-            {**scope, node.element: element},
-            finish,
-        )
+        with assuming(element_predicate(node.source, node.element), True):
+            output = lower_block(
+                backend,
+                (node.condition, node.value, node.fault),
+                {**scope, node.element: element},
+                finish,
+            )
         guarded = output.exact is not None
         return backend.record([output.expr, backend.exact_expression(output)])
 

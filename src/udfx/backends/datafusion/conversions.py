@@ -7,7 +7,9 @@ from udfx.backends.datafusion.numbers import cast_float64, finite
 from udfx.backends.datafusion.regex import findall
 from udfx.backends.datafusion.rules import RULES, length, when
 from udfx.backends.registration import Lowered, register_json, register_text_conversions
+from udfx.semantics.json import CONTROL_CHARACTERS, CONTROL_REPLACEMENTS, ESCAPE_PATTERNS
 from udfx.semantics.literals import (
+    ASCII_SPACE,
     SpellingPrimitives,
     TextPrimitives,
     bool_text,
@@ -17,6 +19,7 @@ from udfx.semantics.numbers import (
     REPR_FIXED_MAX,
     REPR_FIXED_MIN,
 )
+from udfx.semantics.regex_replacement import replacement
 from udfx.types import Kind
 
 TEXT = TextPrimitives(
@@ -29,11 +32,25 @@ TEXT = TextPrimitives(
     replace=lambda text, old, new: functions.replace(text, lit(old), lit(new)),
     char_length=length,
     not_null=Expr.is_not_null,
-    try_int=lambda text: text.try_cast(pa.int64()),
+    try_int=lambda text: functions.btrim(text, lit(ASCII_SPACE)).try_cast(pa.int64()),
     try_float=lambda text: text.try_cast(pa.float64()),
 )
 
 SPELLING = SpellingPrimitives(lit, when, Expr.is_null, functions.coalesce)
+
+
+def encode_json(value: Expr) -> Expr:
+    escaped = value
+    for pattern, template in ESCAPE_PATTERNS:
+        escaped = functions.regexp_replace(
+            escaped, lit(pattern), lit(replacement(pattern, 0, template, "datafusion")), lit("g")
+        )
+    escaped = functions.translate(escaped, lit(CONTROL_CHARACTERS), lit(CONTROL_REPLACEMENTS))
+    return when(
+        functions.regexp_like(value, lit(r'["\\\x00-\x1f]')),
+        functions.concat(lit('"'), escaped, lit('"')),
+        functions.concat(lit('"'), value, lit('"')),
+    )
 
 
 @RULES("int", Kind.FLOAT)
@@ -71,4 +88,10 @@ def bool_str(value: Expr) -> Expr:
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 register_text_conversions(RULES, TEXT)
-register_json(RULES, TEXT, functions.concat, lambda text, pattern: findall(text, pattern, 0))
+register_json(
+    RULES,
+    TEXT,
+    functions.concat,
+    lambda text, pattern: findall(text, pattern, 0),
+    encode=encode_json,
+)

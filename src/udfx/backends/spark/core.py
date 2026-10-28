@@ -14,7 +14,7 @@ for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST, Kind.DATETIM
 
 @RULES("bool", Kind.STR)
 def str_truth(value: Column) -> Column:
-    return value.isNotNull() & (functions.length(value) > 0)
+    return value.isNotNull() & (functions.octet_length(value) > 0)
 
 
 @RULES("bool", Kind.INT)

@@ -4,6 +4,7 @@ from udfx.backends.datafusion import (  # noqa: F401
     conversions,
     core,
     datetimes,
+    json,
     lists,
     math,
     numbers,

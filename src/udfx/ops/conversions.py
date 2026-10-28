@@ -5,7 +5,7 @@ from collections.abc import Callable
 from udfx.ir import Node
 from udfx.ops.numbers import not_finite
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.semantics.json import encode_string, has_type, tokens, valid
+from udfx.semantics.json import encode, has_type, simple_array, simple_string, tokens, valid
 from udfx.semantics.literals import saturated_integer
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
 
@@ -38,7 +38,9 @@ for scalar in (INT, FLOAT, BOOL, STR):
     register(Op("str", (scalar.or_none(),), STR, str))
 register(Op("int_parses", (STR,), BOOL, parses(int)))
 register(Op("float_parses", (STR,), BOOL, parses(float)))
-register(Op("json.dumps", (STR.or_none(), BOOL), STR, encode_string))
+register(Op("json.dumps", (STR.or_none(), BOOL), STR, encode))
 register(Op("json.valid", (STR,), BOOL, valid))
 register(Op("json.is_type", (STR, STR), BOOL, has_type))
 register(Op("json.tokens", (STR,), list_of(STR), tokens))
+register(Op("json.string_native", (STR,), BOOL, simple_string))
+register(Op("json.array_native", (STR,), BOOL, simple_array))

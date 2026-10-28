@@ -26,6 +26,8 @@ def test_case(case: Case, backend: Backend[Any]) -> None:
         assert translation.ok, translation.unsupported
     if not translation.ok:
         return
+    if translation.program is not None and not translation.program.deterministic:
+        pytest.skip("Nondeterministic execution has separate random-state tests")
 
     def draw(data: st.DataObject) -> list[Row]:
         return data.draw(batches(case.schema))

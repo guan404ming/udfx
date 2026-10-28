@@ -1,6 +1,7 @@
 from udfx.ir import Call, If, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics.lists import SET_OPERATIONS, SET_PREDICATES
+from udfx.semantics.ranges import proven
 from udfx.types import BOOL
 
 SET_CALLS = frozenset(f"set_{operation}" for operation in SET_OPERATIONS)
@@ -24,6 +25,22 @@ def empty_union(node: Call) -> Node:
         return node
     empty = apply("and", *(apply("__eq__", apply("len", part), lit(0)) for part in left.arguments))
     return empty if node.op.name == "__eq__" else apply("not", empty)
+
+
+def disjoint_ratio(node: Call) -> Node | None:
+    numerator, denominator = node.arguments
+    if isinstance(numerator, Call) and numerator.op.name == "float":
+        numerator = numerator.arguments[0]
+    if (
+        not isinstance(numerator, Call)
+        or numerator.op.name != "set_intersection_size"
+        or not isinstance(denominator, Call)
+        or denominator.op.name != "set_union_size"
+        or numerator.arguments != denominator.arguments
+    ):
+        return None
+    empty = apply("__eq__", numerator, lit(0))
+    return If(empty, lit(0.0), node, node.type) if proven(empty) is None else None
 
 
 def simplify_set(node: Call) -> Node:

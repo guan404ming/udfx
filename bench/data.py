@@ -89,6 +89,7 @@ def prepare(workload: Workload, directory: Path, rows: int | None) -> Input:
         "rows": table.num_rows,
         "row_selection": "source prefix" if rows is not None else "all source rows",
         "schema": {name: str(type) for name, type in workload.schema.items()},
+        "deterministic": workload.deterministic,
     }
     directory.mkdir(parents=True, exist_ok=True)
     identifier = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()

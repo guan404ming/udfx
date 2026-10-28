@@ -34,6 +34,8 @@ class TextPrimitives:
     try_int: Callable[[Any], Any]
     try_float: Callable[[Any], Any]
     lazy_coalesce: bool = False
+    possessive: bool = False
+    decimal_pattern: Callable[[], str] | None = None
 
 
 @cache
@@ -55,21 +57,21 @@ def integer_characters() -> tuple[str, str]:
 
 
 @cache
-def integer_pattern() -> str:
+def integer_pattern(possessive: bool = False, digits: str | None = None) -> str:
     original, replacement = integer_characters()
-    zeros = [point for point, digit in zip(original, replacement, strict=True) if digit == "0"]
-    digits = (
-        "[0-9"
-        + "".join(f"\\x{{{ord(point):X}}}-\\x{{{ord(point) + 9:X}}}" for point in zeros)
-        + "]"
-    )
+    if digits is None:
+        zeros = [point for point, digit in zip(original, replacement, strict=True) if digit == "0"]
+        digits = (
+            "[0-9"
+            + "".join(f"\\x{{{ord(point):X}}}-\\x{{{ord(point) + 9:X}}}" for point in zeros)
+            + "]"
+        )
     spaces = ASCII_SPACE + "".join(
         point for point, digit in zip(original, replacement, strict=True) if digit == " "
     )
     padding = char_class(spaces)
-    middle = digits[:-1] + "_]"
-    unicode = rf"\A{padding}*[+-]?{digits}({middle}*{digits})?{padding}*\z"
-    return f"(?:{INT_LITERAL}|{unicode})"
+    suffix = "+" if possessive else ""
+    return rf"\A{padding}*[+-]?{digits}+(?:_{digits}+)*{suffix}{padding}*\z"
 
 
 def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
@@ -77,7 +79,8 @@ def literal_matches(primitives: TextPrimitives, text: Any, pattern: str) -> Any:
 
 
 def integer_matches(primitives: TextPrimitives, text: Any) -> Any:
-    return primitives.matches(primitives.replace(text, "__", ":"), integer_pattern())
+    digits = primitives.decimal_pattern() if primitives.decimal_pattern is not None else None
+    return primitives.matches(text, integer_pattern(primitives.possessive, digits))
 
 
 def is_ascii(primitives: TextPrimitives, text: Any) -> Any:
@@ -107,17 +110,15 @@ def parse_int(
     maximum_length: int | None = None,
     valid: bool = False,
 ) -> tuple[Any, Any]:
-    native = primitives.try_int(primitives.strip(text, ASCII_SPACE))
-    pending = (
-        text
-        if primitives.lazy_coalesce
-        else primitives.when(primitives.not_null(native), primitives.literal(None), text)
-    )
+    native = primitives.try_int(text)
     original, replacement = integer_characters()
-    cleaned = primitives.strip(
-        primitives.translate(pending, original + "_", replacement), ASCII_SPACE
+    cleaned = primitives.translate(text, original + "_", replacement)
+    converted = primitives.try_int(cleaned)
+    value = (
+        primitives.coalesce(native, converted)
+        if primitives.lazy_coalesce
+        else primitives.when(primitives.not_null(native), native, converted)
     )
-    value = primitives.coalesce(native, primitives.try_int(cleaned))
     if maximum_length is not None and maximum_length <= 18:
         return value, None
     if valid:

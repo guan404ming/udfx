@@ -1,5 +1,8 @@
 import fcntl
 import json
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,6 +15,40 @@ from workloads.flights import load
 from workloads.storage import FIXTURES
 
 pytestmark = pytest.mark.xdist_group("benchmark-command")
+
+
+def test_command_sets_polars_threads_before_loading_workloads(tmp_path: Path) -> None:
+    output = tmp_path / "result.json"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "bench",
+            "--suites",
+            "flights",
+            "--engines",
+            "polars",
+            "--root",
+            str(FIXTURES),
+            "--cases",
+            "flights/year_month",
+            "--threads",
+            "2",
+            "--rounds",
+            "1",
+            "--warmups",
+            "0",
+            "--output",
+            str(output),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env={key: value for key, value in os.environ.items() if key != "POLARS_MAX_THREADS"},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    results = json.loads(output.read_text())["results"]
+    assert all(result["settings"]["threads"] == 2 for result in results)
 
 
 @pytest.fixture
@@ -131,16 +168,13 @@ def test_runner_distinguishes_exclusions_unsupported_and_errors(tmp_path: Path) 
         (replace(workload, exclusion="random"), "excluded"),
         (replace(workload, error="missing dependency", exclusion="random"), "error"),
         (replace(workload, function=None), "error"),
-        (
-            replace(workload, function=lambda delay, cancelled: json.loads(str(delay))),
-            "unsupported",
-        ),
+        (replace(workload, function=complex), "unsupported"),
         (replace(workload, table=tmp_path / "missing.parquet"), "error"),
     ]
     for case, status in variants:
         results = run(case, ["polars", "spark"], settings, tmp_path)
         assert len(results) == 4
-        assert all(result["status"] == status for result in results)
+        assert all(result["status"] == status for result in results), results
 
 
 @pytest.mark.usefixtures("metadata")

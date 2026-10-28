@@ -13,7 +13,7 @@ from udfx.backends.registration import (
     register_int_truediv,
 )
 from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
-from udfx.frontend.core.sets import empty_union
+from udfx.frontend.core.sets import disjoint_ratio, empty_union
 from udfx.semantics.arithmetic import IntegerRegionPrimitives
 from udfx.semantics.facts import bounded_divisor
 from udfx.semantics.numbers import (
@@ -164,3 +164,6 @@ def int_log10(value: Column) -> Lowered[Column]:
 
 for name in ("__eq__", "__ne__"):
     RULES.rewrite(name, Kind.INT, Kind.INT)(empty_union)
+
+for kind in (Kind.INT, Kind.FLOAT):
+    RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)

@@ -25,10 +25,15 @@ def test_json_list_serialization(backend: Backend[Any], ensure_ascii: bool) -> N
         ([None, "null", ""],),
         (['a"b', "a\\b", "\x00\b\f\n\r\t\x1f\x7f"],),
         (["中文", "😀", "é\u2028"],),
+        ([r"\uABCD", r"\\uFFFF", 'a",', "b"],),
+        (["AbCDé漢😀\x7f", "\uffff", "\U0010ffff"],),
+        (["A" * 20_000 + "é", "\\" * 2_000],),
     ]
     assert check_function(packed, schema, backend, rows) == []
     lowered = backend.lower_program(trace(packed, schema))
-    if lowered.exact is not None:
+    if backend.name == "spark":
+        assert lowered.exact is None
+    elif lowered.exact is not None:
         flags = backend.evaluate([lowered.exact], schema, rows)[0]
         assert flags[:4] == [True] * 4
         assert flags[4] is (not ensure_ascii)

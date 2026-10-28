@@ -25,6 +25,7 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.frontend.core.sequences import join_words, word_item
+from udfx.frontend.core.splitting import join_filtered_words, split_item
 from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import text
 from udfx.semantics.facts import pattern_is_empty
@@ -164,7 +165,7 @@ def join_characters(separator: Expr, text: Expr) -> Expr:
 RULES("coalesce", Kind.STR, Kind.STR)(functions.coalesce)
 
 
-@RULES("__add__", Kind.STR, Kind.STR)
+@RULES("__add__", Kind.STR, Kind.STR, linear=True)
 def str_add(left: Expr, right: Expr) -> Expr:
     return functions.concat(left, right)
 
@@ -183,20 +184,10 @@ def str_contains(text: Expr, item: Expr) -> Expr:
 
 
 def list_contains(container: Expr, item: Expr) -> Expr:
-    if container.variant_name() == "Literal":
-        values = container.python_value()
-        if isinstance(values, pa.ListScalar):
-            values = values.as_py()
-        if isinstance(values, list):
-            found = functions.in_list(item, [lit(value) for value in values if value is not None])
-            return functions.coalesce(found, lit(False)) | (item.is_null() & lit(None in values))
     return functions.array_position(container, item).is_not_null()
 
 
-RULES("__contains__", Kind.LIST, Kind.STR)(list_contains)
-
-
-RULES("len", Kind.STR)(length)
+RULES("len", Kind.STR, linear=True)(length)
 
 
 def list_len(container: Expr) -> Expr:
@@ -223,8 +214,10 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
 
 
 register_string_predicates(RULES, lambda value, pattern: functions.regexp_like(value, lit(pattern)))
-RULES.rewrite(".join", Kind.STR, Kind.LIST)(join_words)
-RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(word_item)
+RULES.rewrite(".join", Kind.STR, Kind.LIST)(
+    lambda node: join_filtered_words(node) or join_words(node)
+)
+RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(lambda node: split_item(node) or word_item(node))
 RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 
 

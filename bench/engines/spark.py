@@ -35,15 +35,19 @@ class Engine(Adapter):
         function = self.workload.function
         assert function is not None
         arguments = [functions.col(name) for name in self.workload.schema]
-        return {
-            "python_scalar": functions.udf(function, dtype(self.workload.result), useArrow=False)(
-                *arguments
-            ),
+        implementations = {
+            "python_scalar": functions.udf(function, dtype(self.workload.result), useArrow=False),
             "python_arrow": functions.arrow_udf(
                 batched(function, arrow.dtype(self.workload.result), len(self.workload.schema)),
                 dtype(self.workload.result),
                 functions.ArrowUDFType.SCALAR,
-            )(*arguments),
+            ),
+        }
+        return {
+            name: (function if self.workload.deterministic else function.asNondeterministic())(
+                *arguments
+            )
+            for name, function in implementations.items()
         }
 
     def execute(self, expr: Any, mode: str) -> pyarrow.Table:

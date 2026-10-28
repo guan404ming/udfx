@@ -8,17 +8,18 @@ from conftest import backend_params
 from udfx.backends.base import Backend
 from udfx.backends.graph import lower_graph
 from udfx.backends.hoisting import free, reads_input, size
+from udfx.backends.indexing import matching
 from udfx.backends.lowering_context import lowering_context
 from udfx.backends.polars import PolarsBackend
 from udfx.frontend import trace
 from udfx.frontend.core.tracing import joining_helpers
 from udfx.frontend.flow import machine
 from udfx.graphs import canonicalize
-from udfx.ir import FALSE, Call, Col, Element, If, Node, lit
+from udfx.ir import FALSE, TRUE, Call, Col, Comprehension, Element, If, Node, lit
 from udfx.ops import apply
 from udfx.program import Program
 from udfx.testing import check_function
-from udfx.types import FLOAT, INT, STR
+from udfx.types import FLOAT, INT, STR, list_of
 
 GRAPH_BACKENDS = [
     value for value in backend_params() if cast("Backend[Any]", value.values[0]).supports_graphs()
@@ -37,6 +38,28 @@ def pipeline(text: str) -> str:
     for _ in range(12):
         text = peel(text)
     return text
+
+
+def decrease(value: int) -> int:
+    return value - 1 if value > 0 else 0
+
+
+def decreasing_length(text: str) -> int:
+    value = len(text)
+    for _ in range(16):
+        value = decrease(value)
+    return value
+
+
+@pytest.mark.parametrize("backend", GRAPH_BACKENDS)
+def test_graph_bindings_preserve_integer_bounds(backend: Backend[Any]) -> None:
+    with joining_helpers():
+        program = trace(decreasing_length, {"text": STR})
+    assert size(program.value) > 10_000
+    lowered = backend.lower_program(program)
+    assert lowered.exact is None
+    rows = [("",), ("x" * 16,), ("x" * 19,)]
+    assert backend.evaluate([backend.build(program)], program.schema, rows) == [[0, 0, 3]]
 
 
 @pytest.mark.parametrize("backend", GRAPH_BACKENDS)
@@ -73,6 +96,23 @@ def test_scope_analysis_keeps_shared_nodes_bounded(
 
     monkeypatch.setattr(Call, "__eq__", checked)
     assert analyze(left) == analyze(right)
+
+
+def test_comprehension_matching_keeps_shared_nodes_bounded() -> None:
+    element = Element("value", INT)
+    value: Node = element
+    for _ in range(40):
+        value = apply("__add__", value, value)
+    node = Comprehension(Col("values", list_of(INT)), element, value, TRUE, FALSE)
+    visits = 0
+
+    def accept(part: Node) -> bool:
+        nonlocal visits
+        visits += 1
+        assert visits <= 43
+        return part is element
+
+    assert matching(node, accept) == frozenset({element})
 
 
 def test_graph_keeps_intermediate_overflow() -> None:

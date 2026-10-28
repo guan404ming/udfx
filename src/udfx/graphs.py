@@ -4,7 +4,13 @@ import pickle
 from collections.abc import Callable, Sequence
 from dataclasses import fields, replace
 
-from udfx.ir import Node, children
+from udfx.ir import Call, Node, children
+
+
+def deterministic(node: Node) -> bool:
+    return (not isinstance(node, Call) or node.op.deterministic) and all(
+        deterministic(part) for part in children(node)
+    )
 
 
 def map_children(node: Node, transform: Callable[[Node], Node]) -> Node:

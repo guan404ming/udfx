@@ -19,6 +19,7 @@ class Kind(StrEnum):
     BOOL = "bool"
     NONE = "none"
     LIST = "list"
+    JSON = "json"
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ INT = Type(Kind.INT)
 FLOAT = Type(Kind.FLOAT)
 BOOL = Type(Kind.BOOL)
 NONE = Type(Kind.NONE, nullable=True)
+JSON = Type(Kind.JSON)
 
 
 def list_of(item: Type) -> Type:
@@ -73,6 +75,14 @@ def unify(left: Type, right: Type) -> Type | None:
         return right.or_none()
     if right.kind is Kind.NONE:
         return left.or_none()
+    if Kind.JSON in (left.kind, right.kind):
+        other = right if left.kind is Kind.JSON else left
+        scalar = (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL)
+        if other.kind is Kind.LIST and (other.item is None or other.item.kind not in scalar):
+            return None
+        if other.kind not in (Kind.JSON, Kind.LIST, *scalar):
+            return None
+        return JSON.or_none() if left.nullable or right.nullable else JSON
     if left.strict() != right.strict():
         return None
     return left.or_none() if left.nullable or right.nullable else left
@@ -94,17 +104,21 @@ def fits(value: object, type: Type) -> bool:
     if value is None:
         return type.nullable
     match type.kind:
+        case Kind.STR | Kind.JSON:
+            return isinstance(value, str)
+        case Kind.BOOL:
+            return isinstance(value, bool)
         case Kind.DATETIME:
             return isinstance(value, datetime) and value.tzinfo is None
         case Kind.INT:
             return isinstance(value, int) and INT64_MIN <= value <= INT64_MAX
         case Kind.FLOAT:
             return isinstance(value, int | float)
-        case Kind.LIST if type.item is not None and isinstance(value, list):
+        case Kind.LIST if type.item is not None and isinstance(value, list | tuple):
             item = type.item
-            elements = cast("list[object]", value)
-            if item.kind in {Kind.STR, Kind.BOOL}:
-                return item.nullable or None not in elements
+            elements = cast("list[object] | tuple[object, ...]", value)
             return all(fits(element, item) for element in elements)
+        case Kind.LIST:
+            return False
         case _:
             return True

@@ -4,9 +4,11 @@ from collections.abc import Callable, Sequence
 
 from pyspark.sql import Column, functions
 
+from udfx.backends.spark.regex_categories import category
 from udfx.backends.spark.rules import INT32_MAX, RULES, split_literal
 from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import array_join, join, length, lstrip
+from udfx.frontend.core import splitting
 from udfx.semantics.facts import (
     separator_is_none,
     simple_arguments,
@@ -20,20 +22,13 @@ from udfx.semantics.splitting import (
     split_right,
     split_right_native,
 )
-from udfx.semantics.text import non_whitespace_pattern, whitespace_pattern, word_prefix_pattern
+from udfx.semantics.text import word_prefix_pattern
 from udfx.types import Kind
 
 
 def split_words(text: Column) -> Column:
-    return functions.when(
-        functions.octet_length(text) == functions.char_length(text),
-        functions.regexp_extract_all(
-            text, functions.lit(whitespace_pattern(negate=True, ascii_only=True)), functions.lit(0)
-        ),
-    ).otherwise(
-        functions.regexp_extract_all(
-            text, functions.lit(non_whitespace_pattern()), functions.lit(0)
-        )
+    return functions.regexp_extract_all(
+        text, functions.lit(category("CATEGORY_NOT_SPACE") + "+"), 0
     )
 
 
@@ -56,6 +51,18 @@ def last_split(text: Column, separator: Column, *, non_overlapping: bool = False
     if non_overlapping:
         return functions.call_function("substring_index", text, separator, functions.lit(-1))
     return functions.split_part(text, separator, functions.lit(-1))
+
+
+@RULES("split_item", Kind.STR, Kind.STR, Kind.INT)
+def split_item(text: Column, separator: Column, index: Column) -> Column:
+    position = functions.when(index < 0, index).otherwise(
+        functions.try_add(index, functions.lit(1))
+    )
+    return functions.split_part(text, separator, position.try_cast("int"))
+
+
+RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(splitting.split_item)
+RULES.rewrite("__gt__", Kind.INT, Kind.INT)(splitting.split_length_greater)
 
 
 def bind(values: Sequence[Column], body: Callable[..., Column], simple: bool) -> Column:

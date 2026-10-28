@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 from collections.abc import Mapping, Sequence
+from functools import partial
 from types import CellType, CodeType, FunctionType, ModuleType
 from typing import Any
 
@@ -39,13 +40,13 @@ class ImportTable:
         )
 
 
-class ImportedFunction:
+class ImportedFunction(partial):
+    def __new__(cls, function: FunctionType, importer: ImportTable) -> ImportedFunction:
+        return super().__new__(cls, function)
+
     def __init__(self, function: FunctionType, importer: ImportTable) -> None:
         self.function = function
         self.importer = importer
-
-    def __call__(self, *arguments: Any, **keywords: Any) -> Any:
-        return self.function(*arguments, **keywords)
 
     @property
     def __code__(self) -> CodeType:

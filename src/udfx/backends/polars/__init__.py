@@ -4,6 +4,7 @@ from udfx.backends.polars import (  # noqa: F401
     conversions,
     core,
     datetimes,
+    json,
     lists,
     math,
     numbers,

@@ -8,7 +8,7 @@ from udfx.frontend.core.values import NULL, Cell, Opaque, Value
 from udfx.frontend.decode import ops
 from udfx.frontend.flow.frame import Flow, Frame, Produced, Result
 from udfx.frontend.flow.machine import evaluates, optional
-from udfx.frontend.operations import containers, operators
+from udfx.frontend.operations import containers, operators, subscripts
 from udfx.frontend.operations.attributes import load_attribute
 from udfx.frontend.operations.formatting import build_string, format_operand
 from udfx.frontend.operations.iterables import iterator_of
@@ -118,7 +118,7 @@ def compare(frame: Frame, flow: Flow, op: ops.Compare) -> list[Result]:
 def subscript(frame: Frame, flow: Flow, op: ops.Subscript) -> list[Result]:
     container, index = flow.values[op.container], flow.values[op.index]
     return frame.settle(
-        flow.bindings, operators.subscript(container, index, frame.where(op.offset))
+        flow.bindings, subscripts.subscript(container, index, frame.where(op.offset))
     )
 
 
@@ -126,14 +126,14 @@ def subscript(frame: Frame, flow: Flow, op: ops.Subscript) -> list[Result]:
 def cut(frame: Frame, flow: Flow, op: ops.Cut) -> list[Result]:
     values = flow.values
     return frame.settle(
-        flow.bindings, operators.cut(values[op.container], values[op.start], values[op.stop])
+        flow.bindings, subscripts.cut(values[op.container], values[op.start], values[op.stop])
     )
 
 
 @evaluates(ops.Slice)
 def build_slice(frame: Frame, flow: Flow, op: ops.Slice) -> list[Result]:
     items = tuple(flow.values[identifier] for identifier in op.bounds)
-    return frame.settle(flow.bindings, operators.build_slice(items, frame.where(op.offset)))
+    return frame.settle(flow.bindings, subscripts.build_slice(items, frame.where(op.offset)))
 
 
 @evaluates(ops.Build)

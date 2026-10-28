@@ -5,13 +5,14 @@ from itertools import count
 from typing import ClassVar, cast
 
 import pyarrow as pa
-from datafusion import Expr, SessionContext, functions, udf
+from datafusion import Expr, SessionContext, functions, lit, udf
 
 from udfx.backends import arrow
 from udfx.backends.arrow import dtype
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
 from udfx.backends.datafusion import graphs
 from udfx.backends.datafusion.rules import (
+    ARRAY_SCOPING,
     RULES,
     array_filter,
     array_lambda,
@@ -19,16 +20,16 @@ from udfx.backends.datafusion.rules import (
     column,
     typed_literal,
 )
-from udfx.backends.lowering_context import graph_enabled
+from udfx.backends.lowering_context import graph_enabled, lowering_context
+from udfx.backends.program_lowering import lower_program
 from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.results import FallbackLowering, ResultLowering, fallback_result
 from udfx.backends.rules import Scope
 from udfx.ir import Col, Comprehension, Element, Lit, Node
 from udfx.program import Program
-from udfx.types import BOOL, Type
+from udfx.types import Kind, Type
 
 ROW = f"{RESERVED}row"
-EXACT = f"{RESERVED}exact"
-NATIVE = f"{RESERVED}native"
 FALLBACKS = count()
 
 
@@ -55,11 +56,30 @@ class DataFusionBackend(Backend[Expr]):
     def column(self, node: Col) -> Expr:
         return column(node.name)
 
+    def lower_program(
+        self, program: Program, results: ResultLowering[Expr] | None = None
+    ) -> Lowered[Expr]:
+        supported = self.supports_graphs()
+        token = ARRAY_SCOPING.set(not supported)
+        try:
+            with lowering_context(binds=supported):
+                return lower_program(self, program, results)
+        finally:
+            ARRAY_SCOPING.reset(token)
+
+    def compose(self, value: Lowered[Expr], program: Program) -> Expr:
+        value = fallback_result(
+            value,
+            FallbackLowering(self, program),
+            lambda results: self.lower_program(program, results),
+        )
+        return super().compose(value, program)
+
     def lower(self, node: Node, elements: Scope[Expr] | None = None) -> Lowered[Expr]:
         lowered = super().lower(node, elements)
         return (
             Lowered(lowered.expr.cast(dtype(node.type)), lowered.exact, lowered.overflow)
-            if isinstance(node, Comprehension | Element)
+            if isinstance(node, Comprehension | Element) and node.type.kind is Kind.LIST
             else lowered
         )
 
@@ -73,6 +93,12 @@ class DataFusionBackend(Backend[Expr]):
         selected = functions.when(*cases[0])
         for condition, value in cases[1:]:
             selected = selected.when(condition, value)
+        return selected.otherwise(orelse)
+
+    def select_value(self, value: Expr, cases: Sequence[tuple[Expr, Expr]], orelse: Expr) -> Expr:
+        selected = functions.case(value)
+        for key, result in cases:
+            selected = selected.when(key, result)
         return selected.otherwise(orelse)
 
     def list_value(self, items: Sequence[Expr], type: Type) -> Expr:
@@ -105,14 +131,16 @@ class DataFusionBackend(Backend[Expr]):
     def fallback(self, native: Expr, exact: Expr, program: Program) -> Expr:
         result = dtype(program.result)
         fields = pa.struct(
-            [(EXACT, dtype(BOOL)), (NATIVE, result)]
-            + [(name, dtype(type)) for name, type in program.schema.items()]
+            [(name, dtype(type)) for name, type in program.schema.items()] or [(ROW, pa.bool_())]
         )
 
         def run(packed: pa.Array) -> pa.Array:
             batch = cast(pa.StructArray, packed)
             columns = [batch.field(name) for name in program.schema]
-            return arrow.fallback(self, program, batch.field(EXACT), batch.field(NATIVE), columns)
+            values = self.evaluate_pending_rows(
+                program, range(len(batch)), arrow.make_gather(columns)
+            )
+            return pa.array(values, type=result)
 
         slow = udf(
             run,
@@ -122,9 +150,9 @@ class DataFusionBackend(Backend[Expr]):
             f"udfx fallback {next(FALLBACKS)}",
         )
         packed = functions.named_struct(
-            [(EXACT, exact), (NATIVE, native), *((name, column(name)) for name in program.schema)]
+            [(name, column(name)) for name in program.schema] or [(ROW, lit(False))]
         )
-        return slow(packed.cast(fields))
+        return functions.when(exact, native).otherwise(slow(packed.cast(fields)))
 
     def evaluate(
         self, exprs: Sequence[Expr], schema: Mapping[str, Type], rows: Sequence[Row]

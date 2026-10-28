@@ -70,6 +70,13 @@ class SequencePrimitives:
     extract: Callable[[Any, str, int], Any] | None = None
 
 
+def take_prefix(primitives: SequencePrimitives, container: Any, count: Any) -> Any:
+    bounds = primitives.bounds
+    zero = bounds.literal(0)
+    size = bounds.clip(count, zero, bounds.literal(bounds.maximum))
+    return primitives.slice(container, zero, size)
+
+
 def slice_forward(
     primitives: SequencePrimitives,
     container: Any,

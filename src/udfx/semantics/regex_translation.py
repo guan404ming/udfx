@@ -3,19 +3,15 @@ from __future__ import annotations
 import re
 import re._constants as constants
 import re._parser as parser
-from collections.abc import Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cache
 from typing import Any
 
 from udfx.errors import Unsupported
-from udfx.semantics.text import code_points
+from udfx.semantics.regex_categories import category, escaped
 
 FLAGS = int(re.IGNORECASE | re.MULTILINE | re.DOTALL | re.UNICODE)
-
-
-def escaped(point: int) -> str:
-    return f"\\x{{{point:X}}}"
 
 
 def union_patterns(left: str, right: str, flags: int) -> str | None:
@@ -26,37 +22,6 @@ def union_patterns(left: str, right: str, flags: int) -> str | None:
     if any(pattern.groups or pattern.flags != flags | re.UNICODE for pattern in patterns):
         return None
     return f"(?:{left})|(?:{right})"
-
-
-def ranges(points: Iterable[int]) -> str:
-    parts: list[str] = []
-    start = previous = -1
-    for point in points:
-        if start >= 0 and point == previous + 1:
-            previous = point
-            continue
-        if start >= 0:
-            parts.append(escaped(start) + ("-" + escaped(previous) if start != previous else ""))
-        start = previous = point
-    if start >= 0:
-        parts.append(escaped(start) + ("-" + escaped(previous) if start != previous else ""))
-    return "".join(parts)
-
-
-@cache
-def category(name: str, ascii_only: bool = False) -> str:
-    positive = name.replace("_NOT_", "_")
-    predicate = {
-        "CATEGORY_DIGIT": str.isdecimal,
-        "CATEGORY_SPACE": str.isspace,
-        "CATEGORY_WORD": lambda point: point.isalnum() or point == "_",
-    }[positive]
-    negate = "_NOT_" in name
-    return ranges(
-        ord(point)
-        for point in code_points()
-        if predicate(point) != negate and (point.isascii() or not ascii_only)
-    )
 
 
 def ascii_member(name: str, member: Any) -> Any:
@@ -76,10 +41,18 @@ class Pattern:
     dollar: bool
     ignorecase: bool
     native: bool
+    capture_nonempty: bool
 
 
 class Translator:
-    def __init__(self, flags: int, dialect: str, ascii_only: bool) -> None:
+    def __init__(
+        self,
+        flags: int,
+        dialect: str,
+        ascii_only: bool,
+        categories: Callable[[str], str] | None = None,
+    ) -> None:
+        self.categories = categories
         self.flags = flags
         self.dialect = dialect
         self.ascii_only = ascii_only
@@ -135,6 +108,9 @@ class Translator:
     def char_set(self, value: Any) -> str:
         negate = bool(value and str(value[0][0]) == "NEGATE")
         members = value[1:] if negate else value
+        categories = {str(member) for name, member in members if str(name) == "CATEGORY"}
+        if any("_NOT_" in name and name.replace("_NOT_", "_") in categories for name in categories):
+            return r"[^\s\S]" if negate else "(?s:.)"
         if self.ascii_only and not self.flags & re.IGNORECASE:
             members = [
                 (name, kept)
@@ -142,7 +118,7 @@ class Translator:
                 if (kept := ascii_member(str(name), member)) is not None
             ]
             if not members:
-                return "(?s:.)" if negate else "(?!)"
+                return "(?s:.)" if negate else "(?!)" if self.dialect == "java" else r"[^\s\S]"
         return (
             "["
             + ("^" if negate else "")
@@ -152,7 +128,7 @@ class Translator:
 
     def character(self, name: str, value: Any) -> str:
         if name == "CATEGORY":
-            return category(str(value), self.ascii_only)
+            return self.category(str(value))
         if name == "RANGE":
             if (value[0] <= 0xDFFF and value[1] >= 0xD800) or (
                 self.flags & re.IGNORECASE and value[1] > 127
@@ -160,6 +136,11 @@ class Translator:
                 self.native = False
             return escaped(value[0]) + "-" + escaped(value[1])
         return self.token(name, value, 1)
+
+    def category(self, name: str) -> str:
+        if self.categories is None or self.ascii_only:
+            return category(name, self.ascii_only)
+        return self.categories(name)
 
     def anchor(self, name: str) -> str:
         match name:
@@ -181,7 +162,7 @@ class Translator:
             case "AT_BOUNDARY" | "AT_NON_BOUNDARY":
                 self.boundary = True
                 if self.dialect == "java":
-                    word = "[" + category("CATEGORY_WORD", self.ascii_only) + "]"
+                    word = "[" + self.category("CATEGORY_WORD") + "]"
                     following, opposite = ("!", "=") if name == "AT_BOUNDARY" else ("=", "!")
                     return f"(?:(?<={word})(?{following}{word})|(?<!{word})(?{opposite}{word}))"
                 return r"\b" if name == "AT_BOUNDARY" else r"\B"
@@ -190,7 +171,13 @@ class Translator:
 
 
 @cache
-def translate(pattern: str, flags: int, dialect: str, ascii_only: bool = False) -> Pattern:
+def translate(
+    pattern: str,
+    flags: int,
+    dialect: str,
+    ascii_only: bool = False,
+    categories: Callable[[str], str] | None = None,
+) -> Pattern:
     reject_comments(pattern)
     if flags & ~FLAGS:
         raise Unsupported("regex flags support only IGNORECASE, MULTILINE, and DOTALL")
@@ -203,7 +190,7 @@ def translate(pattern: str, flags: int, dialect: str, ascii_only: bool = False) 
         raise Unsupported("regex named groups are unsupported")
     if parsed.state.flags & ~FLAGS:
         raise Unsupported("regex flags support only IGNORECASE, MULTILINE, and DOTALL")
-    translator = Translator(parsed.state.flags, dialect, ascii_only)
+    translator = Translator(parsed.state.flags, dialect, ascii_only, categories)
     source = translator.sequence(parsed)
     ignorecase = bool(parsed.state.flags & re.IGNORECASE)
     if ignorecase:
@@ -220,6 +207,10 @@ def translate(pattern: str, flags: int, dialect: str, ascii_only: bool = False) 
         translator.dollar,
         ignorecase,
         translator.native,
+        any(
+            str(name) == "SUBPATTERN" and value[0] == 1 and value[3].getwidth()[0] > 0
+            for name, value in parsed
+        ),
     )
 
 

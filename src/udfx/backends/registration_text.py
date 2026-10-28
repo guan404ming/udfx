@@ -10,7 +10,7 @@ from udfx.semantics.facts import (
     ascii_predicate_result,
     integer_is_valid,
 )
-from udfx.semantics.json import lower_string, lower_type, native_shape, patterns
+from udfx.semantics.json import lower_string, patterns
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
@@ -22,6 +22,7 @@ from udfx.semantics.literals import (
 from udfx.semantics.padding import PaddingPrimitives, pad_text
 from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.text import PADDING_METHODS, PREDICATES, string_predicate
+from udfx.semantics.text_bounds import argument_without_newline
 from udfx.semantics.text_predicates import AsciiPrimitives, ascii_predicate
 from udfx.semantics.translation import lower_translation
 from udfx.types import Kind
@@ -34,20 +35,17 @@ def register_json[E](
     findall: Callable[[E, str], E],
     *,
     possessive: bool = False,
+    encode: Callable[[E], E] | None = None,
 ) -> None:
-    string, array, _ = patterns(possessive)
+    string, array, scalar = patterns(possessive)
+    rules("json.string_native", Kind.STR)(lambda value: primitives.matches(value, rf"\A{scalar}\z"))
+    rules("json.array_native", Kind.STR)(lambda value: primitives.matches(value, rf"\A{array}\z"))
     rules("json.tokens", Kind.STR)(
         lambda value: Lowered(findall(value, string), primitives.matches(value, rf"\A{array}\z"))
     )
-    rules("json.valid", Kind.STR)(
-        lambda value: Lowered(primitives.literal(True), native_shape(primitives, value, possessive))
-    )
-    rules("json.is_type", Kind.STR, Kind.STR, literals=(1,))(
-        lambda value, name: Lowered(*lower_type(primitives, value, name, possessive))
-    )
     rules("json.dumps", Kind.STR, Kind.BOOL, literals=(1,))(
         lambda value, ensure_ascii: Lowered(
-            *lower_string(primitives, concatenate, value, ensure_ascii)
+            *lower_string(primitives, concatenate, value, ensure_ascii, encode)
         )
     )
 
@@ -56,12 +54,24 @@ def register_regex[E](
     rules: RuleSet[E], primitives: RegexPrimitives, ascii: AsciiPrimitives | None = None
 ) -> None:
     def rule(name: str) -> Rule[E]:
-        return lambda *arguments: Lowered(*lower_regex(primitives, name, *arguments, ascii=ascii))
+        return lambda *arguments, newline_free=False: Lowered(
+            *lower_regex(primitives, name, *arguments, ascii=ascii, newline_free=newline_free)
+        )
 
-    for name in ("search", "match", "fullmatch", "findall", "contains"):
-        rules(f"re.{name}", Kind.STR, Kind.STR, Kind.INT, literals=(1, 2))(rule(name))
-    rules("re.sub", Kind.STR, Kind.STR, Kind.INT, Kind.STR, Kind.INT, literals=(1, 2, 3, 4))(
-        lambda text, pattern, flags, substitute, count: Lowered(
+    facts = {"newline_free": argument_without_newline}
+    for name in ("search", "match", "fullmatch", "findall", "first", "contains", "count"):
+        rules(f"re.{name}", Kind.STR, Kind.STR, Kind.INT, literals=(1, 2), facts=facts)(rule(name))
+    rules(
+        "re.sub",
+        Kind.STR,
+        Kind.STR,
+        Kind.INT,
+        Kind.STR,
+        Kind.INT,
+        literals=(1, 2, 3, 4),
+        facts=facts,
+    )(
+        lambda text, pattern, flags, substitute, count, newline_free=False: Lowered(
             *lower_regex(
                 primitives,
                 "sub",
@@ -71,12 +81,22 @@ def register_regex[E](
                 substitute=substitute,
                 count=count,
                 ascii=ascii,
+                newline_free=newline_free,
             )
         )
     )
-    rules("re.split", Kind.STR, Kind.STR, Kind.INT, Kind.INT, literals=(1, 2, 3))(
-        lambda text, pattern, flags, count: Lowered(
-            *lower_regex(primitives, "split", text, pattern, flags, count=count, ascii=ascii)
+    rules("re.split", Kind.STR, Kind.STR, Kind.INT, Kind.INT, literals=(1, 2, 3), facts=facts)(
+        lambda text, pattern, flags, count, newline_free=False: Lowered(
+            *lower_regex(
+                primitives,
+                "split",
+                text,
+                pattern,
+                flags,
+                count=count,
+                ascii=ascii,
+                newline_free=newline_free,
+            )
         )
     )
 

@@ -15,7 +15,7 @@ for _kind in (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL, Kind.LIST, Kind.DATETIM
 
 @RULES("bool", Kind.STR)
 def str_truth(value: Expression) -> Expression:
-    return value.isnotnull() & (length(value) > constant(0))
+    return value.isnotnull() & (function("strlen", value) > constant(0))
 
 
 @RULES("bool", Kind.INT)

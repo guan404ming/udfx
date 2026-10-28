@@ -68,11 +68,22 @@ def last_split(value: str, separator: str) -> str:
     return parts[-1]
 
 
+def split_item(value: str, separator: str, index: int) -> str:
+    return value.split(separator)[index]
+
+
+def split_item_faults(value: Node, separator: Node, index: Node) -> tuple[Fault, ...]:
+    return empty_separator(value, separator) + out_of_range(
+        apply(".split", value, separator), index
+    )
+
+
 for name, method in ((".split", str.split), (".rsplit", str.rsplit)):
     register(Op(name, (STR,), STRINGS, method))
     register(Op(name, (STR, STR.or_none()), STRINGS, method, empty_separator))
     register(Op(name, (STR, STR.or_none(), INT), STRINGS, method, empty_separator))
 register(Op("last_split", (STR, STR), STR, last_split, empty_separator))
+register(Op("split_item", (STR, STR, INT), STR, split_item, split_item_faults))
 register(Op(".find", (STR, STR), INT, str.find))
 register(Op(".rfind", (STR, STR), INT, str.rfind))
 register(Op(".count", (STR, STR), INT, str.count))

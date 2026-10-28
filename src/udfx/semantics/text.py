@@ -104,6 +104,12 @@ def whitespace_pattern(negate: bool = False, ascii_only: bool = False) -> str:
     return f"[{'^' if negate else ''}{re.escape(characters)}]+"
 
 
+def whitespace_normalization_pattern() -> str:
+    spaces = char_class(whitespace())
+    others = char_class(whitespace().replace(" ", ""))
+    return f"{spaces}*{others}{spaces}*| {{2,}}"
+
+
 @cache
 def non_whitespace_pattern() -> str:
     return whitespace_pattern(negate=True)

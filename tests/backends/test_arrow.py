@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pyarrow as pa
 import pytest
+from pyarrow import compute
 
 from udfx.backends import arrow
 from udfx.backends.polars import PolarsBackend
@@ -16,9 +17,24 @@ def test_exact_batch_keeps_native_array(values: list[int | None]) -> None:
     program = Program(lambda value: value, {"value": INT.or_none()}, Col("value", INT.or_none()))
     native = pa.array(values, pa.int64())
     flags = pa.array([True] * len(values), pa.bool_())
-    with patch.object(backend, "run_fallback_rows") as run:
+    with (
+        patch.object(backend, "run_fallback_rows") as run,
+        patch.object(compute, "indices_nonzero", side_effect=AssertionError("row indices")),
+    ):
         assert arrow.fallback(backend, program, flags, native, [native]) is native
     run.assert_not_called()
+
+
+@pytest.mark.parametrize("flags", [[False, False, False], [None, None, None], [False, None, False]])
+def test_pending_batch_uses_all_rows_without_indices(flags: list[bool | None]) -> None:
+    backend = PolarsBackend()
+    program = Program(lambda value: value, {"value": INT}, Col("value", INT))
+    columns = pa.array([1, 2, 3], pa.int64())
+    native = pa.nulls(3, pa.int64())
+    selected = pa.array([True, *flags, True], pa.bool_()).slice(1, 3)
+    with patch.object(compute, "indices_nonzero", side_effect=AssertionError("row indices")):
+        result = arrow.fallback(backend, program, selected, native, [columns])
+    assert result.equals(columns)
 
 
 @pytest.mark.parametrize(

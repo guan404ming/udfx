@@ -3,6 +3,7 @@ from __future__ import annotations
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import register_regex
+from udfx.backends.spark.regex_categories import category
 from udfx.backends.spark.rules import ASCII, RULES
 from udfx.semantics.regex import RegexPrimitives
 
@@ -24,6 +25,15 @@ def extract(text: Column, pattern: str, empty: bool) -> Column:
     ).otherwise(functions.lit(None).cast("string"))
 
 
+def first(text: Column, pattern: str, group: int, nonempty: bool) -> Column:
+    if nonempty:
+        return functions.nullif(functions.regexp_extract(text, pattern, group), functions.lit(""))
+    return functions.when(
+        functions.regexp_like(text, functions.lit(pattern)),
+        functions.regexp_extract(text, pattern, group),
+    ).otherwise(functions.lit(None).cast("string"))
+
+
 register_regex(
     RULES,
     RegexPrimitives(
@@ -38,7 +48,12 @@ register_regex(
         findall=lambda text, pattern, group: functions.regexp_extract_all(
             text, functions.lit(pattern), group
         ),
+        first=first,
+        count_matches=lambda text, pattern: functions.regexp_count(
+            text, functions.lit(pattern)
+        ).cast("long"),
         maximum_count=0,
+        categories=category,
     ),
     ASCII,
 )

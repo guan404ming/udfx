@@ -83,7 +83,7 @@ def test_reports_include_failures_and_slower_cases(
 ) -> None:
     result = artifact()
     text = markdown(result)
-    assert "| 1 | 0 | 1 | 1 | 1 | 0 | 0.50x | 0.50x | 1/1 |" in text
+    assert "| 1 | 0 | 0 | 1 | 1 | 1 | 0 | 0.50x | 0.50x | 0.50x | 1/1 |" in text
     assert "wrong output" in text
     path = tmp_path / "result.csv"
     export_csv(result, path)
@@ -117,6 +117,27 @@ def test_duplicate_plans_have_one_group_weight() -> None:
     ratios, dedup = speedups(results)
     assert ratios == [1.0, 1.0, 9.0]
     assert dedup == pytest.approx(3.0)
+
+
+def test_python_fallback_does_not_count_as_compiler_speedup() -> None:
+    result = artifact()["results"][0]
+    result["status"] = "python"
+    result["native_row_fraction"] = 0.0
+    assert speedups([result]) == ([], None)
+
+
+def test_overall_speedup_includes_python_only_cases() -> None:
+    result = artifact()
+    native = result["results"][0]
+    result["results"].append(
+        {
+            **native,
+            "status": "python",
+            "native_row_fraction": 0.0,
+            "comparisons": {"python_scalar": {"median_speedup": 2.0}},
+        }
+    )
+    assert "| 1 | 0 | 1 | 1 | 1 | 1 | 0 | 1.00x | 0.50x | 0.50x | 1/1 |" in markdown(result)
 
 
 def test_code_summary_keeps_framework_and_compiler_separate() -> None:

@@ -13,7 +13,7 @@ from udfx.frontend.core.expressions import node_of, truth
 from udfx.frontend.core.logic import choose, conjunction, disjunction, negate
 from udfx.frontend.core.merge import merge
 from udfx.frontend.core.tracing import FOLDED
-from udfx.frontend.core.values import Function, Generator, Item, Null, Opaque, Value
+from udfx.frontend.core.values import Function, Generator, Item, Null, Opaque, Value, wrapped
 from udfx.frontend.decode import ops
 from udfx.frontend.flow.comprehensions import comprehension, validate_fault_handlers
 from udfx.frontend.flow.frame import Flow, Frame, Produced, Result
@@ -84,12 +84,12 @@ def inline(
         if returns:
             faults = [outcome.path for outcome in failures]
             path = conjunction(bindings.path, negate(reduce(disjunction, faults, FALSE)))
-            results.append(Produced(bindings.under(path), (Value(merge(returns, faults)),)))
+            results.append(Produced(bindings.under(path), (wrapped(merge(returns, faults)),)))
         return results
     results = []
     for outcome in outcomes:
         if isinstance(outcome, Return):
-            results.append(Produced(bindings.under(outcome.path), (Value(outcome.value),)))
+            results.append(Produced(bindings.under(outcome.path), (wrapped(outcome.value),)))
         elif isinstance(outcome, Raise):
             results.append(outcome)
     return results

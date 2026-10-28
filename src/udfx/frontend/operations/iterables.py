@@ -5,7 +5,7 @@ from functools import reduce
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of, nullable_faults
-from udfx.frontend.core.json import array, iterable_faults
+from udfx.frontend.core.json import array, dynamic, iterable_faults
 from udfx.frontend.core.logic import fold
 from udfx.frontend.core.values import (
     Generator,
@@ -17,6 +17,7 @@ from udfx.frontend.core.values import (
     Set,
     Tuple,
     Value,
+    bounded_iterator,
     require_bounded,
 )
 from udfx.frontend.operations.builtins import iterable_node
@@ -27,27 +28,23 @@ from udfx.frontend.resolve.constants import (
     construct_dictionary,
     dictionary_method,
 )
-from udfx.ir import Element, ListValue, Lit, Node, lit
+from udfx.ir import Call, Element, ListValue, Lit, Node, lit
 from udfx.ops import Fault, apply
 from udfx.types import BOOL, FLOAT, INT, STR, Kind, list_of
 
 
-def bounded(items: Sequence[Item]) -> Iterator:
-    require_bounded(len(items))
-    return Iterator(tuple(items))
-
-
 def iterator_of(item: Item) -> tuple[Iterator, list[Fault]]:
     if isinstance(item, Json):
-        return Iterator((), source=array(item.node), json=True), iterable_faults(item.node)
+        faults = [] if item.container in (str, list, tuple) else iterable_faults(item.node)
+        return Iterator((), source=array(item.node), json=True), faults
     if isinstance(item, Iterator):
         return item, []
     if isinstance(item, Generator):
         return Iterator((), source=item.node), []
     if isinstance(item, Tuple):
-        return bounded(item.items), []
+        return bounded_iterator(item.items), []
     if isinstance(item, Value) and isinstance(item.node, ListValue):
-        return bounded(tuple(Value(node) for node in item.node.items)), []
+        return bounded_iterator(tuple(Value(node) for node in item.node.items)), []
     if isinstance(item, Value) and not isinstance(item.node, Lit):
         source = item.node
         if source.type.kind is Kind.STR:
@@ -63,7 +60,7 @@ def iterator_of(item: Item) -> tuple[Iterator, list[Fault]]:
     if not isinstance(value, tuple | list | range | dict | str):
         raise Unsupported("loops and comprehensions require a sequence")
     require_bounded(len(value))
-    return bounded(tuple(constant(member) for member in value)), []
+    return bounded_iterator(tuple(constant(member) for member in value)), []
 
 
 def source_of(iterator: Iterator) -> Node:
@@ -93,10 +90,14 @@ def indexed(iterator: Iterator, name: str) -> tuple[Node, Element, Item]:
         source = apply("range", lit(len(iterator.items)))
         return source, element, selected(iterator.items, element)
     source = source_of(iterator)
+    decoded = iterator.json and isinstance(source, Call) and source.op.name == "json.tokens"
+    if decoded and isinstance(source, Call):
+        source = apply("json.result.list[str]", dynamic(source.arguments[0]))
     if source.type.item is None:
         raise Unsupported("comprehension requires a list")
     element = Element(name, source.type.item)
-    return source, element, Json(element) if iterator.json else Value(element)
+    value = apply("json.encode", element) if decoded else element
+    return source, element, Json(value, str if decoded else None) if iterator.json else Value(value)
 
 
 def constant_range(arguments: Sequence[Item]) -> Opaque:
@@ -144,7 +145,7 @@ def combined(name: str, arguments: Sequence[Item]) -> tuple[Iterator, list[Fault
                 zip(*(iterator.items for iterator in iterators), strict=False)
             )
         )
-        return bounded(items), faults
+        return bounded_iterator(items), faults
     return paired(name, iterators, start), faults
 
 

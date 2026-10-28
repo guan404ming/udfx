@@ -15,7 +15,7 @@ from udfx.backends.registration_text import (
     register_translation,
 )
 from udfx.backends.rules import BinaryRule, Lowered, Rule, RuleOptions, RuleResult, RuleSet
-from udfx.semantics.facts import float_exact_operands
+from udfx.semantics.facts import float_exact_operands, nullable_arguments
 from udfx.semantics.lists import (
     SET_OPERATIONS,
     SET_PREDICATES,
@@ -172,7 +172,13 @@ def register_comparison[E](
     def ordered(left: E, right: E) -> E:
         return float_compare(order, compare, left, right)
 
-    rules(name, Kind.INT, Kind.INT)(compare)
+    def integer(left: E, right: E, nullable: bool = True) -> E:
+        return (
+            operator.eq(left, right) if name == "__eq__" and not nullable else compare(left, right)
+        )
+
+    facts = {"nullable": nullable_arguments} if name == "__eq__" else {}
+    rules(name, Kind.INT, Kind.INT, facts=facts)(integer)
     rules(name, Kind.FLOAT, Kind.FLOAT)(ordered)
     register_widened_variants(rules, name, ordered, to_float, order)
 
@@ -180,14 +186,14 @@ def register_comparison[E](
 def register_equality[E](
     rules: RuleSet[E], equal: Binary, to_float: Callable[[E], E], order: OrderPrimitives
 ) -> None:
-    def unequal(left: Any, right: Any) -> Any:
-        return ~equal(left, right)
+    def unequal(left: Any, right: Any, nullable: bool = True) -> Any:
+        return ~equal(left, right) if nullable else left != right
 
     def float_unequal(left: Any, right: Any) -> Any:
         return ~float_compare(order, equal, left, right)
 
     register_comparison(rules, "__eq__", equal, to_float, order)
-    rules("__ne__", Kind.INT, Kind.INT)(unequal)
+    rules("__ne__", Kind.INT, Kind.INT, facts={"nullable": nullable_arguments})(unequal)
     rules("__ne__", Kind.FLOAT, Kind.FLOAT)(float_unequal)
     register_widened_variants(rules, "__ne__", float_unequal, to_float, order)
 

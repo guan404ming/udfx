@@ -3,9 +3,12 @@ from __future__ import annotations
 import polars as pl
 
 from udfx.backends.polars.rules import RULES, when
+from udfx.backends.polars.slicing import SEQUENCE
 from udfx.backends.polars.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
+from udfx.frontend.core.comprehensions import lowercase_words
 from udfx.semantics.lists import ListPrimitives, SetPrimitives
+from udfx.semantics.sequences import take_prefix
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
@@ -48,14 +51,20 @@ def ordered(value: pl.Expr) -> pl.Expr:
     return value.list.sort()
 
 
-@RULES("frequency_order", Kind.LIST)
-def frequency_order(value: pl.Expr) -> pl.Expr:
+@RULES("frequency_order", Kind.LIST, Kind.INT)
+def frequency_order(value: pl.Expr, count: pl.Expr) -> pl.Expr:
     element = pl.element()
     runs = element.sort().rle()
     keys = runs.struct.field("value")
     indexes = pl.int_range(pl.len()).sort_by(element, maintain_order=True)
     first = indexes.gather(element.sort().search_sorted(keys))
-    return value.list.eval(keys.sort_by(runs.struct.field("len"), first, descending=[True, False]))
+    ranked = value.list.eval(
+        keys.sort_by(runs.struct.field("len"), first, descending=[True, False])
+    )
+    return take_prefix(SEQUENCE, ranked, count)
+
+
+RULES.rewrite("frequency_order", Kind.LIST, Kind.INT)(lowercase_words)
 
 
 @RULES("__contains__", Kind.LIST, Kind.FLOAT)

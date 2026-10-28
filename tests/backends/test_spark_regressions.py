@@ -1,3 +1,4 @@
+import json
 from collections.abc import Mapping
 from contextlib import redirect_stdout
 from io import StringIO
@@ -5,11 +6,12 @@ from typing import Any
 
 import pytest
 from conftest import backend_params
-from pyspark.sql import functions
+from pyspark.sql import Column, functions
 
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
+from udfx.backends.spark.json import typed_field
 from udfx.backends.spark.splitting import split_words
 from udfx.frontend import trace
 from udfx.ir import Col, Node
@@ -30,7 +32,7 @@ def test_spark_fallback_returns_only_python_result(backend: Backend[Any]) -> Non
     )
     native = functions.size(split_words(backend.column(Col("text", STR))))
     expr = backend.fallback(native, functions.col("exact"), program)
-    assert str(expr).count("regexp_extract_all") == 2
+    assert str(expr).count("regexp_extract_all") == str(native).count("regexp_extract_all")
     frame = backend.session().createDataFrame([("one two", True)], ["text", "exact"])
     output = StringIO()
     with redirect_stdout(output):
@@ -123,6 +125,28 @@ def test_spark_fallback_skips_inexact_native_values(backend: Backend[Any]) -> No
     )
     expression = backend.fallback(native, functions.col("exact"), program)
     assert backend.evaluate([expression], schema, [(1, True), (2, False), (3, None)]) == [[1, 2, 3]]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_spark_json_field_binding_keeps_outer_keys(backend: Backend[Any]) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark lambda capture")
+
+    def selected(documents: list[str], exact: bool) -> list[str | None]:
+        return [json.loads(document).get(document[0]) for document in documents]
+
+    schema = {"documents": list_of(STR), "exact": BOOL}
+    program = Program(selected, schema, Col("result", list_of(STR.or_none())))
+    source = backend.column(Col("documents", schema["documents"]))
+
+    def fields(document: Column) -> tuple[Column, Column, Column]:
+        return typed_field(document, functions.substring(document, 1, 1), STR.or_none(), ())
+
+    native = functions.transform(source, lambda document: fields(document)[0])
+    exact = functions.forall(source, lambda document: fields(document)[2]) & functions.col("exact")
+    expression = backend.fallback(native, exact, program)
+    rows = [([], True), (['{"{":"native"}', "{}"], True), (['{"{":"python"}'], False)]
+    assert backend.evaluate([expression], schema, rows) == [program.run(rows)]
 
 
 @pytest.mark.parametrize("backend", backend_params())

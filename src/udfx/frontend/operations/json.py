@@ -4,7 +4,16 @@ from collections.abc import Mapping, Sequence
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of
-from udfx.frontend.core.json import array, iterable_faults, packed, string, strings, type_fault
+from udfx.frontend.core.json import (
+    array,
+    dynamic,
+    encoded,
+    iterable_faults,
+    packed,
+    string,
+    strings,
+    type_fault,
+)
 from udfx.frontend.core.values import Item, Json, Method, Opaque, Set, Value
 from udfx.frontend.operations.builtins import method_call
 from udfx.frontend.resolve.constants import constant, constant_value
@@ -16,12 +25,16 @@ from udfx.types import INT, STR, Kind
 
 
 def serialized(value: Node, ensure_ascii: bool) -> Node:
+    if value.type.kind is Kind.JSON:
+        return apply("json.serialize", value, lit(ensure_ascii))
     if value.type.kind is Kind.NONE:
         return lit("null")
     if value.type.kind is Kind.STR:
         return apply("json.dumps", value, lit(ensure_ascii))
     if value.type.kind is not Kind.LIST or value.type.item is None:
         raise Unsupported("json.dumps supports strings and lists of strings")
+    if value.type.item.kind is Kind.STR:
+        return apply("json.dumps", value, lit(ensure_ascii))
     element = Element("json item", value.type.item)
     items = Comprehension(value, element, serialized(element, ensure_ascii), TRUE, FALSE)
     joined = apply(".join", lit(", "), items)
@@ -33,10 +46,18 @@ def call_json(
     callee: Item, arguments: Sequence[Item], keywords: Mapping[str, Item]
 ) -> tuple[Item, list[Fault]] | None:
     if isinstance(callee, Method) and arguments and isinstance(arguments[0], Json):
+        if callee.name == "get" and not keywords and len(arguments) in (2, 3):
+            default = encoded(node_of(arguments[2])) if len(arguments) == 3 else encoded(lit(None))
+            value, faults = invoke(
+                "json.get", [dynamic(arguments[0].node), node_of(arguments[1]), default], TypeError
+            )
+            return Json(value), faults
         if keywords or callee.name.startswith("__") or not hasattr(str, callee.name):
             raise Unsupported(f"JSON method {callee.name}")
         source = arguments[0].node
         value, faults = method_call(callee.name, [Value(string(source)), *arguments[1:]])
+        if arguments[0].container is str:
+            return Value(value), faults
         return Value(value), [
             type_fault(source, AttributeError, attribute_types(callee.name)),
             *faults,
@@ -69,11 +90,17 @@ def dumped(arguments: Sequence[Item], keywords: Mapping[str, Item]) -> tuple[Ite
     item = bindings["obj"]
     if isinstance(item, Json):
         source = item.node
-        result = If(
-            apply("json.is_type", source, lit("str")),
-            serialized(string(source), ensure_ascii),
-            serialized(strings(source), ensure_ascii),
-            STR,
+        result = (
+            serialized(source, ensure_ascii)
+            if source.type.kind is Kind.JSON
+            else serialized(strings(source), ensure_ascii)
+            if item.container is list or item.container is tuple
+            else If(
+                apply("json.is_type", source, lit("str")),
+                serialized(string(source), ensure_ascii),
+                serialized(strings(source), ensure_ascii),
+                STR,
+            )
         )
     else:
         result = serialized(node_of(item), ensure_ascii)
@@ -100,8 +127,14 @@ def loaded(arguments: Sequence[Item], keywords: Mapping[str, Item]) -> tuple[Ite
 
 def consumed(callee: object, item: Json) -> tuple[Item, list[Fault]] | None:
     source = item.node
-    faults = iterable_faults(source)
+    if isinstance(callee, type) and callee in (str, int, float, bool):
+        value, faults = invoke(f"json.convert.{callee.__name__}", [dynamic(source)], TypeError)
+        return Value(value), faults
+    faults = [] if item.container in (str, list, tuple) else iterable_faults(source)
     if callee is len:
+        if source.type.kind is Kind.JSON:
+            value, faults = invoke("json.length", [source], TypeError)
+            return Value(value), faults
         value = If(
             apply("json.is_type", source, lit("str")),
             apply("len", string(source)),

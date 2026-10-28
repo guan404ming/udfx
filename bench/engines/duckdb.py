@@ -42,6 +42,7 @@ class Engine(Adapter):
                 dtype(self.workload.result),
                 type=form,
                 null_handling=SPECIAL,
+                side_effects=not self.workload.deterministic,
             )
             expressions[name] = duckdb.FunctionExpression(
                 name,

@@ -119,14 +119,14 @@ def test_ascii_free_classes() -> None:
     assert not ascii_free(ANY_CHAR)
 
 
-def test_spark_split_uses_ascii_pattern_for_ascii() -> None:
+def test_spark_split_uses_corrected_category() -> None:
     def words(value: str) -> list[str]:
         return value.split()
 
     schema = {"value": STR.or_none()}
     backend = SparkBackend()
     lowered = lower_program(backend, trace(words, schema))
-    assert "octet_length(value)" in str(lowered.expr)
+    assert "p{IsWhite_Space}" in str(lowered.expr)
     rows = [("a b\tc",), ("a\xa0b",), ("a\u3000b\x1cc",), ("x\x85y\u2007z",), ("",), (None,)]
     assert check_function(words, schema, backend, rows) == []
 

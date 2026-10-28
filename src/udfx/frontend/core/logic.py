@@ -9,9 +9,10 @@ from udfx.frontend.core.sequences import simplify_sequence
 from udfx.frontend.core.sets import simplify_set
 from udfx.frontend.core.text import simplify_text
 from udfx.frontend.core.tracing import FOLDED
+from udfx.graphs import deterministic
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, ListValue, Lit, Node
 from udfx.ops import apply
-from udfx.types import Kind, Type, fits, unify
+from udfx.types import JSON, Kind, Type, fits, unify
 
 EXCLUSIVE = frozenset({"bool", "is_none"})
 
@@ -36,8 +37,8 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
             return retype(
                 fold_shared(node.then if condition.value else node.orelse, seen), node.type
             )
-        return If(
-            condition, fold_shared(node.then, seen), fold_shared(node.orelse, seen), node.type
+        return coalesce_branch(
+            If(condition, fold_shared(node.then, seen), fold_shared(node.orelse, seen), node.type)
         )
     if not isinstance(node, Call):
         return node
@@ -51,7 +52,7 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
         folded = simplify_set(folded)
     if isinstance(folded, Call):
         folded = simplify_number(folded)
-    if not isinstance(folded, Call):
+    if not isinstance(folded, Call) or not folded.op.deterministic:
         return folded
     values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]
     if len(values) < len(folded.arguments):
@@ -65,6 +66,37 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
     if not fits(value, folded.type):
         return folded
     return Lit(tuple(value) if isinstance(value, list) else value, folded.type)
+
+
+def coalesce_branch(node: If) -> Node:
+    predicate = node.condition
+    positive = True
+    if isinstance(predicate, Call) and predicate.op.name == "not":
+        predicate = predicate.arguments[0]
+        positive = False
+    if not isinstance(predicate, Call):
+        return node
+    if predicate.op.name == "is_none":
+        source = predicate.arguments[0]
+        positive = not positive
+    elif predicate.op.name in {"__eq__", "__ne__"} and any(
+        isinstance(part, Lit) and part.value is None for part in predicate.arguments
+    ):
+        left, right = predicate.arguments
+        source = right if isinstance(left, Lit) and left.value is None else left
+        positive = positive == (predicate.op.name == "__ne__")
+    else:
+        return node
+    value, default = (node.then, node.orelse) if positive else (node.orelse, node.then)
+    if (
+        value != source
+        or value.type.kind is not Kind.STR
+        or not isinstance(default, Lit)
+        or not isinstance(default.value, str)
+        or not deterministic(source)
+    ):
+        return node
+    return apply("coalesce", source, default)
 
 
 def conjuncts(node: Node) -> tuple[Node, ...]:
@@ -148,6 +180,8 @@ def choose(cases: Sequence[tuple[Node, Node]]) -> Node:
 
 
 def retype(node: Node, type: Type) -> Node:
+    if type.kind is Kind.JSON and node.type.kind is not Kind.JSON:
+        return Lit("null", JSON) if node.type.kind is Kind.NONE else apply("json.encode", node)
     if isinstance(node, Lit) and node.type.kind is Kind.NONE:
         return Lit(None, type.or_none())
     return node

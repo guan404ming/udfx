@@ -9,6 +9,7 @@ from udfx.frontend.core.logic import depends_on
 from udfx.frontend.core.values import Item, Iterator, Opaque, Value
 from udfx.frontend.decode import graph, ops
 from udfx.frontend.flow.comprehensions import comprehension, region_of, series, target_names
+from udfx.frontend.flow.first_iteration import first_iteration
 from udfx.frontend.flow.frame import Flow, Frame
 from udfx.frontend.flow.machine import Step, divert, exits, explore, follow
 from udfx.frontend.operations.iterables import indexed
@@ -51,6 +52,9 @@ def iterate(frame: Frame, flow: Flow, exit: graph.ForEach) -> list[Step]:
             steps.append(leave(frame, stored, exit, {**flow.values, exit.accumulator: item}))
         return steps
     if iterator.source is not None:
+        first = first_iteration(frame, flow, exit, iterator)
+        if first is not None:
+            return first
         if iterator.value is not None and not iterator.requires_native:
             return reduced_loop(frame, flow, exit, iterator)
         raise refusal(frame, exit)

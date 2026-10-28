@@ -5,6 +5,7 @@ from udfx.ir import Call, Guarded, If, Lit, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics.casing import folded_case, lowercase_pattern
 from udfx.semantics.ranges import integer_bounds
+from udfx.semantics.regex_patterns import literal_suffix
 from udfx.semantics.regex_translation import union_patterns
 from udfx.semantics.text import CASE_METHODS
 from udfx.types import INT, INT64_MAX, STR, Kind
@@ -158,6 +159,23 @@ def joined_split(node: Call) -> Node | None:
     if integer_bounds(apply("len", source), INT64_MAX) != (count, count):
         return None
     return apply(".replace", text, original, separator)
+
+
+def removed_suffix(node: Call) -> Node | None:
+    text, pattern, flags, replacement, count = node.arguments
+    if (
+        replacement != lit("")
+        or not isinstance(pattern, Lit)
+        or not isinstance(pattern.value, str)
+        or not isinstance(flags, Lit)
+        or not isinstance(flags.value, int)
+        or not isinstance(count, Lit)
+        or not isinstance(count.value, int)
+        or count.value < 0
+    ):
+        return None
+    separator = literal_suffix(pattern.value, flags.value)
+    return None if separator is None else apply("split_item", text, lit(separator), lit(0))
 
 
 def lowercase_contains(node: Call) -> Node | None:

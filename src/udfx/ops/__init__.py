@@ -1,4 +1,15 @@
-from udfx.ops import conversions, core, datetimes, lists, math, numbers, regex, strings
+from udfx.ops import (
+    conversions,
+    core,
+    datetimes,
+    json,
+    lists,
+    math,
+    numbers,
+    randomness,
+    regex,
+    strings,
+)
 from udfx.ops.registry import Fault, Op, OpKey, all_ops, apply, matching, register, resolve
 
 __all__ = [
@@ -10,10 +21,12 @@ __all__ = [
     "conversions",
     "core",
     "datetimes",
+    "json",
     "lists",
     "matching",
     "math",
     "numbers",
+    "randomness",
     "regex",
     "register",
     "resolve",

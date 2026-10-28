@@ -8,9 +8,8 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of
 from udfx.frontend.core.values import Counter, CounterKey, Item, Opaque, Value
 from udfx.frontend.operations.builtins import iterable_node
-from udfx.ir import lit
 from udfx.ops import Fault
-from udfx.types import INT, STR, list_of
+from udfx.types import STR, list_of
 
 
 def call_counter(
@@ -34,7 +33,5 @@ def call_counter(
     key = keywords["key"]
     if not isinstance(counter, Counter) or not isinstance(key, CounterKey) or key.owner != counter:
         raise Unsupported("nlargest requires a Counter and its get method as key")
-    ordered, faults = invoke("frequency_order", [counter.node], TypeError)
-    limit, pending = invoke("max", [lit(0), node_of(count)], TypeError)
-    value, slicing = invoke("slice", [ordered, lit(None, INT.or_none()), limit], TypeError)
-    return Value(value), [*faults, *pending, *slicing]
+    ordered, faults = invoke("frequency_order", [counter.node, node_of(count)], TypeError)
+    return Value(ordered), faults

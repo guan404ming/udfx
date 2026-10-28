@@ -10,7 +10,7 @@ from udfx.backends.lowering_context import lowering_context
 from udfx.backends.rules import Lowered, fold_predicate
 from udfx.errors import Unsupported
 from udfx.graphs import canonicalize, unique_size
-from udfx.ir import FALSE, Node
+from udfx.ir import FALSE, Lit, Node
 from udfx.program import Program
 from udfx.semantics.assumptions import assuming
 
@@ -25,6 +25,12 @@ EXPANDED_LIMIT = 10_000
 def lower_program[E](
     backend: Backend[E], program: Program, results: ResultLowering[E] | None = None
 ) -> Lowered[E]:
+    if not program.deterministic:
+        exact = backend.literal(FALSE)
+        record_lowering(
+            exact, value_guard=True, fault_guard=False, failure=False, native_errors=False
+        )
+        return Lowered(backend.literal(Lit(None, program.result.or_none())), exact)
     expanded = size(program.value) + size(program.fault)
     graph = expanded > EXPANDED_LIMIT and backend.supports_graphs()
     if graph:

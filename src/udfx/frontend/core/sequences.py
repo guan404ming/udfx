@@ -1,6 +1,7 @@
 import re
 from collections.abc import Sequence
 
+from udfx.frontend.core.regex import first_match
 from udfx.ir import Call, Guarded, If, Lit, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics.text import (
@@ -8,7 +9,15 @@ from udfx.semantics.text import (
     non_whitespace_pattern,
     whitespace_pattern,
 )
-from udfx.types import INT
+from udfx.types import INT, INT64_MAX
+
+
+def literal_string_item(node: Call) -> Node | None:
+    text, index = node.arguments
+    if not isinstance(index, Lit) or type(index.value) is not int:
+        return None
+    stop = None if index.value in (-1, INT64_MAX) else index.value + 1
+    return apply("slice", text, index, lit(stop))
 
 
 def unit_stride(steps: Sequence[Node]) -> bool:
@@ -83,6 +92,9 @@ def sequence_length(name: str, length: Node) -> Node | None:
 
 
 def simplify_sequence(node: Call) -> Node:
+    first = first_match(node)
+    if first is not None:
+        return first
     total = sum_partition(node)
     if total is not None:
         return total

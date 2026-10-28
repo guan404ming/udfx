@@ -3,9 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from udfx.errors import Unsupported
+from udfx.frontend.core.json import dynamic
 from udfx.frontend.core.logic import fold, negate
+from udfx.frontend.core.tracing import EFFECTS
 from udfx.frontend.core.values import (
     Item,
+    Json,
     Match,
     Opaque,
     Set,
@@ -20,6 +23,8 @@ from udfx.types import BOOL, Kind, type_of
 
 
 def node_of(item: Item) -> Node:
+    if isinstance(item, Json):
+        return dynamic(item.node)
     if not isinstance(item, Value):
         raise Unsupported(f"expected a value, got {describe(item)}")
     if item.container in (tuple, set, frozenset):
@@ -77,6 +82,9 @@ def invoke(
         else:
             format_parts(arguments[1].value)
     op, arguments = overload(name, arguments)
+    effects = EFFECTS.get()
+    if not op.deterministic and effects is not None:
+        effects.add(name)
     call = Call(op, tuple(arguments))
     folded = fold(call)
     if (
@@ -125,6 +133,8 @@ def truth(item: Item) -> tuple[Node, list[Fault]]:
             return negate(none_test(item)), []
         case Set(node=node):
             return invoke("bool", [node], TypeError)
+        case Json(node=node):
+            return invoke("json.truth", [dynamic(node)], TypeError)
         case Value(node=Lit(value=value)):
             return lit(bool(value)), []
         case Value(node=node) if node.type == BOOL:
@@ -137,6 +147,8 @@ def truth(item: Item) -> tuple[Node, list[Fault]]:
 
 def none_test(item: Item) -> Node:
     match item:
+        case Json(node=node):
+            return apply("json.none", dynamic(node))
         case Match(node=node):
             return none_test(Value(node))
         case Value(node=Lit(value=value)):

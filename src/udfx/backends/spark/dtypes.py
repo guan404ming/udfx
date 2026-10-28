@@ -15,6 +15,7 @@ from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, DataType] = {
     Kind.DATETIME: TimestampNTZType(),
+    Kind.JSON: StringType(),
     Kind.STR: StringType(),
     Kind.INT: LongType(),
     Kind.FLOAT: DoubleType(),

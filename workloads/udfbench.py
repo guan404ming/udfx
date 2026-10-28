@@ -90,7 +90,7 @@ def load(root: Path) -> list[Workload]:
                 CATEGORIES.get(table),
                 CONSTANTS.get(name, {}),
                 origin="upstream",
-                exclusion="Nondeterministic random.gauss output" if name == "addnoise" else None,
+                deterministic=name != "addnoise",
                 error=error,
             )
         )
