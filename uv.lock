@@ -849,7 +849,7 @@ wheels = [
 
 [[package]]
 name = "udfx"
-version = "0.1.0b1"
+version = "0.1.0a1"
 source = { editable = "." }
 
 [package.optional-dependencies]

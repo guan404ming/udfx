@@ -1,6 +1,6 @@
 [project]
 name = "udfx"
-version = "0.1.0b1"
+version = "0.1.0a1"
 description = "Turn Python UDFs into native dataframe expressions"
 readme = "README.md"
 license = "Apache-2.0"
