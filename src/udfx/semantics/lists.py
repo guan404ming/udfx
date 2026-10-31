@@ -40,6 +40,10 @@ def range_list(*arguments: int) -> list[int]:
     return list(range(*arguments))
 
 
+def optional_item(values: list[Any], index: int) -> Any:
+    return values[index] if -len(values) <= index < len(values) else None
+
+
 @dataclass(frozen=True)
 class SumPrimitives:
     literal: Callable[[object], Any]

@@ -45,8 +45,9 @@ register_regex(
             text, pattern, replacement
         ),
         split=lambda text, separator: functions.split(text, separator, -1),
-        findall=lambda text, pattern, group: functions.regexp_extract_all(
-            text, functions.lit(pattern), group
+        findall=lambda text, pattern, group: (
+            functions.regexp_extract_all(text, functions.lit(pattern), group),
+            None,
         ),
         first=first,
         count_matches=lambda text, pattern: functions.regexp_count(

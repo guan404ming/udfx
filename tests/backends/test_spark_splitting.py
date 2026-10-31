@@ -25,6 +25,28 @@ def test_absent_separator_skips_splitting(function: Callable[..., object]) -> No
 
 
 @pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("separator", [None, " ", ".", "*", "\\E", "[]", "aa", "😀", "\x00"])
+def test_literal_separator_skips_presence_scan(
+    backend: Backend[Any], separator: str | None
+) -> None:
+    if not isinstance(backend, SparkBackend):
+        pytest.skip("Spark literal split")
+
+    def split(text: str) -> list[str]:
+        return text.split(separator)
+
+    schema = {"text": STR.or_none()}
+    expression = str(backend.lower(trace(split, schema).value).expr)
+    assert "contains(" not in expression
+    assert "regexp_replace(" not in expression
+    marker = separator or " "
+    rows = [
+        (text,) for text in (None, "", "plain", marker, marker.join(("", "\u03b1", "", "😀", "")))
+    ]
+    assert check_function(split, schema, backend, rows) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize(
     "function",
     [

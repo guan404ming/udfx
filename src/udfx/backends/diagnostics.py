@@ -11,6 +11,7 @@ class LoweringDetails:
     fault_guard: bool
     failure: bool
     native_errors: bool
+    runtime_udfs: tuple[str, ...] = ()
 
 
 CURRENT: ContextVar[list[LoweringDetails] | None] = ContextVar("udfx_diagnostics", default=None)
@@ -33,7 +34,10 @@ def record_lowering(
     fault_guard: bool,
     failure: bool,
     native_errors: bool,
+    runtime_udfs: tuple[str, ...] = (),
 ) -> None:
     details = CURRENT.get()
     if details is not None:
-        details[:] = [LoweringDetails(exact, value_guard, fault_guard, failure, native_errors)]
+        details[:] = [
+            LoweringDetails(exact, value_guard, fault_guard, failure, native_errors, runtime_udfs)
+        ]

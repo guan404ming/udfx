@@ -5,13 +5,14 @@ from udfx.backends.polars.conversions import TEXT
 from udfx.backends.polars.rules import RULES
 from udfx.backends.registration_json import register_json_string_decoder, register_json_values
 from udfx.backends.rules import Lowered
-from udfx.frontend.core.json import serialized_words
+from udfx.frontend.core.json import nonempty_array, serialized_words
+from udfx.semantics.facts import json_validity
 from udfx.semantics.json import lower_decoded_strings
 from udfx.types import Kind
 
 register_json_string_decoder(RULES, TEXT, lambda value: value.str.json_decode(pl.String))
 
-RULES("json.result.list[str]", Kind.JSON)(
+RULES("json.result.list[str]", Kind.JSON, proves=json_validity)(
     lambda value: Lowered(
         *lower_decoded_strings(
             TEXT,
@@ -27,3 +28,4 @@ RULES("json.result.list[str]", Kind.JSON)(
 )
 
 register_json_values(RULES, PolarsBackend().literal, TEXT, serialize_strings=serialized_words)
+RULES.rewrite("__gt__", Kind.INT, Kind.INT)(nonempty_array)

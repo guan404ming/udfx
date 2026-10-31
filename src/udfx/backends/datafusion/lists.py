@@ -109,8 +109,8 @@ RULES.rewrite("frequency_order", Kind.LIST, Kind.INT)(lowercase_words)
 
 FREQUENCY_RUNS = FrequencyRunPrimitives(
     literal=lit,
-    length=lambda value: functions.cardinality(value).cast(pa.int64()),
-    indices=lambda count: functions.range(lit(0), count),
+    length=lambda value: functions.cardinality(value).cast(pa.int32()),
+    indices=lambda count: functions.range(lit(0), count).cast(pa.list_(pa.int32())),
     zip=functions.arrays_zip,
     field=lambda value, index: functions.get_field(value, str(index + 1)),
     record=lambda *values: functions.named_struct(

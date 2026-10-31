@@ -41,6 +41,8 @@ jobs:
           java-version: "21"
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --locked --python ${{ matrix.python }}
+      - if: matrix.shard.name == 'spark' && matrix.python == '3.12'
+        run: uv run python tools/build_spark_runtime.py --check
       - if: matrix.shard.name == 'engines'
         run: |
           uv run ruff check .

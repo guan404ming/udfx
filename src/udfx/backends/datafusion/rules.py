@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextvars import ContextVar
-from itertools import count
 
 import pyarrow as pa
 from datafusion import Expr, col, functions, lit
@@ -13,14 +12,14 @@ from udfx.backends.registration import RuleSet
 from udfx.types import Kind, Type
 
 RULES: RuleSet[Expr] = RuleSet()
-LAMBDAS = count()
-LAMBDA_SCOPE: ContextVar[bool] = ContextVar("udfx datafusion lambda", default=False)
+LAMBDA_SCOPE: ContextVar[int] = ContextVar("udfx datafusion lambda", default=0)
 ARRAY_SCOPING: ContextVar[bool] = ContextVar("udfx datafusion array scoping", default=True)
 
 
 def array_lambda(transform: Callable[[Expr], Expr]) -> Expr:
-    name = f"{RESERVED}element {next(LAMBDAS)}"
-    token = LAMBDA_SCOPE.set(True)
+    level = LAMBDA_SCOPE.get()
+    name = f"{RESERVED}element {level}"
+    token = LAMBDA_SCOPE.set(level + 1)
     try:
         body = transform(functions.lambda_var(name))
     finally:

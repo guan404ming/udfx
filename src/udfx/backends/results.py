@@ -32,6 +32,9 @@ class ResultLowering[E]:
         return self.finish(lowered)
 
     def finish(self, lowered: Lowered[E]) -> Lowered[E]:
+        return lowered.map(self.finish_overflow)
+
+    def finish_overflow(self, lowered: Lowered[E]) -> Lowered[E]:
         if lowered.overflow is None:
             return lowered
         if self.raised is None:
@@ -39,10 +42,16 @@ class ResultLowering[E]:
         if self.raised is None:
             return lowered
         self.native_errors = True
+        if lowered.exact is None and lowered.recover_overflow is not None:
+            return Lowered(lowered.recover_overflow(self.raised), guarantees=lowered.guarantees)
         condition = lowered.overflow
         if lowered.exact is not None:
             condition = self.backend.both(condition, lowered.exact)
-        return Lowered(self.backend.select(condition, self.raised, lowered.expr), lowered.exact)
+        return Lowered(
+            self.backend.select(condition, self.raised, lowered.expr),
+            lowered.exact,
+            guarantees=lowered.guarantees,
+        )
 
 
 class FallbackLowering[E](ResultLowering[E]):
@@ -95,6 +104,8 @@ class FallbackLowering[E](ResultLowering[E]):
 
     def finish(self, lowered: Lowered[E]) -> Lowered[E]:
         lowered = super().finish(lowered)
+        if lowered.exact is None and lowered.recover_overflow is not None:
+            return Lowered(lowered.recover_overflow(self.fallback()))
         exact = self.backend.exact(lowered)
         return Lowered(
             lowered.expr

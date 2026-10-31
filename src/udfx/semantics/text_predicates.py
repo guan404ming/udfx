@@ -3,6 +3,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from udfx.ir import Call, Comprehension, Element, If, ListValue, Lit, Node
+from udfx.semantics.bindings import source
 from udfx.semantics.text import string_predicate
 
 ASCII_PREDICATES = {
@@ -60,3 +62,53 @@ def unicode_match(
     if not ascii_free(pattern):
         return found
     return primitives.when(primitives.is_ascii(value), primitives.literal(False), found)
+
+
+def ascii_uppercase_free(node: Node, elements: frozenset[Element] = frozenset()) -> bool:
+    node = source(node)
+    if isinstance(node, Element) and node in elements:
+        return True
+    if isinstance(node, Lit):
+
+        def plain(value: object) -> bool:
+            if value is None:
+                return True
+            if isinstance(value, str):
+                return not any("A" <= character <= "Z" for character in value)
+            return isinstance(value, list | tuple) and all(plain(item) for item in value)
+
+        return plain(node.value)
+    if isinstance(node, If):
+        return ascii_uppercase_free(node.then, elements) and ascii_uppercase_free(
+            node.orelse, elements
+        )
+    if isinstance(node, ListValue):
+        return all(ascii_uppercase_free(item, elements) for item in node.items)
+    if isinstance(node, Comprehension):
+        scope = (
+            elements | {node.element} if ascii_uppercase_free(node.source, elements) else elements
+        )
+        return ascii_uppercase_free(node.value, scope)
+    if not isinstance(node, Call):
+        return False
+    if node.op.name in {".lower", ".casefold"}:
+        return True
+    if node.op.name in {
+        ".split",
+        ".rsplit",
+        ".strip",
+        ".lstrip",
+        ".rstrip",
+        "sorted",
+        "list",
+        "slice",
+        "__getitem__",
+    }:
+        return ascii_uppercase_free(node.arguments[0], elements)
+    if node.op.name in {".join", "__add__"}:
+        return all(ascii_uppercase_free(item, elements) for item in node.arguments)
+    if node.op.name == ".replace":
+        return ascii_uppercase_free(node.arguments[0], elements) and ascii_uppercase_free(
+            node.arguments[2], elements
+        )
+    return False

@@ -8,6 +8,7 @@ from conftest import backend_params
 
 from bench.fingerprint import expression_text, fingerprint
 from udfx.backends.base import Backend
+from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.frontend import trace
 from udfx.ir import Col
@@ -147,3 +148,12 @@ def test_duckdb_fingerprint_normalizes_generated_bindings() -> None:
     first, second = [expression_text(expr, "duckdb") for expr in expressions]
     assert first == second
     assert str(literal) in first
+
+
+def test_datafusion_fingerprint_keeps_stable_binding_names() -> None:
+    backend = DataFusionBackend()
+    literal = 'literal "udfx element 17"'
+    program = trace(lambda text: [part + literal for part in text.split()], {"text": STR})
+    first = fingerprint(backend, program)
+    assert first == fingerprint(backend, program)
+    assert literal in first

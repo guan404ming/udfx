@@ -28,6 +28,7 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.frontend.core.sequences import join_words, word_item
+from udfx.frontend.core.splitting import joined_tokens
 from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import casing, text
 from udfx.semantics.clusters import CLUSTER_JOINERS
@@ -198,6 +199,7 @@ def str_getitem(text: Expression, index: Expression) -> Expression:
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
+@RULES("optional_item", Kind.LIST, Kind.INT)
 def list_getitem(container: Expression, index: Expression) -> Expression:
     following = function("nullif", index, constant(INT64_MAX)) + constant(1)
     position = when(index < constant(0), index, following)
@@ -207,7 +209,7 @@ def list_getitem(container: Expression, index: Expression) -> Expression:
 register_string_predicates(
     RULES, lambda value, pattern: function("regexp_matches", value, constant(pattern))
 )
-RULES.rewrite(".join", Kind.STR, Kind.LIST)(join_words)
+RULES.rewrite(".join", Kind.STR, Kind.LIST)(lambda node: joined_tokens(node) or join_words(node))
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(word_item)
 RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 

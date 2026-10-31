@@ -6,6 +6,7 @@ from datafusion import Expr, functions, lit
 from udfx.backends.datafusion.rules import RULES, array_transform, length
 from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import join, lstrip
+from udfx.frontend.core.json import nonempty_array
 from udfx.frontend.core.splitting import split_length_greater
 from udfx.semantics.facts import separator_is_none, split_non_overlapping, split_partitioned
 from udfx.semantics.splitting import SplitPrimitives, split_limited, split_right
@@ -56,7 +57,9 @@ def split_item(text: Expr, separator: Expr, index: Expr) -> Expr:
     return functions.split_part(text, separator, position)
 
 
-RULES.rewrite("__gt__", Kind.INT, Kind.INT)(split_length_greater)
+RULES.rewrite("__gt__", Kind.INT, Kind.INT)(
+    lambda node: nonempty_array(node) or split_length_greater(node)
+)
 
 
 SPLIT = SplitPrimitives(

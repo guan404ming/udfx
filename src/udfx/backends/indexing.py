@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING, cast
 
+from udfx.backends.guarantees import required
 from udfx.backends.hoisting import reads_input
 from udfx.backends.registration import Lowered
 from udfx.backends.rules import Scope
@@ -178,9 +179,9 @@ def comprehension_result[E](
     if guarded:
         exact = backend.conjunction(exact, every(backend, flags(lambda found: cast("E", found[2]))))
     if node.fault == FALSE:
-        return Lowered(value, exact)
+        return Lowered(value, exact, guarantees=required((source,)))
     safe = every(backend, flags(lambda found: backend.negate(found[3])))
-    return Lowered(value, exact, backend.negate(safe))
+    return Lowered(value, exact, backend.negate(safe), guarantees=required((source,)))
 
 
 def every[E](backend: Backend[E], flags: E) -> E:

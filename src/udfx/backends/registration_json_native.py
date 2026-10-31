@@ -9,25 +9,27 @@ from udfx.semantics.facts import (
     json_default_is_none,
     json_path_indexes,
     json_path_source,
+    json_projection_validity,
+    json_validity,
 )
 from udfx.semantics.json import lower_decoded_strings, lower_valid, native_shape
 from udfx.semantics.json_lowering import (
     JsonPrimitives,
     accepted,
     get,
-    get_result,
     has_type,
     iterable,
     result,
     safe,
 )
+from udfx.semantics.json_projection import get_result
 from udfx.semantics.json_values import SCALARS, result_name
 from udfx.types import STR, Kind
 
 
 def register_native_json(rules: RuleSet, primitives: JsonPrimitives) -> None:
     register_json_items(rules, primitives)
-    rules("json.result.list[str]", Kind.JSON)(
+    rules("json.result.list[str]", Kind.JSON, proves=json_validity)(
         lambda value: Lowered(
             *lower_decoded_strings(
                 primitives.text, value, primitives.strings, primitives.possessive
@@ -52,7 +54,7 @@ def register_native_json(rules: RuleSet, primitives: JsonPrimitives) -> None:
         )
         return Lowered(*lower_valid(text, value, exact))
 
-    rules("json.valid", Kind.STR)(valid)
+    rules("json.valid", Kind.STR, false_exact=True)(valid)
     rules("json.value", Kind.STR, facts=facts)(
         lambda value, validated=False: Lowered(
             safe(primitives, value), None if validated else accepted(primitives, value)
@@ -94,9 +96,30 @@ def register_native_json(rules: RuleSet, primitives: JsonPrimitives) -> None:
         source: Any = None,
         indexes: tuple[int, ...] = (),
     ) -> Lowered:
+        exact = None if validated else accepted(primitives, value)
+        if source is not None and primitives.object_at_path is not None:
+            mapping, native = primitives.object_at_path(source, indexes)
+            if native is not None:
+                exact = native if exact is None else exact & native
+        else:
+            mapping = has_type(primitives, value, "dict")
+        return Lowered(~mapping, exact)
+
+    def project(value: Any, key: Any, default: Any, *, output: Any, **facts: Any) -> Lowered:
+        def consume(finish: Any) -> Any:
+            return get_result(
+                primitives,
+                value,
+                key,
+                default,
+                output,
+                **facts,
+                consume=lambda value, exact: finish(Lowered(value, exact)),
+            )
+
         return Lowered(
-            ~has_type(primitives, value, "dict", source=source, indexes=indexes),
-            None if validated else accepted(primitives, value),
+            *get_result(primitives, value, key, default, output, **facts),
+            prepare=consume if primitives.project_field is not None else None,
         )
 
     get_facts = {**facts, "default_validated": partial(json_argument_validated, index=2)}
@@ -112,9 +135,10 @@ def register_native_json(rules: RuleSet, primitives: JsonPrimitives) -> None:
                 "indexes": json_path_indexes,
             },
             expressions={"source": json_path_source},
+            proves=json_projection_validity if primitives.project_field is not None else None,
         )(
-            lambda value, key, default, output=output, **facts: Lowered(
-                *get_result(primitives, value, key, default, output, **facts)
+            lambda value, key, default, output=output, **facts: project(
+                value, key, default, output=output, **facts
             )
         )
         if primitives.typed_field is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from itertools import count
 from typing import ClassVar, cast
 
@@ -78,7 +79,11 @@ class DataFusionBackend(Backend[Expr]):
     def lower(self, node: Node, elements: Scope[Expr] | None = None) -> Lowered[Expr]:
         lowered = super().lower(node, elements)
         return (
-            Lowered(lowered.expr.cast(dtype(node.type)), lowered.exact, lowered.overflow)
+            lowered.map(
+                lambda value: replace(
+                    value, expr=value.expr.cast(dtype(node.type, string_type=pa.string_view()))
+                )
+            )
             if isinstance(node, Comprehension | Element) and node.type.kind is Kind.LIST
             else lowered
         )

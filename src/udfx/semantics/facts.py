@@ -8,7 +8,7 @@ from udfx.semantics.bindings import source as bound_source
 from udfx.semantics.numbers import FLOAT_INT_MAX
 from udfx.semantics.ranges import LENGTH_OPS, integer_bounds, maximum_length, proven
 from udfx.semantics.text import has_prefix_suffix_overlap
-from udfx.semantics.text_predicates import ASCII_PREDICATES
+from udfx.semantics.text_predicates import ASCII_PREDICATES, ascii_uppercase_free
 from udfx.types import INT64_MAX, INT64_MIN, STR, Kind, Type, fits
 
 
@@ -214,6 +214,21 @@ def json_argument_validated(node: Call, *, index: int = 0) -> bool:
 def json_string_is_native(node: Call) -> bool:
     value = json_paths.source(node.arguments[0])
     return value.type.kind is Kind.STR and proven(apply("json.string_native", value)) is True
+
+
+def json_validity(node: Call) -> Node | None:
+    value = json_paths.source(node.arguments[0])
+    return apply("json.valid", value) if value.type.kind is Kind.STR else None
+
+
+def json_projection_validity(node: Call) -> Node | None:
+    source = json_paths.indexed_path(node)[0]
+    value = json_paths.source(node.arguments[0] if source is None else source)
+    return apply("json.valid", value) if value.type.kind is Kind.STR else None
+
+
+def json_ascii_uppercase_free(node: Call) -> bool:
+    return ascii_uppercase_free(node.arguments[0])
 
 
 def json_argument_type(node: Call) -> str | None:

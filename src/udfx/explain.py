@@ -112,9 +112,9 @@ def explain[E](
             (
                 f"Value: {render(translation.program.value)}",
                 f"Fault: {render(translation.program.fault)}",
-                "Native: shared expression graph; inspect translation.expr with the engine"
+                "Expression: shared expression graph; inspect translation.expr with the engine"
                 if graph
-                else f"Native: {str(translation.expr)!r}",
+                else f"Expression: {str(translation.expr)!r}",
             )
         )
     return "\n".join(lines)
@@ -124,7 +124,14 @@ def execution_lines(details: LoweringDetails | None, *, graph: bool = False) -> 
     if details is None:
         return ["Status: compiled", "Python fallback: unknown (backend supplied no diagnostics)"]
     lines = [
-        f"Status: {'native' if details.exact is None else 'guarded'}",
+        "Status: "
+        + (
+            "guarded"
+            if details.exact is not None
+            else "runtime"
+            if details.runtime_udfs
+            else "native"
+        ),
         f"Python fallback: {'no' if details.exact is None else 'possible'}",
         "Fault handling: "
         + (
@@ -135,6 +142,8 @@ def execution_lines(details: LoweringDetails | None, *, graph: bool = False) -> 
             else "none"
         ),
     ]
+    if details.runtime_udfs:
+        lines.append("Runtime UDFs: " + ", ".join(details.runtime_udfs))
     if details.exact is not None:
         lines.extend(
             [

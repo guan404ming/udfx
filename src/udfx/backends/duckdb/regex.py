@@ -8,14 +8,17 @@ from udfx.backends.registration import register_regex
 from udfx.semantics.regex import RegexPrimitives
 
 
-def findall(text: Expression, pattern: str, group: int) -> Expression:
+def findall(text: Expression, pattern: str, group: int) -> tuple[Expression, None]:
+    found = function("regexp_extract_all", text, constant(pattern), constant(group))
+    if not group:
+        return found, None
     return function(
         "list_transform",
-        function("regexp_extract_all", text, constant(pattern), constant(group)),
+        found,
         duckdb.LambdaExpression(
             "value", duckdb.CoalesceOperator(duckdb.ColumnExpression("value"), constant(""))
         ),
-    )
+    ), None
 
 
 def extract(text: Expression, pattern: str, group: int) -> Expression:
@@ -28,7 +31,7 @@ def extract(text: Expression, pattern: str, group: int) -> Expression:
 
 def first(text: Expression, pattern: str, group: int, nonempty: bool) -> Expression:
     return (
-        function("list_extract", findall(text, pattern, group), constant(1))
+        function("list_extract", findall(text, pattern, group)[0], constant(1))
         if nonempty
         else extract(text, pattern, group)
     )

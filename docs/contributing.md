@@ -14,6 +14,12 @@ uv run pytest -m corpus
 Spark needs Java 21. Use `UDFX_TESTS=full uv run pytest` for all engine configurations.
 The default test run uses the fast tier.
 
+After editing Spark runtime Java sources, run
+`uv run python tools/build_spark_runtime.py` with JDK 21.
+Commit the sources, bundled JAR, and runtime metadata together.
+CI checks them with `uv run python tools/build_spark_runtime.py --check`.
+Package installation does not require a Java compiler.
+
 ## Preview the docs
 
 ```sh

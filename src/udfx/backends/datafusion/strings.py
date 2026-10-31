@@ -25,7 +25,7 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.frontend.core.sequences import join_words, word_item
-from udfx.frontend.core.splitting import join_filtered_words, split_item
+from udfx.frontend.core.splitting import join_filtered_words, joined_tokens, split_item
 from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import text
 from udfx.semantics.facts import pattern_is_empty
@@ -206,6 +206,7 @@ def str_getitem(text: Expr, index: Expr) -> Expr:
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
+@RULES("optional_item", Kind.LIST, Kind.INT)
 def list_getitem(container: Expr, index: Expr) -> Expr:
     position = functions.when(index < lit(0), index).otherwise(
         functions.nullif(index, lit(INT64_MAX)) + lit(1)
@@ -215,7 +216,7 @@ def list_getitem(container: Expr, index: Expr) -> Expr:
 
 register_string_predicates(RULES, lambda value, pattern: functions.regexp_like(value, lit(pattern)))
 RULES.rewrite(".join", Kind.STR, Kind.LIST)(
-    lambda node: join_filtered_words(node) or join_words(node)
+    lambda node: joined_tokens(node) or join_filtered_words(node) or join_words(node)
 )
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(lambda node: split_item(node) or word_item(node))
 RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)

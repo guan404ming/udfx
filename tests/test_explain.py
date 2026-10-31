@@ -31,7 +31,7 @@ def test_supported_report() -> None:
     assert translation.program is not None
     assert f"Value: {render(translation.program.value)}" in report
     assert f"Fault: {render(translation.program.fault)}" in report
-    assert f"Native: {str(translation.expr)!r}" in report
+    assert f"Expression: {str(translation.expr)!r}" in report
 
 
 def test_unsupported_report() -> None:
@@ -80,7 +80,7 @@ def test_report_preserves_shared_expressions(kind: Type) -> None:
     report = explain(squares, {"value": kind})
     assert "Value: let %0 = __mul__(col value, col value)" in report
     assert "%39 = __mul__(%38, %38); %39" in report
-    assert "Native: shared expression graph" in report
+    assert "Expression: shared expression graph" in report
     assert len(report) < 5000
 
 

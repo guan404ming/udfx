@@ -28,21 +28,30 @@ def total(node: Comprehension) -> bool:
     return node.fault == FALSE and deterministic(node.value)
 
 
-def compose(node: Comprehension, linear: Callable[[Call], bool]) -> Comprehension:
+def compose(
+    node: Comprehension,
+    linear: Callable[[Call], bool],
+    rewrite: Callable[[Call], Node | None],
+) -> Comprehension:
     while isinstance(source := node.source, Comprehension):
         if (
             node.condition != TRUE
             or source.condition != TRUE
             or not total(node)
             or not total(source)
-            or (source.value != source.element and uses(node.value, node.element, linear) != 1)
         ):
             break
+        value = substitute(node.value, node.element, source.value)
+        if source.value != source.element and uses(node.value, node.element, linear) != 1:
+            rewritten = rewrite(value) if isinstance(value, Call) else None
+            if rewritten is None or rewritten == value:
+                break
+            value = rewritten
         node = replace(
             node,
             source=source.source,
             element=source.element,
-            value=substitute(node.value, node.element, source.value),
+            value=value,
             requires_native=node.requires_native or source.requires_native,
         )
     return node

@@ -3,18 +3,22 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from udfx.backends.guarantees import Guarantee
 from udfx.backends.rules import Lowered, Rule, RuleSet
+from udfx.ir import FALSE
 from udfx.semantics.facts import (
     argument_length,
     argument_maximum,
     ascii_predicate_result,
     integer_is_valid,
+    json_validity,
 )
 from udfx.semantics.json import lower_string, patterns
 from udfx.semantics.literals import (
     TextPrimitives,
     float_parses,
     int_parses,
+    integer_candidates,
     parse_float,
     parse_int,
     parse_saturated_int,
@@ -38,8 +42,13 @@ def register_json[E](
     encode: Callable[[E], E] | None = None,
 ) -> None:
     string, array, scalar = patterns(possessive)
-    rules("json.string_native", Kind.STR)(lambda value: primitives.matches(value, rf"\A{scalar}\z"))
-    rules("json.array_native", Kind.STR)(lambda value: primitives.matches(value, rf"\A{array}\z"))
+    for name, pattern in (("json.string_native", scalar), ("json.array_native", array)):
+        rules(name, Kind.STR, facts={"validity": json_validity})(
+            lambda value, validity, pattern=pattern: Lowered(
+                primitives.matches(value, rf"\A{pattern}\z"),
+                guarantees=() if validity is None else (Guarantee(validity, FALSE),),
+            )
+        )
     rules("json.tokens", Kind.STR)(
         lambda value: Lowered(findall(value, string), primitives.matches(value, rf"\A{array}\z"))
     )
@@ -149,7 +158,15 @@ def register_text_conversions[E](rules: RuleSet[E], text: TextPrimitives) -> Non
 
     def integer(value: E, maximum_length: int | None = None, valid: bool = False) -> Lowered[E]:
         parsed, exact = parse_int(text, value, maximum_length, valid)
-        return Lowered(parsed, overflow=None if exact is None else ~exact)
+        return Lowered(
+            parsed,
+            overflow=None if exact is None else ~exact,
+            recover_overflow=(
+                (lambda failure: text.coalesce(*integer_candidates(text, value), failure))
+                if valid and exact is not None
+                else None
+            ),
+        )
 
     rules("int", Kind.STR, facts={"maximum_length": argument_length, "valid": integer_is_valid})(
         integer

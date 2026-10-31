@@ -21,13 +21,15 @@ print(udfx.explain(float_text, {"value": FLOAT}))
 
 | Field | Meaning |
 | --- | --- |
-| `Status: native` | No Python fallback UDF is needed |
+| `Status: native` | Engine expressions need no Python fallback or runtime UDF |
+| `Status: runtime` | Compiled runtime UDFs run without Python fallback |
 | `Status: guarded` | Some rows may need Python fallback |
 | `Status: unsupported` | Compilation failed; a reason follows |
 | `Native guard` | False or null sends a row to Python |
 | `Reason` | Why a fallback path exists |
 | `Fault handling` | Native errors, Python fallback, or no fault path |
 | `Compile time` | Compilation time, including engine setup and probes |
+| `Runtime UDFs` | Runtime calls emitted during lowering; not measured invocations |
 
 ## Limits
 

@@ -8,6 +8,7 @@ from conftest import backend_params
 from udfx.backends.lowering_context import bindings_enabled
 from udfx.backends.program_lowering import lower_program
 from udfx.backends.spark import backend as spark
+from udfx.backends.spark import json as spark_json
 from udfx.frontend import trace
 from udfx.testing import check_function
 from udfx.types import STR
@@ -70,6 +71,7 @@ def native_reuse(text: str) -> int:
         (comprehension_reuse, True),
         (unrelated_comprehension, False),
         (native_reuse, True),
+        (native_reuse, False),
     ],
 )
 def test_guarded_bindings_keep_only_numeric_reuse(
@@ -78,6 +80,8 @@ def test_guarded_bindings_keep_only_numeric_reuse(
     unbound: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if function is native_reuse and unbound:
+        monkeypatch.setattr(spark_json, "call", lambda *arguments: None)
     original = lower_program
     passes: list[bool] = []
 

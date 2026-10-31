@@ -3,6 +3,12 @@ from udfx.semantics.assumptions import CONDITIONS
 from udfx.semantics.bindings import source as bound_source
 
 
+def initial_object_pattern(indexes: tuple[int, ...]) -> str | None:
+    if any(indexes):
+        return None
+    return r"\A[ \t\r\n]*" + r"\[[ \t\r\n]*" * len(indexes) + r"\{"
+
+
 def source(value: Node) -> Node:
     value = bound_source(value)
     while isinstance(value, Call) and value.op.name in {"json.value", "json.text"}:

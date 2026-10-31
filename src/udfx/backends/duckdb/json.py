@@ -5,9 +5,10 @@ from udfx.backends.duckdb.backend import DuckDBBackend
 from udfx.backends.duckdb.conversions import TEXT
 from udfx.backends.duckdb.rules import RULES, column, constant, function, length, when
 from udfx.backends.registration_json import register_json_values
-from udfx.frontend.core.json import serialized_ascii_lists
+from udfx.frontend.core.json import nonempty_array, serialized_ascii_lists
 from udfx.semantics.json_lowering import JsonPrimitives
-from udfx.types import Type
+from udfx.semantics.json_validation import validate
+from udfx.types import Kind, Type
 
 
 def replace(value: Expression, pattern: str, replacement: str) -> Expression:
@@ -52,11 +53,14 @@ def index(value: Expression, position: Expression) -> Expression:
     return function("json_extract", value, position.cast("BIGINT")).cast("VARCHAR")
 
 
-def object_at_path(value: Expression, indexes: tuple[int, ...]) -> Expression:
+def object_at_path(
+    value: Expression, indexes: tuple[int, ...]
+) -> tuple[Expression, Expression | None]:
     path = constant("".join(f"/{position}" for position in indexes))
-    return duckdb.CoalesceOperator(
+    mapping = duckdb.CoalesceOperator(
         function("json_type", value, path) == constant("OBJECT"), constant(False)
     )
+    return mapping, None
 
 
 def unique(value: Expression) -> Expression:
@@ -78,7 +82,7 @@ NATIVE = JsonPrimitives(
     text=TEXT,
     byte_length=lambda value: function("strlen", value),
     replace=replace,
-    valid=lambda value: function("json_valid", value),
+    valid=lambda value: validate(NATIVE, value, function("json_valid", value)),
     sanitize=lambda value: when(function("json_valid", value), value, constant("null")),
     field=field,
     index=index,
@@ -97,3 +101,4 @@ NATIVE = JsonPrimitives(
 register_json_values(
     RULES, DuckDBBackend().literal, TEXT, NATIVE, serialize_strings=serialized_ascii_lists
 )
+RULES.rewrite("__gt__", Kind.INT, Kind.INT)(nonempty_array)

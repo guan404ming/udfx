@@ -11,6 +11,7 @@ from udfx.ops.strings import out_of_range, slice_of
 from udfx.semantics.lists import (
     SET_OPERATIONS,
     SET_PREDICATES,
+    optional_item,
     range_list,
     set_list,
     set_operation,
@@ -29,6 +30,7 @@ register(Op("frequency_order", (list_of(STR), INT), list_of(STR), frequency_orde
 
 for item in (STR, INT, FLOAT, BOOL):
     sequence = list_of(item)
+    register(Op("optional_item", (list_of(item.or_none()), INT), item.or_none(), optional_item))
     register(Op("list", (sequence,), sequence, list))
     register(Op("__add__", (sequence, sequence), sequence, operator.add))
     register(Op("__mul__", (sequence, INT), sequence, operator.mul))

@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
+from udfx.backends.guarantees import Guarantee
 from udfx.frontend.core.comprehensions import cardinality
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.membership import comparison_membership, initial_lowercase_membership
 from udfx.frontend.core.sequences import literal_string_item
 from udfx.frontend.core.text import combined_search, joined_split, lowercase_contains
-from udfx.ir import FALSE, TRUE, Call, Node
+from udfx.ir import FALSE, TRUE, Call, Guarded, If, Node
 from udfx.ops.registry import OpKey
 from udfx.semantics.assumptions import assuming
 from udfx.semantics.ranges import proven
@@ -22,6 +23,21 @@ class Lowered[E]:
     expr: E
     exact: E | None = None
     overflow: E | None = None
+    recover_overflow: Callable[[E], E] | None = None
+    prepare: Callable[[Callable[[Lowered[E]], E]], E] | None = None
+    guarantees: tuple[Guarantee, ...] = ()
+
+    def consume(self, finish: Callable[[Lowered[E]], E]) -> E:
+        return finish(self) if self.prepare is None else self.prepare(finish)
+
+    def map(self, transform: Callable[[Lowered[E]], Lowered[E]]) -> Lowered[E]:
+        if self.prepare is None:
+            return transform(self)
+        value = transform(replace(self, prepare=None))
+        return replace(
+            value,
+            prepare=lambda finish: self.consume(lambda part: transform(part).consume(finish)),
+        )
 
 
 type Scope[E] = Mapping[Node, E | Lowered[E]]
@@ -59,6 +75,19 @@ def fold_predicate(node: Node, rewrite: Rewrite) -> Node:
     return builders[node.op.name](*arguments)
 
 
+def fold_value(node: Node, rewrite: Rewrite) -> Node:
+    while isinstance(node, If | Guarded):
+        predicate = node.condition if isinstance(node, If) else node.exact
+        known = fold_predicate(predicate, rewrite)
+        if isinstance(node, If) and known in (TRUE, FALSE):
+            node = node.then if known == TRUE else node.orelse
+        elif isinstance(node, Guarded) and known == TRUE:
+            node = node.value
+        else:
+            break
+    return node
+
+
 @dataclass(frozen=True)
 class RuleOptions:
     literals: tuple[int, ...] = ()
@@ -66,6 +95,8 @@ class RuleOptions:
     guards: Mapping[int, Callable[[Any], Any]] = field(default_factory=dict)
     linear: bool = False
     expressions: Mapping[str, Callable[[Call], Node | None]] = field(default_factory=dict)
+    proves: Callable[[Call], Node | None] | None = None
+    false_exact: bool = False
 
 
 class RuleSet[E]:
@@ -109,6 +140,8 @@ class RuleSet[E]:
         guards: Mapping[int, Callable[[Any], Any]] | None = None,
         linear: bool = False,
         expressions: Mapping[str, Callable[[Call], Node | None]] | None = None,
+        proves: Callable[[Call], Node | None] | None = None,
+        false_exact: bool = False,
     ) -> Callable[[Callable[P, RuleResult[E]]], Callable[P, RuleResult[E]]]:
         key = OpKey(name, kinds)
 
@@ -117,7 +150,7 @@ class RuleSet[E]:
                 raise ValueError(f"duplicate rule {key}")
             self._rules[key] = rule
             self._options[key] = RuleOptions(
-                literals, facts or {}, guards or {}, linear, expressions or {}
+                literals, facts or {}, guards or {}, linear, expressions or {}, proves, false_exact
             )
             return rule
 

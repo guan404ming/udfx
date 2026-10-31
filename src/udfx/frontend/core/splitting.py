@@ -1,6 +1,6 @@
 import re
 
-from udfx.ir import FALSE, Call, Comprehension, Lit, Node, lit
+from udfx.ir import FALSE, Call, Col, Comprehension, Element, If, Lit, Node, lit
 from udfx.ops import apply
 from udfx.semantics.ranges import proven
 
@@ -24,6 +24,60 @@ def split_item(node: Call) -> Node | None:
         return None
     value, separator = source
     return apply("split_item", value, lit(separator), node.arguments[1])
+
+
+def separated_values(values: Node, separator: Node) -> bool:
+    if isinstance(values, Call):
+        if values.op.name in {"sorted", "list"}:
+            return separated_values(values.arguments[0], separator)
+        if values.op.name == ".split" and len(values.arguments) == 2:
+            return values.arguments[1] == separator
+    if isinstance(values, Comprehension) and values.value == values.element:
+        return separated_values(values.source, separator)
+    return False
+
+
+def joined_tokens(node: Call) -> Node | None:
+    separator, ordered = node.arguments
+    if (
+        not isinstance(separator, Lit)
+        or not isinstance(separator.value, str)
+        or len(separator.value) != 1
+        or not isinstance(ordered, Call)
+        or ordered.op.name != "sorted"
+    ):
+        return None
+    split = ordered.arguments[0]
+    if (
+        not isinstance(split, Call)
+        or split.op.name != ".split"
+        or len(split.arguments) != 2
+        or split.arguments[1] != separator
+    ):
+        return None
+    joined = split.arguments[0]
+    if (
+        not isinstance(joined, Call)
+        or joined.op.name != ".join"
+        or joined.arguments[0] != separator
+        or not separated_values(joined.arguments[1], separator)
+    ):
+        return None
+    return apply(".join", separator, apply("sorted", joined.arguments[1]))
+
+
+def single_sorted_token(node: Call) -> Node | None:
+    separator, ordered = node.arguments
+    if not isinstance(ordered, Call) or ordered.op.name != "sorted":
+        return None
+    split = literal_split(ordered.arguments[0])
+    if split is None or separator != lit(split[1]):
+        return None
+    value, text = split
+    if not isinstance(value, Col | Element):
+        return None
+    present = apply("__contains__", value, lit(text))
+    return If(present, node, value, node.type) if proven(present) is None else None
 
 
 def split_length_greater(node: Call) -> Node | None:

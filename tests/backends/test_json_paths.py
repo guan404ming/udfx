@@ -15,31 +15,38 @@ from udfx.types import INT, JSON, STR
 @pytest.mark.parametrize(
     "backend", [param for param in backend_params() if param.id in {"duckdb", "spark"}]
 )
-def test_json_indexed_object_check_skips_serialization(backend: Backend[Any]) -> None:
-    value = apply("json.item", Col("text", JSON), lit(0))
+@pytest.mark.parametrize("indexes", [(0,), (0, 0), (0, 1)])
+def test_json_indexed_object_check_skips_serialization(
+    backend: Backend[Any], indexes: tuple[int, ...]
+) -> None:
+    value = Col("text", JSON)
+    for index in indexes:
+        value = apply("json.item", value, lit(index))
     predicate = apply("json.get.AttributeError", value, lit("value"), lit("null", JSON))
     expression = str(backend.lower(predicate).expr).lower()
     if backend.name == "spark":
-        assert "struct<>" in expression
+        assert ("struct<>" in expression) is any(indexes)
+        assert ("try_parse_json" in expression) is any(indexes)
         assert "map<" not in expression
-        assert "$[0]" in expression
         assert "get_json_object" not in expression
     else:
         assert "json_type" in expression
-        assert "/0" in expression
+        assert "".join(f"/{index}" for index in indexes) in expression
         assert "json_extract" not in expression
 
 
 @pytest.mark.parametrize(
     "backend", [param for param in backend_params() if param.id in {"duckdb", "spark"}]
 )
-@pytest.mark.parametrize("nested", [False, True])
-def test_json_indexed_projection_preserves_faults(backend: Backend[Any], nested: bool) -> None:
+@pytest.mark.parametrize("position", [None, 0, 1])
+def test_json_indexed_projection_preserves_faults(
+    backend: Backend[Any], position: int | None
+) -> None:
     def selected(text: str, key: str | None, default: str | None) -> object:
         try:
             value = json.loads(text)[0]
-            if nested:
-                value = value[1]
+            if position is not None:
+                value = value[position]
             return value.get(key, default)
         except (ValueError, TypeError, KeyError, IndexError, AttributeError):
             return "invalid"
@@ -47,9 +54,9 @@ def test_json_indexed_projection_preserves_faults(backend: Backend[Any], nested:
     schema = {"text": STR, "key": STR.or_none(), "default": STR.or_none()}
     program = trace(selected, schema, result=STR.or_none())
     expression = str(backend.lower_program(program).expr)
-    prefix = "$[0][1][" if nested else "$[0]["
+    prefix = f"$[0][{position}]" if position is not None else "$[0]"
     if backend.name == "duckdb":
-        prefix = "/0/1" if nested else "/0"
+        prefix = f"/0/{position}" if position is not None else "/0"
     assert prefix in expression
     documents = [
         "{}",
@@ -66,7 +73,13 @@ def test_json_indexed_projection_preserves_faults(backend: Backend[Any], nested:
         "1",
     ]
     rows = [
-        (f"[[null,{document}]]" if nested else f"[{document}]", key, default)
+        (
+            f"[[{'null,' if position == 1 else ''}{document}]]"
+            if position is not None
+            else f"[{document}]",
+            key,
+            default,
+        )
         for document in documents
         for key in ("value", "", "~a/b", "a.b", "x[y]", "a'b", "*", "中文", None)
         for default in (None, "missing")
@@ -75,7 +88,11 @@ def test_json_indexed_projection_preserves_faults(backend: Backend[Any], nested:
     translation = compile(selected, schema, backend, result=STR.or_none())
     assert translation.ok, translation.unsupported
     assert backend.evaluate([translation.expr], schema, rows) == [[selected(*row) for row in rows]]
-    wrong = '[[null,{"value":1}]]' if nested else '[{"value":1}]'
+    wrong = (
+        f'[[{"null," if position == 1 else ""}{{"value":1}}]]'
+        if position is not None
+        else '[{"value":1}]'
+    )
     with pytest.raises(OverflowError, match="does not fit"):
         backend.evaluate([translation.expr], schema, [(wrong, "value", None)])
 
@@ -113,3 +130,34 @@ def test_json_literal_index_keeps_python_bounds(backend: Backend[Any], position:
     assert translation.ok, translation.unsupported
     rows = [(text,) for text in ('[{"value":"found"}]', "[]", "{}", "null")]
     assert backend.evaluate([translation.expr], schema, rows) == [[selected(*row) for row in rows]]
+
+
+@pytest.mark.parametrize(
+    "backend", [param for param in backend_params() if param.id in {"spark", "spark-ansi-off"}]
+)
+@pytest.mark.parametrize("indexed", [False, True])
+def test_json_variant_keys_stay_native(backend: Backend[Any], indexed: bool) -> None:
+    def selected(text: str, key: str | None, default: str | None) -> object:
+        value = json.loads(text)
+        if indexed:
+            value = value[0]
+        return value.get(key, default)
+
+    schema = {"text": STR, "key": STR.or_none(), "default": STR.or_none()}
+    program = trace(selected, schema, result=STR.or_none())
+    lowered = backend.lower_program(program)
+    assert lowered.exact is not None
+    keys = ("", "a\\b", "*", "\x00", "\t", "\n", 'a"b', "a'b", "a'\"b", "x[y]", "a.b", "漢")
+    rows = [
+        (
+            json.dumps([document] if indexed else document),
+            key,
+            default,
+        )
+        for key in (*keys, None)
+        for document in ({name: "found" for name in keys}, {}, {name: None for name in keys})
+        for default in (None, "missing")
+    ]
+    actual, native = backend.evaluate([lowered.expr, lowered.exact], schema, rows)
+    assert actual == program.run(rows)
+    assert native == [True] * len(rows)

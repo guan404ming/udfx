@@ -10,14 +10,14 @@ from pathlib import Path
 
 from coverage import Coverage
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def source_digest() -> str:
     digest = hashlib.sha256()
     for root in ("src", "bench", "workloads"):
         for path in sorted(Path(root).rglob("*")):
-            if path.suffix in {".py", ".json", ".parquet"}:
+            if path.suffix in {".py", ".json", ".parquet", ".java", ".jar"}:
                 digest.update(str(path).encode())
                 digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -73,6 +73,6 @@ def write(path: Path, artifact: dict) -> None:
 
 def read(path: Path) -> dict:
     artifact = json.loads(path.read_text())
-    if artifact.get("schema_version") != SCHEMA_VERSION:
+    if artifact.get("schema_version") not in {1, SCHEMA_VERSION}:
         raise ValueError(f"Unsupported result schema: {artifact.get('schema_version')}")
     return artifact

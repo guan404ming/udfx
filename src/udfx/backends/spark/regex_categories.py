@@ -4,7 +4,7 @@ from typing import cast
 from pyspark.sql import functions
 
 from udfx.backends.spark.backend import SparkBackend
-from udfx.semantics.regex_categories import corrected_category
+from udfx.semantics.regex_categories import ascii_characters, corrected_category
 from udfx.semantics.text import code_points
 from udfx.types import STR
 
@@ -27,6 +27,6 @@ def native_category(pattern: str) -> str:
 def category(name: str) -> str:
     positive = name.replace("_NOT_", "_")
     if positive != name:
-        return "[^" + category(positive) + "]"
+        return "[[" + ascii_characters(name, printable=True) + "][^" + category(positive) + "]]"
     pattern = PROPERTIES[name]
     return corrected_category(name, pattern, native_category(pattern))

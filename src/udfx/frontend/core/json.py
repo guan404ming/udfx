@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from udfx.frontend.core.comprehensions import permutation_source
+from udfx.frontend.core.comprehensions import cardinality, permutation_source
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, Lit, Node, lit
 from udfx.ops import Fault, apply
 from udfx.semantics.facts import json_argument_type, json_argument_validated
@@ -15,6 +15,25 @@ def known_type(node: Call) -> Node | None:
     if kind is not None and isinstance(name, Lit) and json_argument_validated(node):
         return lit(kind == name.value)
     return None
+
+
+def nonempty_array(node: Call) -> Node | None:
+    length, limit = node.arguments
+    if isinstance(length, Call) and length.op.name == "len":
+        length = cardinality(length) or length
+    if isinstance(length, Guarded):
+        result = nonempty_array(Call(node.op, (length.value, limit)))
+        return None if result is None else Guarded(result, length.exact)
+    if (
+        limit != lit(0)
+        or not isinstance(length, Call)
+        or length.op.name != "json.length"
+        or json_argument_type(length) != "list"
+    ):
+        return None
+    value = apply("json.text", length.arguments[0])
+    empty = apply("re.contains", value, lit(r"\A[ \t\r\n]*\[[ \t\r\n]*\]"), lit(0))
+    return apply("not", empty)
 
 
 def typed_get(node: Call) -> Node | None:

@@ -2,7 +2,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from udfx.semantics.json_limits import within_limits
 from udfx.semantics.literals import TextPrimitives
 from udfx.types import BOOL, FLOAT, INT, STR, Type
 
@@ -27,7 +26,8 @@ TYPES = {
 
 
 def possessive_string(pattern: str) -> str:
-    return pattern.replace(r'[^"\\\x00-\x1f]', r'[^"\\\x00-\x1f]++').replace('*"', '*+"')
+    character = r'[^"\\\x00-\x1f]'
+    return pattern.replace(character, f"(?>{character}+)").replace('*"', '*+"')
 
 
 @dataclass(frozen=True)
@@ -48,40 +48,21 @@ class JsonPrimitives:
     possessive: bool = False
     field_or_null: Callable[[Any, Any], Any] | None = None
     typed_field: Callable[[Any, Any, Type, tuple[int, ...]], tuple[Any, Any, Any]] | None = None
-    object_at_path: Callable[[Any, tuple[int, ...]], Any] | None = None
+    object_at_path: Callable[[Any, tuple[int, ...]], tuple[Any, Any | None]] | None = None
+    project_field: (
+        Callable[[Any, Any, Type, tuple[int, ...], Callable[[Any, Any, Any], Any]], Any] | None
+    ) = None
 
 
 def accepted(primitives: JsonPrimitives, value: Any, validated: bool = False) -> Any:
-    if validated:
-        return primitives.text.literal(True)
-    text = primitives.text
-    structure = primitives.replace(value, STRING, '""')
-    trailing = r",[ \t\r\n]*[\]}]"
-    exact = text.when(
-        text.matches(value, trailing), ~text.matches(structure, trailing), text.literal(True)
-    )
-    normalized = primitives.replace(structure, r"(?:\A|[\[,: \t\r\n])(?:NaN|-?Infinity)", "")
-    exact = exact & text.when(
-        text.matches(value, NONFINITE), ~text.matches(normalized, NONFINITE), text.literal(True)
-    )
-    exact = exact & within_limits(primitives, value, structure)
-    return text.coalesce(primitives.valid(value) & exact, text.literal(False))
+    return primitives.text.literal(True) if validated else primitives.valid(value)
 
 
 def safe(primitives: JsonPrimitives, value: Any, validated: bool = False) -> Any:
     return value if validated else primitives.sanitize(value)
 
 
-def has_type(
-    primitives: JsonPrimitives,
-    value: Any,
-    name: str,
-    *,
-    source: Any = None,
-    indexes: tuple[int, ...] = (),
-) -> Any:
-    if name == "dict" and source is not None and primitives.object_at_path is not None:
-        return primitives.object_at_path(source, indexes)
+def has_type(primitives: JsonPrimitives, value: Any, name: str) -> Any:
     text = primitives.text
     if (pattern := TYPES.get(name)) is None:
         return text.literal(False)
@@ -136,59 +117,6 @@ def result(
         exact = exact | missing
         output = text.when(missing, text.literal(None), output)
     return output, accepted(primitives, value, validated) & exact
-
-
-def get_result(
-    primitives: JsonPrimitives,
-    value: Any,
-    key: Any,
-    default: Any,
-    type: Type,
-    *,
-    validated: bool = False,
-    default_validated: bool = False,
-    default_none: bool = False,
-    source: Any = None,
-    indexes: tuple[int, ...] = (),
-) -> tuple[Any, Any]:
-    if primitives.typed_field is None:
-        selected, exact = get(
-            primitives,
-            value,
-            key,
-            default,
-            validated=validated,
-            default_validated=default_validated,
-            default_none=default_none,
-        )
-        output, typed = result(primitives, selected, type, True)
-        return output, exact & typed
-    text = primitives.text
-    document = safe(primitives, value, validated)
-    output, present, exact = primitives.typed_field(
-        document if source is None else source, key, type, indexes
-    )
-    exact = exact & accepted(primitives, value, validated) & primitives.unique(document)
-    exact = exact & accepted(primitives, default, default_validated)
-    if not (default_none and type.nullable):
-        fallback, typed = result(
-            primitives, safe(primitives, default, default_validated), type, True
-        )
-        output = text.when(present, output, fallback)
-        exact = exact & text.when(present, text.literal(True), typed)
-    return output, exact
-
-
-def complete_integer_document(
-    text: TextPrimitives, replace: Callable[[Any, str, str], Any], value: Any, serialized: Any
-) -> Any:
-    original = replace(value, STRING, '""')
-    output = replace(serialized, STRING, '""')
-    original = replace(original, r"[ \t\r\n]", "")
-    output = replace(output, r"[ \t\r\n]", "")
-    return ~text.matches(original, r"[0-9][.eE]|\\u[dD][89a-fA-F]") & (
-        text.char_length(original) == text.char_length(output)
-    )
 
 
 def item(

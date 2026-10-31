@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import suppress
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+from udfx.backends.guarantees import redundant_guard, required
+from udfx.backends.guarantees import selected as selected_guarantees
 from udfx.backends.hoisting import exact_free, hoist, invariant, repeated_condition
 from udfx.backends.indexing import (
     Parts,
@@ -16,7 +19,7 @@ from udfx.backends.indexing import (
 from udfx.backends.lowering_context import assuming_exact, bindings_enabled
 from udfx.backends.reductions import lower_reduction
 from udfx.backends.registration import Lowered, RuleResult
-from udfx.backends.rules import Scope, fold_predicate
+from udfx.backends.rules import Scope, fold_predicate, fold_value
 from udfx.backends.selection import lower_cases
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
@@ -49,6 +52,10 @@ def lower_if[E](
         then = lower(node.then, elements)
     with assuming(predicate, False), assuming_exact(predicate):
         orelse = lower(node.orelse, elements)
+    if condition.overflow is None and redundant_guard(
+        backend, predicate, then, node.orelse, elements
+    ):
+        condition = replace(condition, exact=None, guarantees=())
     expr = backend.select(condition.expr, then.expr, orelse.expr)
     exact = backend.exact(condition)
     if then.exact is not None or orelse.exact is not None:
@@ -65,10 +72,37 @@ def lower_if[E](
             then.overflow if then.overflow is not None else backend.literal(FALSE),
             orelse.overflow if orelse.overflow is not None else backend.literal(FALSE),
         )
-    return Lowered(expr, exact, overflow)
+
+    def prepare(finish: Callable[[Lowered[E]], E]) -> E:
+        left, right = then.consume(finish), orelse.consume(finish)
+        if isinstance(node.then, If) and isinstance(node.orelse, Lit):
+            inverted = backend.select(condition.expr, backend.literal(FALSE), backend.literal(TRUE))
+            selected = backend.select(inverted, right, left)
+        else:
+            selected = backend.select(condition.expr, left, right)
+        guard = backend.exact(condition)
+        if guard is None:
+            return selected
+        pending = finish(Lowered(expr, backend.literal(FALSE)))
+        return backend.select(guard, selected, pending)
+
+    return Lowered(
+        expr,
+        exact,
+        overflow,
+        prepare=prepare if then.prepare is not None or orelse.prepare is not None else None,
+        guarantees=required((condition,)) + selected_guarantees(node, then, orelse),
+    )
 
 
 def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowered[E]:
+    arguments = tuple(
+        fold_value(argument, backend.rules.rewrite_call) for argument in node.arguments
+    )
+    if any(
+        current is not previous for current, previous in zip(arguments, node.arguments, strict=True)
+    ):
+        node = Call(node.op, arguments)
     reduced = lower_reduction(backend, node, elements)
     if reduced is not None:
         return reduced
@@ -83,7 +117,7 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowere
     if rule is None:
         raise Unsupported(f"{backend.name} has no rule for {node.op.key}")
     options = backend.rules.options(node.op.key)
-    arguments = [
+    lowered_arguments = [
         Lowered(cast("Any", argument.value))
         if index in options.literals and isinstance(argument, Lit)
         else backend.lower(argument, elements)
@@ -94,25 +128,33 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowere
         for name, expression in options.expressions.items()
     }
     result: RuleResult[E] = rule(
-        *(argument.expr for argument in arguments),
+        *(argument.expr for argument in lowered_arguments),
         **{name: fact(node) for name, fact in options.facts.items()},
         **{name: None if value is None else value.expr for name, value in expressions.items()},
     )
     lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
     guards = [
-        guard(argument.value if isinstance(argument, Lit) else arguments[index].expr)
+        guard(argument.value if isinstance(argument, Lit) else lowered_arguments[index].expr)
         for index, guard in options.guards.items()
         for argument in (node.arguments[index],)
     ]
-    return Lowered(
-        lowered.expr,
-        backend.conjunction(
-            *(backend.exact(argument) for argument in arguments),
-            *(backend.exact(value) for value in expressions.values() if value is not None),
-            lowered.exact,
-            *guards,
-        ),
-        lowered.overflow,
+    exact = backend.conjunction(
+        *(backend.exact(argument) for argument in lowered_arguments),
+        *(backend.exact(value) for value in expressions.values() if value is not None),
+        *guards,
+    )
+    guarantees = required(
+        (*lowered_arguments, *(value for value in expressions.values() if value is not None)),
+        None if options.proves is None else options.proves(node),
+    )
+    return lowered.map(
+        lambda value: Lowered(
+            value.expr,
+            backend.conjunction(exact, value.exact),
+            value.overflow,
+            value.recover_overflow,
+            guarantees=value.guarantees + guarantees,
+        )
     )
 
 

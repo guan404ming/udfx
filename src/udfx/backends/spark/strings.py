@@ -17,6 +17,7 @@ from udfx.backends.spark.backend import SparkBackend
 from udfx.backends.spark.casing import exact_case, exact_title
 from udfx.backends.spark.conversions import TEXT as TRANSLATION
 from udfx.backends.spark.rules import ASCII, INT32_MAX, RULES, when
+from udfx.frontend.core.splitting import joined_tokens, single_sorted_token
 from udfx.frontend.core.text import folded_case_chain
 from udfx.ir import Col
 from udfx.semantics import text
@@ -35,7 +36,7 @@ from udfx.semantics.text import (
     case_guard,
     whitespace,
 )
-from udfx.semantics.text_predicates import unicode_match
+from udfx.semantics.text_predicates import ascii_free
 from udfx.types import STR, Kind
 
 POINT = "point"
@@ -54,15 +55,14 @@ def case_drift(method: str) -> CaseDrift:
     return text.case_drift(method, partial(native_recase, method), engine)
 
 
-def contains_class(value: Column, pattern: str) -> Column:
-    return unicode_match(ASCII, Column.rlike, value, pattern)
-
-
 def recase(value: Column, method: str) -> RuleResult[Column]:
     if method == "title":
         return exact_title(value, CASE)
     expr = case_expression(CASE, value, method)
-    exact = case_guard(case_drift(method), partial(contains_class, value), value.contains(SIGMA))
+    found = case_drift(method)
+    exact = case_guard(found, value.rlike, value.contains(SIGMA))
+    if exact is not None and (found.alone is None or ascii_free(found.alone)):
+        exact = ASCII.is_ascii(value) | exact
     if method in {"lower", "upper", "casefold"}:
         return exact_case(value, method, expr, exact, CASE.characters)
     return expr if exact is None else Lowered(expr, exact)
@@ -165,6 +165,9 @@ def join(separator: Column, words: Column) -> Column:
 
 
 RULES(".join", Kind.STR, Kind.LIST)(join)
+RULES.rewrite(".join", Kind.STR, Kind.LIST)(
+    lambda node: joined_tokens(node) or single_sorted_token(node)
+)
 
 
 @RULES(".join", Kind.STR, Kind.STR)

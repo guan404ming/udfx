@@ -13,7 +13,7 @@ from udfx.types import STR, Kind
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("separator", ["::", "aa", "[.]"])
 @pytest.mark.parametrize("index", [0, 1, 2])
-def test_split_projection_preserves_bounds_without_arrays(
+def test_split_projection_preserves_bounds(
     backend: Backend[Any], separator: str, index: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def selected(text: str) -> str | None:
@@ -23,9 +23,11 @@ def test_split_projection_preserves_bounds_without_arrays(
             return None
 
     original = backend.rules.get
+    requested: set[OpKey] = set()
 
     def rule(key: OpKey) -> Any:
-        if backend.name in ("datafusion", "spark"):
+        requested.add(key)
+        if index == 0 and backend.name in ("datafusion", "spark"):
             assert key != OpKey(".split", (Kind.STR, Kind.STR))
         return original(key)
 
@@ -34,3 +36,6 @@ def test_split_projection_preserves_bounds_without_arrays(
     values = [None, "", "a", "aaaaa", separator, separator * 3, f"\u03b1{separator}\n{separator}😀"]
     assert check_function(selected, schema, backend, [(value,) for value in values]) == []
     assert backend.lower_program(trace(selected, schema)).exact is None
+    if index > 0:
+        assert OpKey("optional_item", (Kind.LIST, Kind.INT)) in requested
+        assert OpKey("len", (Kind.LIST,)) not in requested

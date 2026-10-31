@@ -14,24 +14,42 @@ from udfx.types import STR
 
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize(
-    "function",
+    ("function", "guarded_backends"),
     [
-        lambda text: re.findall(r"\d+", text),
-        lambda text: re.findall(r"(\d+)", text),
-        lambda text: re.split(r"\d+", text),
+        (lambda text: re.findall(r"\d+", text), {"datafusion"}),
+        (lambda text: re.findall(r"(\d+)", text), {"datafusion"}),
+        (lambda text: re.findall(r"[a-z](\d+)", text), {"polars", "datafusion"}),
+        (lambda text: re.split(r"\d+", text), {"polars", "duckdb", "datafusion", "spark"}),
     ],
-    ids=["findall", "findall_group", "split"],
+    ids=["findall", "findall_group", "findall_partial_group", "split"],
 )
-def test_regex_list_fallback(backend: Backend[Any], function: Callable[[str], list[str]]) -> None:
+def test_regex_list_guards(
+    backend: Backend[Any], function: Callable[[str], list[str]], guarded_backends: set[str]
+) -> None:
     schema = {"text": STR}
     rows = [("a12b34",), ("\x00a12b34",), ("",), ("\x00",)]
     program = trace(function, schema)
     lowered = backend.lower(program.value)
-    assert lowered.exact is not None
-    assert backend.evaluate([lowered.exact], schema, rows) == [[True, False, True, False]]
+    guarded = backend.name in guarded_backends
+    assert (lowered.exact is not None) == guarded
+    _, flags = backend.evaluate(
+        [backend.column(Col("text", STR)), backend.exact_expression(lowered)], schema, rows
+    )
+    assert flags == [True, not guarded, True, not guarded]
     assert backend.evaluate([backend.build(program)], schema, rows) == [
         [function(text) for (text,) in rows]
     ]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize("pattern", ["(a$)", "(?m)(^a$)", r"(\ba\b)", "(?i)(a+)"])
+def test_whole_capture_preserves_anchors_and_flags(backend: Backend[Any], pattern: str) -> None:
+    def function(text: str) -> list[str]:
+        return re.findall(pattern, text)
+
+    rows = [("a",), ("a\n",), ("b\na\nb",), ("aA",), ("ba",)]
+    program = trace(function, {"text": STR})
+    assert backend.evaluate([backend.build(program)], program.schema, rows) == [program.run(rows)]
 
 
 @pytest.mark.parametrize("backend", backend_params())

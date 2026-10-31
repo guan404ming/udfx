@@ -52,6 +52,7 @@ class FrequencyRunPrimitives(FrequencySequencePrimitives):
 
 @dataclass(frozen=True)
 class FrequencyOffsetPrimitives(FrequencySequencePrimitives):
+    compact: Callable[[Any], Any]
     get: Callable[[Any, Any], Any]
     coalesce: Callable[[Any, Any], Any]
     position: Callable[[Any, Any], Any]
@@ -86,19 +87,23 @@ def offset_frequencies(primitives: FrequencyOffsetPrimitives, values: Any, count
 def frequency_offsets(
     primitives: FrequencyOffsetPrimitives, items: Any, values: Any, count: Any
 ) -> Any:
-    starts = primitives.filter(
-        primitives.indices(primitives.length(items)),
-        lambda index: (
-            (index == primitives.literal(0))
-            | (primitives.get(items, index) != primitives.get(items, index - primitives.literal(1)))
+    starts = primitives.compact(
+        primitives.indexed(
+            items,
+            lambda item, index: primitives.select(
+                (index == primitives.literal(0))
+                | (item != primitives.get(items, index - primitives.literal(1))),
+                index,
+                primitives.literal(None),
+            ),
         ),
     )
 
     def ranked(boundaries: Any) -> Any:
-        counts = primitives.transform(
-            primitives.indices(primitives.length(boundaries)),
-            lambda index: (
-                primitives.get(boundaries, index)
+        counts = primitives.indexed(
+            boundaries,
+            lambda start, index: (
+                start
                 - primitives.coalesce(
                     primitives.get(boundaries, index + primitives.literal(1)),
                     primitives.length(items),

@@ -24,7 +24,7 @@ FLOAT_LITERAL = (
 class TextPrimitives:
     literal: Callable[[object], Any]
     when: Callable[[Any, Any, Any], Any]
-    coalesce: Callable[[Any, Any], Any]
+    coalesce: Callable[..., Any]
     matches: Callable[[Any, str], Any]
     strip: Callable[[Any, str], Any]
     replace: Callable[[Any, str, str], Any]
@@ -104,16 +104,20 @@ def float_parses(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
     return literal_matches(primitives, text, FLOAT_LITERAL), is_ascii(primitives, text)
 
 
+def integer_candidates(primitives: TextPrimitives, text: Any) -> tuple[Any, Any]:
+    native = primitives.try_int(text)
+    original, replacement = integer_characters()
+    cleaned = primitives.translate(text, original + "_", replacement)
+    return native, primitives.try_int(cleaned)
+
+
 def parse_int(
     primitives: TextPrimitives,
     text: Any,
     maximum_length: int | None = None,
     valid: bool = False,
 ) -> tuple[Any, Any]:
-    native = primitives.try_int(text)
-    original, replacement = integer_characters()
-    cleaned = primitives.translate(text, original + "_", replacement)
-    converted = primitives.try_int(cleaned)
+    native, converted = integer_candidates(primitives, text)
     value = (
         primitives.coalesce(native, converted)
         if primitives.lazy_coalesce

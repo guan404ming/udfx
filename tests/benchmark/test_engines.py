@@ -33,7 +33,7 @@ def test_public_inputs_match_python_on_every_engine(
     results = run(workload, [engine], Settings(warmups=0, rounds=1), tmp_path)
     assert len(results) == 2
     for result in results:
-        assert result["status"] in {"native", "guarded"}, result.get("reason")
+        assert result["status"] in {"native", "runtime", "guarded"}, result.get("reason")
         assert len(result["samples"]) == 1
         assert len(result["orders"]) == 1
         assert 0 <= result["native_row_fraction"] <= 1

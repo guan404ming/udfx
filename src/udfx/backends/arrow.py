@@ -21,11 +21,13 @@ _SCALARS: dict[Kind, pa.DataType] = {
 }
 
 
-def dtype(type: Type) -> pa.DataType:
+def dtype(type: Type, *, string_type: pa.DataType | None = None) -> pa.DataType:
     if type.kind is Kind.LIST:
         if type.item is None:
             raise TypeError("list type needs an item type")
-        return pa.list_(dtype(type.item))
+        return pa.list_(dtype(type.item, string_type=string_type))
+    if string_type is not None and type.kind in {Kind.STR, Kind.JSON}:
+        return string_type
     return _SCALARS[type.kind]
 
 

@@ -9,7 +9,8 @@ from functools import cache
 from typing import Any
 
 from udfx.errors import Unsupported
-from udfx.semantics.regex_categories import category, escaped
+from udfx.semantics.regex_boundaries import anchor_after
+from udfx.semantics.regex_categories import ascii_characters, ascii_member, category, escaped
 
 FLAGS = int(re.IGNORECASE | re.MULTILINE | re.DOTALL | re.UNICODE)
 
@@ -22,14 +23,6 @@ def union_patterns(left: str, right: str, flags: int) -> str | None:
     if any(pattern.groups or pattern.flags != flags | re.UNICODE for pattern in patterns):
         return None
     return f"(?:{left})|(?:{right})"
-
-
-def ascii_member(name: str, member: Any) -> Any:
-    if name == "LITERAL":
-        return member if member <= 127 else None
-    if name == "RANGE":
-        return (member[0], min(member[1], 127)) if member[0] <= 127 else None
-    return member
 
 
 @dataclass(frozen=True)
@@ -62,7 +55,25 @@ class Translator:
         self.expansion = 0
 
     def sequence(self, tokens: Any, repetitions: int = 1) -> str:
-        parts = [self.token(str(name), value, repetitions) for name, value in tokens]
+        parts = []
+        for index, (name, value) in enumerate(tokens):
+            anchored = None
+            if (
+                index
+                and self.dialect == "java"
+                and not self.flags & re.IGNORECASE
+                and str(name) == "AT"
+                and str(value) in {"AT_BOUNDARY", "AT_NON_BOUNDARY"}
+            ):
+                anchored = anchor_after(
+                    tokens[index - 1],
+                    str(value) == "AT_BOUNDARY",
+                    "[" + self.category("CATEGORY_WORD") + "]",
+                    self.char_set,
+                )
+            parts.append(
+                anchored if anchored is not None else self.token(str(name), value, repetitions)
+            )
         self.expansion += sum(map(len, parts)) * repetitions
         if self.expansion > (1_000_000 if self.dialect == "java" else 100_000):
             self.native = False
@@ -93,13 +104,14 @@ class Translator:
                 if repetitions * max(bound, 1) > 1000:
                     self.native = False
                 suffix = "" if maximum == constants.MAXREPEAT else str(maximum)
-                return (
-                    "(?:"
-                    + self.sequence(body, repetitions * max(bound, 1))
-                    + ")"
-                    + f"{{{minimum},{suffix}}}"
-                    + ("?" if name == "MIN_REPEAT" else "")
+                source = self.sequence(body, repetitions * max(bound, 1))
+                atomic = (
+                    self.dialect == "java"
+                    and len(body) == 1
+                    and str(body[0][0]) in {"LITERAL", "NOT_LITERAL", "IN", "ANY", "SUBPATTERN"}
                 )
+                source = source if atomic else "(?:" + source + ")"
+                return source + f"{{{minimum},{suffix}}}" + ("?" if name == "MIN_REPEAT" else "")
             case "AT":
                 return self.anchor(str(value))
             case _:
@@ -138,6 +150,8 @@ class Translator:
         return self.token(name, value, 1)
 
     def category(self, name: str) -> str:
+        if self.ascii_only and self.dialect == "java":
+            return ascii_characters(name)
         if self.categories is None or self.ascii_only:
             return category(name, self.ascii_only)
         return self.categories(name)
@@ -177,6 +191,8 @@ def translate(
     dialect: str,
     ascii_only: bool = False,
     categories: Callable[[str], str] | None = None,
+    *,
+    whole_capture: bool = False,
 ) -> Pattern:
     reject_comments(pattern)
     if flags & ~FLAGS:
@@ -191,7 +207,13 @@ def translate(
     if parsed.state.flags & ~FLAGS:
         raise Unsupported("regex flags support only IGNORECASE, MULTILINE, and DOTALL")
     translator = Translator(parsed.state.flags, dialect, ascii_only, categories)
-    source = translator.sequence(parsed)
+    captures = [value for name, value in parsed if str(name) == "SUBPATTERN" and value[0] == 1]
+    capture = (
+        whole_capture
+        and compiled.groups == len(parsed) == 1
+        and any(value[:3] == (1, 0, 0) for value in captures)
+    )
+    source = translator.sequence(parsed[0][1][3] if capture else parsed)
     ignorecase = bool(parsed.state.flags & re.IGNORECASE)
     if ignorecase:
         source = "(?i:" + source + ")"
@@ -201,16 +223,13 @@ def translate(
         source = "(?d)" + source
     return Pattern(
         source,
-        compiled.groups,
+        0 if capture else compiled.groups,
         parsed.getwidth()[0] == 0,
         translator.boundary,
         translator.dollar,
         ignorecase,
         translator.native,
-        any(
-            str(name) == "SUBPATTERN" and value[0] == 1 and value[3].getwidth()[0] > 0
-            for name, value in parsed
-        ),
+        any(value[3].getwidth()[0] > 0 for value in captures),
     )
 
 

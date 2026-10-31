@@ -1,8 +1,9 @@
 from dataclasses import replace
 
 from udfx.frontend.core.values import MAX_UNROLL
+from udfx.graphs import deterministic
 from udfx.ir import TRUE, Call, Comprehension, If, Lit, Node, lit
-from udfx.ops.registry import apply
+from udfx.ops.registry import apply, resolve
 from udfx.types import STR, Kind
 
 
@@ -35,3 +36,32 @@ def join_filtered(node: Call) -> Node:
         return node
     value = If(source.condition, source.value, lit(""), STR)
     return apply(".join", separator, replace(source, condition=TRUE, value=value))
+
+
+def optional_item(node: If) -> Node | None:
+    if not isinstance(node.orelse, Lit) or node.orelse.value is not None:
+        return None
+    condition, value = node.condition, node.then
+    if (
+        not isinstance(condition, Call)
+        or condition.op.name != "__gt__"
+        or not isinstance(value, Call)
+        or value.op.name != "__getitem__"
+    ):
+        return None
+    length, limit = condition.arguments
+    values, index = value.arguments
+    if (
+        not isinstance(length, Call)
+        or length.op.name != "len"
+        or length.arguments != (values,)
+        or not isinstance(index, Lit)
+        or type(index.value) is not int
+        or index.value < 0
+        or limit != index
+        or values.type.kind is not Kind.LIST
+        or not deterministic(values)
+    ):
+        return None
+    op = resolve("optional_item", (values.type, index.type))
+    return None if op is None else Call(op, (values, index))

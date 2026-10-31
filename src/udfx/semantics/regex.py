@@ -21,7 +21,7 @@ class RegexPrimitives:
     extract: Callable[[Any, str, bool], Any]
     replace: Callable[[Any, str, str, int], Any]
     split: Callable[[Any, str], Any]
-    findall: Callable[[Any, str, int], Any]
+    findall: Callable[[Any, str, int], tuple[Any, Any]]
     first: Callable[[Any, str, int, bool], Any]
     count_matches: Callable[[Any, str], Any]
     maximum_count: int
@@ -43,7 +43,7 @@ def lower_regex(
     options = {"substitute": substitute, "count": count, "newline_free": newline_free}
     expr, exact = regex_parts(primitives, name, text, pattern, flags, **options, ascii_only=False)
     if ascii is None or not ascii_differs(
-        pattern, flags, primitives.dialect, primitives.categories
+        pattern, flags, primitives.dialect, primitives.categories, name in {"findall", "first"}
     ):
         return expr, exact
     fast, fast_exact = regex_parts(
@@ -56,15 +56,22 @@ def lower_regex(
 
 
 def ascii_differs(
-    pattern: Any, flags: Any, dialect: str, categories: Callable[[str], str] | None = None
+    pattern: Any,
+    flags: Any,
+    dialect: str,
+    categories: Callable[[str], str] | None = None,
+    whole_capture: bool = False,
 ) -> bool:
     if not isinstance(pattern, str) or not isinstance(flags, int):
         return False
     try:
-        full = translate(pattern, flags, dialect, categories=categories)
+        full = translate(pattern, flags, dialect, False, categories, whole_capture=whole_capture)
         return (
             not (full.native and ascii_required(full, dialect))
-            and full.source != translate(pattern, flags, dialect, True, categories).source
+            and full.source
+            != translate(
+                pattern, flags, dialect, True, categories, whole_capture=whole_capture
+            ).source
         )
     except Unsupported:
         return False
@@ -97,8 +104,14 @@ def regex_parts(
     if not isinstance(pattern, str) or not isinstance(flags, int) or not isinstance(count, int):
         return fallback
     try:
+        whole_capture = name in {"findall", "first"}
         translated = translate(
-            pattern, flags, primitives.dialect, ascii_only, primitives.categories
+            pattern,
+            flags,
+            primitives.dialect,
+            ascii_only,
+            primitives.categories,
+            whole_capture=whole_capture,
         )
         if (
             not translated.native
@@ -109,7 +122,14 @@ def regex_parts(
         ):
             return fallback
         source = (
-            translate(pattern, flags, primitives.dialect, True, primitives.categories).source
+            translate(
+                pattern,
+                flags,
+                primitives.dialect,
+                True,
+                primitives.categories,
+                whole_capture=whole_capture,
+            ).source
             if not ascii_only and ascii_required(translated, primitives.dialect)
             else translated.source
         )
@@ -125,9 +145,8 @@ def regex_parts(
             nonempty = translated.capture_nonempty if translated.groups else not translated.empty
             return primitives.first(text, source, translated.groups, nonempty), exact
         if name == "findall":
-            return primitives.findall(
-                text, source, translated.groups
-            ), exact & ~primitives.contains(text, escaped(0))
+            found, guard = primitives.findall(text, source, translated.groups)
+            return found, exact if guard is None else exact & guard
         if name == "split":
             if count < 0:
                 return primitives.split(text, SEPARATOR), exact & ~primitives.contains(

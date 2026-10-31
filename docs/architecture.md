@@ -10,6 +10,8 @@ udfx compiles a Python function and a declared schema into one engine expression
 4. **Execution** uses native results where they match Python and runs fallback rows in Python.
 
 Backends can raise Python-equivalent errors natively when supported. A raising row fails the query.
+Spark also uses a small bundled JVM runtime for selected operations.
+Its [execution report](explain.md) distinguishes runtime calls from built-in expressions.
 
 ## Source layout
 

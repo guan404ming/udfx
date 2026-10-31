@@ -213,6 +213,7 @@ def str_getitem(text: pl.Expr, index: pl.Expr) -> pl.Expr:
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
+@RULES("optional_item", Kind.LIST, Kind.INT)
 def list_getitem(container: pl.Expr, index: pl.Expr) -> pl.Expr:
     return container.list.get(index.clip(-(2**62), None), null_on_oob=True)
 

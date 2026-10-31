@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from udfx.backends.rules import Lowered, Scope
@@ -19,6 +19,7 @@ class LoweringContext:
     binds: bool | None = None
     graph: bool = False
     has_bindings: bool = False
+    runtime_udfs: set[str] = field(default_factory=set)
     results: dict[
         tuple[int, int, int, int, int],
         tuple[
@@ -56,6 +57,17 @@ def assuming_exact(node: Node) -> Generator[None]:
         EXACT.reset(token)
 
 
+def record_runtime(name: str) -> None:
+    context = CURRENT.get()
+    if context is not None:
+        context.runtime_udfs.add(name)
+
+
+def runtime_udfs() -> tuple[str, ...]:
+    context = CURRENT.get()
+    return () if context is None else tuple(sorted(context.runtime_udfs))
+
+
 @contextmanager
 def lowering_context(
     *, binds: bool | None = None, graph: bool = False
@@ -70,6 +82,8 @@ def lowering_context(
         yield context
     finally:
         CURRENT.reset(token)
+    if current is not None:
+        current.runtime_udfs.update(context.runtime_udfs)
 
 
 def bindings_enabled(default: bool) -> bool:
@@ -90,7 +104,7 @@ def lower_shared[E](backend: Backend[E], node: Node, elements: Scope[E]) -> Lowe
         if key not in context.results:
             lowered = backend.lower_node(node, elements)
             if exact is not None and id(node) in exact:
-                lowered = Lowered(lowered.expr, overflow=lowered.overflow)
+                lowered = lowered.map(lambda value: replace(value, exact=None))
             context.results[key] = (
                 backend,
                 node,

@@ -19,13 +19,16 @@ def replace(text: pl.Expr, pattern: str, replacement: str, count: int) -> pl.Exp
     )
 
 
-def findall(text: pl.Expr, pattern: str, group: int) -> pl.Expr:
-    return (
+def findall(text: pl.Expr, pattern: str, group: int) -> tuple[pl.Expr, pl.Expr | None]:
+    if not group:
+        return text.str.extract_all(pattern), None
+    found = (
         text.str.replace_all(pattern, f"{SEPARATOR}${{{group}}}{SEPARATOR}")
         .str.split(SEPARATOR)
         .list.slice(1)
         .list.gather_every(2)
     )
+    return found, ~text.str.contains(SEPARATOR, literal=True)
 
 
 def first(text: pl.Expr, pattern: str, group: int, nonempty: bool) -> pl.Expr:

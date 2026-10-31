@@ -10,7 +10,7 @@ from pyspark.sql.types import StructField, StructType
 
 from udfx.backends import arrow
 from udfx.backends.arithmetic import lower_integer_region
-from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
+from udfx.backends.base import Backend, Row, output_names, transpose_rows
 from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.hoisting import free
 from udfx.backends.indexing import literal_range
@@ -21,15 +21,14 @@ from udfx.backends.results import ResultLowering
 from udfx.backends.rules import Scope
 from udfx.backends.spark.bindings import bind, binding_scope, reading
 from udfx.backends.spark.dtypes import dtype
+from udfx.backends.spark.fallback import EXACT, NATIVE, finish, packet
 from udfx.backends.spark.numbers import WIDE_INTEGERS
 from udfx.backends.spark.rules import RULES
+from udfx.backends.spark.runtime import scope as runtime_scope
 from udfx.errors import Unsupported
 from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
-
-EXACT = f"{RESERVED}exact"
-NATIVE = f"{RESERVED}native"
 
 
 def fallback_patch(program: Program) -> Callable[[pa.Array], pa.Array]:
@@ -60,7 +59,7 @@ class SparkBackend(Backend[Column]):
         return lowered
 
     def lower(self, node: Node, elements: Scope[Column] | None = None) -> Lowered[Column]:
-        with reading(node, elements):
+        with runtime_scope(self.session), reading(node, elements):
             lowered = super().lower(node, elements)
         if isinstance(node, Comprehension) and elements and self.exact(lowered) is not None:
             captured = free(node.value) | free(node.condition) | free(node.fault)
@@ -180,26 +179,16 @@ class SparkBackend(Backend[Column]):
         message = functions.concat(functions.lit(self.native_faults.marker(program)), encoded)
         return functions.raise_error(message).cast(dtype(program.result))
 
+    def compose(self, value: Lowered[Column], program: Program) -> Column:
+        if value.exact is not None and value.prepare is not None:
+            packed = value.consume(lambda value: packet(self, value, program))
+            return finish(packed, program, fallback_patch(program))
+        return super().compose(value, program)
+
     def fallback(self, native: Column, exact: Column, program: Program) -> Column:
-        result = dtype(program.result)
-        flag = functions.coalesce(exact, functions.lit(False))
-        completed = functions.struct(
-            functions.lit(True).alias(EXACT),
-            native.cast(result).alias(NATIVE),
-            *(
-                functions.lit(None).cast(dtype(type)).alias(name)
-                for name, type in program.schema.items()
-            ),
+        return finish(
+            packet(self, Lowered(native, exact), program), program, fallback_patch(program)
         )
-        pending = functions.struct(
-            functions.lit(False).alias(EXACT),
-            functions.lit(None).cast(result).alias(NATIVE),
-            *(self.column(Col(name, type)).alias(name) for name, type in program.schema.items()),
-        )
-        function = functions.arrow_udf(fallback_patch(program), result)  # pyright: ignore[reportCallIssue, reportArgumentType]
-        if not program.deterministic:
-            function = function.asNondeterministic()
-        return function(functions.when(flag, completed).otherwise(pending))
 
     def evaluate(
         self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]

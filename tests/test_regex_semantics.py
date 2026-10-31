@@ -103,3 +103,48 @@ def test_ascii_branch_keeps_patterns_above_unicode_expansion_limit() -> None:
     assert not translate(pattern, re.IGNORECASE, "java").native
     assert translate(pattern, re.IGNORECASE, "java", True).native
     assert ascii_differs(pattern, re.IGNORECASE, "java")
+
+
+@pytest.mark.parametrize("pattern", ["a+", "[a-z]{2,4}", "[^a]*?", ".{1,3}", "(ab)+"])
+def test_java_repetition_keeps_single_atoms(pattern: str) -> None:
+    assert "(?:" not in translate(pattern, 0, "java").source
+
+
+@pytest.mark.parametrize("pattern", ["(?:ab)+", "(?:a+)+"])
+def test_java_repetition_groups_composite_atoms(pattern: str) -> None:
+    assert "(?:" in translate(pattern, 0, "java").source
+
+
+@pytest.mark.parametrize("pattern", [r"\w+\b", r"[\d.]+\b", r"[\w\s]+\B", r"(a)\b"])
+def test_java_proven_suffix_removes_boundary_guard(pattern: str) -> None:
+    assert not translate(pattern, 0, "java").boundary
+    assert translate(pattern, 0, "rust").boundary
+
+
+@pytest.mark.parametrize("pattern", [r"\w*\b", r"\b\w+", r"[\w\W]+\b", r"[^a]+\b", r"(?:)\b"])
+def test_java_unknown_suffix_keeps_boundary_guard(pattern: str) -> None:
+    assert translate(pattern, 0, "java").boundary
+
+
+def test_java_case_insensitive_suffix_keeps_boundary_guard() -> None:
+    assert translate(r"[\d.]+\b", re.IGNORECASE, "java").boundary
+
+
+@pytest.mark.parametrize(
+    "pattern", [r"(\d+)", "(a|b)", "(?i)(a+)", r"([\s\S]+)", "(a*)", "(?:((?:a|b)+))", "(a$)"]
+)
+def test_whole_capture_uses_the_complete_match(pattern: str) -> None:
+    original = translate(pattern, 0, "rust")
+    normalized = translate(pattern, 0, "rust", whole_capture=True)
+    assert normalized.groups == 0
+    assert normalized.empty == original.empty
+    assert normalized.dollar == original.dollar
+    assert normalized.ignorecase == original.ignorecase
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [r"a(\d+)", "(a)?", "(a)+", "(a)|(b)", "((a))"],
+)
+def test_partial_capture_stays_unchanged(pattern: str) -> None:
+    assert translate(pattern, 0, "rust", whole_capture=True) == translate(pattern, 0, "rust")

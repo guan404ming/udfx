@@ -49,7 +49,16 @@ def measure(
         if exact is None
         else sum(value is True for value in adapter.execute(exact, "memory").column(1).to_pylist())
     )
-    status = "python" if native_rows == 0 else "native" if exact is None else "guarded"
+    runtime_udfs = details[-1].runtime_udfs
+    status = (
+        "python"
+        if native_rows == 0
+        else "guarded"
+        if exact is not None
+        else "runtime"
+        if runtime_udfs
+        else "native"
+    )
     expressions = {**adapter.python(), "udfx": expr}
     native = adapter.native()
     if native is not None:
@@ -61,6 +70,7 @@ def measure(
         "native_rows": native_rows,
         "total_rows": data.table.num_rows,
         "native_row_fraction": native_rows / data.table.num_rows,
+        "runtime_udfs": list(runtime_udfs),
         "compiled_udfs": int(native_rows > 0),
         "total_udfs": 1,
         "data": data.metadata,

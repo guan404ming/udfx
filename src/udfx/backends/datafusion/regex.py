@@ -18,13 +18,14 @@ def literal(value: object) -> Expr:
     return lit(value).cast(pa.string()) if value is None else lit(value)
 
 
-def findall(text: Expr, pattern: str, group: int) -> Expr:
+def findall(text: Expr, pattern: str, group: int) -> tuple[Expr, Expr]:
     replaced = functions.regexp_replace(
         text, lit(pattern), lit(f"{SEPARATOR}${{{group}}}{SEPARATOR}"), lit("g")
     )
-    return functions.array_slice(
+    found = functions.array_slice(
         functions.string_to_array(replaced, lit(SEPARATOR)), 2, 2**31 - 1, 2
     )
+    return found, ~functions.contains(text, lit(SEPARATOR))
 
 
 def first(text: Expr, pattern: str, group: int, nonempty: bool) -> Expr:

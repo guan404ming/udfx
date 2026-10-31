@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 
 from pyspark.sql import Column, functions
@@ -9,6 +10,7 @@ from udfx.backends.spark.rules import INT32_MAX, RULES, split_literal
 from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import array_join, join, length, lstrip
 from udfx.frontend.core import splitting
+from udfx.frontend.core.json import nonempty_array
 from udfx.semantics.facts import (
     separator_is_none,
     simple_arguments,
@@ -36,14 +38,18 @@ RULES(".split", Kind.STR)(split_words)
 RULES(".rsplit", Kind.STR)(split_words)
 
 
-def split(text: Column, separator: Column, *, optional: bool | None = None) -> Column:
+def split(text: Column, separator: Column | str | None, *, optional: bool | None = None) -> Column:
+    if isinstance(separator, str):
+        return functions.split(text, re.escape(separator), -1)
+    if separator is None:
+        return split_words(text)
     pieces = split_literal(text, separator)
     if optional is not None:
         return split_words(text) if optional else pieces
     return functions.when(separator.isNull(), split_words(text)).otherwise(pieces)
 
 
-RULES(".split", Kind.STR, Kind.STR, facts={"optional": separator_is_none})(split)
+RULES(".split", Kind.STR, Kind.STR, literals=(1,), facts={"optional": separator_is_none})(split)
 
 
 @RULES("last_split", Kind.STR, Kind.STR, facts={"non_overlapping": split_non_overlapping})
@@ -62,7 +68,9 @@ def split_item(text: Column, separator: Column, index: Column) -> Column:
 
 
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(splitting.split_item)
-RULES.rewrite("__gt__", Kind.INT, Kind.INT)(splitting.split_length_greater)
+RULES.rewrite("__gt__", Kind.INT, Kind.INT)(
+    lambda node: nonempty_array(node) or splitting.split_length_greater(node)
+)
 
 
 def bind(values: Sequence[Column], body: Callable[..., Column], simple: bool) -> Column:

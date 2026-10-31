@@ -92,6 +92,6 @@ register_json(
     RULES,
     TEXT,
     functions.concat,
-    lambda text, pattern: findall(text, pattern, 0),
+    lambda text, pattern: findall(text, pattern, 0)[0],
     encode=encode_json,
 )

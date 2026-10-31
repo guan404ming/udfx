@@ -18,7 +18,7 @@ def artifact() -> dict:
     comparison = summarize([{"python_scalar": 2.0, "udfx": 4.0}], "python_scalar")
     base = {"suite": "test", "engine": "polars", "mode": "memory", "workload": "test/case"}
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "commit": "test",
         "python": "3.12 test",
         "results": [
@@ -36,17 +36,33 @@ def artifact() -> dict:
     }
 
 
-def test_artifact_round_trip_and_future_schema(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", [1, 2])
+def test_artifact_round_trip_and_future_schema(tmp_path: Path, version: int) -> None:
     path = tmp_path / "nested/result.json"
-    write(path, artifact())
-    assert read(path) == artifact()
+    result = {**artifact(), "schema_version": version}
+    write(path, result)
+    assert read(path) == result
     write(path, {"schema_version": 99})
     with pytest.raises(ValueError, match="Unsupported result schema"):
         read(path)
 
 
+def test_runtime_artifact_rejects_legacy_reader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = artifact()
+    result["results"][0].update(status="runtime", runtime_udfs=["spark.json_strings"])
+    path = tmp_path / "result.json"
+    write(path, result)
+    assert read(path) == result
+    monkeypatch.setattr("bench.artifacts.SCHEMA_VERSION", 1)
+    with pytest.raises(ValueError, match="Unsupported result schema: 2"):
+        read(path)
+
+
 def test_metadata_identifies_code_and_machine() -> None:
     result = metadata()
+    assert result["schema_version"] == 2
     assert len(result["commit"]) == 40
     assert len(result["source_sha256"]) == 64
     assert result["logical_cpus"] > 0
@@ -83,7 +99,7 @@ def test_reports_include_failures_and_slower_cases(
 ) -> None:
     result = artifact()
     text = markdown(result)
-    assert "| 1 | 0 | 0 | 1 | 1 | 1 | 0 | 0.50x | 0.50x | 0.50x | 1/1 |" in text
+    assert "| 1 | 0 | 0 | 0 | 1 | 1 | 1 | 0 | 0.50x | 0.50x | 0.50x | 1/1 |" in text
     assert "wrong output" in text
     path = tmp_path / "result.csv"
     export_csv(result, path)
@@ -137,7 +153,7 @@ def test_overall_speedup_includes_python_only_cases() -> None:
             "comparisons": {"python_scalar": {"median_speedup": 2.0}},
         }
     )
-    assert "| 1 | 0 | 1 | 1 | 1 | 1 | 0 | 1.00x | 0.50x | 0.50x | 1/1 |" in markdown(result)
+    assert "| 1 | 0 | 0 | 1 | 1 | 1 | 1 | 0 | 1.00x | 0.50x | 0.50x | 1/1 |" in markdown(result)
 
 
 def test_code_summary_keeps_framework_and_compiler_separate() -> None:

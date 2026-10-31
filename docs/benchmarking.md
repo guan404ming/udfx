@@ -23,7 +23,9 @@ every sample. Reports use the median of paired baseline/udfx ratios, plus variat
 slower-case counts. Each Python UDF form appears separately. Handwritten native expressions
 appear where provided; the primary Python baseline is fixed before timing.
 DataFusion registers these deterministic Python functions as immutable.
-The deduplicated mean gives each distinct native-plan fingerprint equal weight.
+The deduplicated mean gives each distinct compiled-plan fingerprint equal weight.
+Reports separate engine expressions, runtime UDFs, guarded execution, and Python fallback.
+Overall speedup includes every timed case, including Python-only cases.
 
 ### Execution modes
 

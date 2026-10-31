@@ -6,6 +6,7 @@ from udfx.backends.lowering_context import bindings_enabled
 from udfx.backends.registration import Lowered, register_lists
 from udfx.backends.spark.bindings import bind
 from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
+from udfx.backends.spark.runtime import call
 from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import characters, list_contains
 from udfx.semantics.facts import nullable_arguments, simple_arguments
@@ -93,6 +94,8 @@ def ordered(value: Column) -> Column:
 
 @RULES("frequency_order", Kind.LIST, Kind.INT)
 def frequency_order(value: Column, count: Column) -> Column:
+    if (runtime := call("frequency_order", value, count)) is not None:
+        return runtime
     if bindings_enabled(False):
         return bind(value, lambda source: offset_frequencies(FREQUENCY_OFFSETS, source, count))
     return take_prefix(SEQUENCE, ordered_frequencies_value(value), count)
@@ -114,6 +117,7 @@ FREQUENCY_OFFSETS = FrequencyOffsetPrimitives(
     transform=functions.transform,
     filter=functions.filter,
     bind=bind,
+    compact=functions.array_compact,
     get=functions.get,
     coalesce=functions.coalesce,
     position=functions.array_position,
@@ -121,7 +125,8 @@ FREQUENCY_OFFSETS = FrequencyOffsetPrimitives(
     prefix=lambda values, count: take_prefix(SEQUENCE, values, count),
     distinct=functions.array_distinct,
     indexed=lambda values, transform: functions.transform(
-        values, lambda item, index: transform(item, index.cast("long"))
+        values,
+        lambda item, index: transform(item, index),  # noqa: PLW0108
     ),
     logarithm=functions.log2,
     select=when,

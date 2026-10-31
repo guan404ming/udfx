@@ -5,6 +5,7 @@ from typing import Any
 
 from udfx.backends.base import Backend
 from udfx.backends.faults import NativeFaults
+from udfx.backends.rules import Lowered
 from udfx.ir import Col
 from udfx.program import Program
 
@@ -84,6 +85,11 @@ def fingerprint(backend: Backend[Any], program: Program) -> str:
             )
         return type(backend).native_raise(self, program)
 
+    def compose(self: Backend[Any], value: Lowered[Any], program: Program) -> Any:
+        if value.prepare is None:
+            return type(backend).compose(self, value, program)
+        return value.consume(lambda value: self.record([value.expr, self.exact_expression(value)]))
+
     normalized = copy(backend)
     normalized.__class__ = type(
         "FingerprintBackend",
@@ -92,6 +98,7 @@ def fingerprint(backend: Backend[Any], program: Program) -> str:
             "column": column,
             "fallback": fallback,
             "native_raise": native_raise,
+            "compose": compose,
             "native_faults": property(lambda self: FingerprintFaults()),
         },
     )

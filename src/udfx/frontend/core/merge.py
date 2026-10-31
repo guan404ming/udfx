@@ -6,11 +6,11 @@ from functools import reduce
 from udfx.frontend.core.evaluation import Return
 from udfx.frontend.core.logic import (
     choose,
-    coalesce_branch,
     conjunction,
     conjuncts,
     negate,
     retype,
+    simplify_branch,
     unified,
 )
 from udfx.ir import TRUE, Call, If, Node
@@ -78,4 +78,4 @@ def _build(cases: list[Case], result: Type) -> Node:
         return retype(choose(chain), result)
     positive = _build(_side(cases, atom, True), result)
     negative = _build(_side(cases, atom, False), result)
-    return coalesce_branch(If(atom, positive, negative, result))
+    return simplify_branch(If(atom, positive, negative, result))

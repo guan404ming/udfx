@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from udfx.errors import Unsupported
-from udfx.frontend.core.lists import simplify_list
+from udfx.frontend.core.lists import optional_item, simplify_list
 from udfx.frontend.core.numbers import simplify_number
 from udfx.frontend.core.sequences import simplify_sequence
 from udfx.frontend.core.sets import simplify_set
@@ -37,7 +37,7 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
             return retype(
                 fold_shared(node.then if condition.value else node.orelse, seen), node.type
             )
-        return coalesce_branch(
+        return simplify_branch(
             If(condition, fold_shared(node.then, seen), fold_shared(node.orelse, seen), node.type)
         )
     if not isinstance(node, Call):
@@ -68,7 +68,10 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
     return Lit(tuple(value) if isinstance(value, list) else value, folded.type)
 
 
-def coalesce_branch(node: If) -> Node:
+def simplify_branch(node: If) -> Node:
+    selected = optional_item(node)
+    if selected is not None:
+        return selected
     predicate = node.condition
     positive = True
     if isinstance(predicate, Call) and predicate.op.name == "not":

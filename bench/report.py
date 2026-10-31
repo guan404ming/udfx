@@ -15,7 +15,7 @@ def speedups(results: list[dict]) -> tuple[list[float], float | None]:
     groups: dict[str, list[float]] = defaultdict(list)
     ratios = []
     for result in results:
-        if result["status"] in {"native", "guarded"}:
+        if result["status"] in {"native", "runtime", "guarded"}:
             ratio = result["comparisons"][result["primary_baseline"]]["median_speedup"]
             ratios.append(ratio)
             groups[result.get("fingerprint", result["workload"])].append(ratio)
@@ -34,29 +34,32 @@ def markdown(artifact: dict) -> str:
         f"Run complete: {artifact.get('complete', False)}.",
         "",
         "Speedups use the declared Python baseline and the median of paired rounds.",
-        "Native and guarded counts require correct output. Errors remain in the denominator.",
+        "Compiled counts require correct output. Errors remain in the denominator.",
+        "Expression counts exclude runtime UDFs. Runtime counts have no Python fallback.",
         "Overall includes every timed case, including Python-only cases.",
-        "Compiler and Dedup include only native and guarded cases.",
+        "Compiler and Dedup include expression, runtime, and guarded cases.",
+        "Runtime UDFs name emitted calls, not measured invocations. Guarded cases can use them.",
         "Nondeterministic cases use distribution checks, not exact output comparison.",
         "",
-        "| Suite | Engine | Mode | Native | Guarded | Python | Unsupported | Errors | Excluded |"
-        " Pending | Overall | Compiler | Dedup | Slower (compiler) |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
-        " ---: |",
+        "| Suite | Engine | Mode | Expressions | Runtime | Guarded | Python | Unsupported |"
+        " Errors | Excluded | Pending | Overall | Compiler | Dedup | Slower (compiler) |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        " ---: | ---: | ---: |",
     ]
     for (suite, engine, mode), results in sorted(groups.items()):
         counts = Counter(result["status"] for result in results)
         measured = [
             result["comparisons"][result["primary_baseline"]]["median_speedup"]
             for result in results
-            if result["status"] in {"native", "guarded", "python"}
+            if result["status"] in {"native", "runtime", "guarded", "python"}
         ]
         overall = f"{geometric_mean(measured):.2f}x" if measured else "N/A"
         ratios, dedup = speedups(results)
         mean = f"{geometric_mean(ratios):.2f}x" if ratios else "N/A"
         grouped = f"{dedup:.2f}x" if dedup is not None else "N/A"
         lines.append(
-            f"| {suite} | {engine} | {mode} | {counts['native']} | {counts['guarded']} | "
+            f"| {suite} | {engine} | {mode} | {counts['native']} | {counts['runtime']} | "
+            f"{counts['guarded']} | "
             f"{counts['python']} | {counts['unsupported']} | {counts['error']} | "
             f"{counts['excluded']} | "
             f"{counts['pending']} | {overall} | {mean} | {grouped} | "
@@ -67,8 +70,9 @@ def markdown(artifact: dict) -> str:
             "",
             "## Cases",
             "",
-            "| Workload | Engine | Mode | Status | Validation | Baseline | Speedup | Native rows |",
-            "| --- | --- | --- | --- | --- | --- | ---: | ---: |",
+            "| Workload | Engine | Mode | Status | Runtime UDFs | Validation | Baseline |"
+            " Speedup | Non-Python rows |",
+            "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: |",
         ]
     )
     for result in artifact["results"]:
@@ -78,7 +82,8 @@ def markdown(artifact: dict) -> str:
             speedup = f"{comparison['median_speedup']:.2f}x" if comparison else "N/A"
             lines.append(
                 f"| {result['workload']} | {result['engine']} | {result['mode']} | "
-                f"{result['status']} | {result.get('validation', 'exact')} | "
+                f"{result['status']} | {', '.join(result.get('runtime_udfs', [])) or 'none'} | "
+                f"{result.get('validation', 'exact')} | "
                 f"{baseline} | {speedup} | {share} |"
             )
     failures = [result for result in artifact["results"] if "reason" in result]
@@ -100,6 +105,7 @@ def export_csv(artifact: dict, path: Path) -> None:
         "engine",
         "mode",
         "status",
+        "runtime_udfs",
         "validation",
         "baseline",
         "median_speedup",
@@ -113,7 +119,13 @@ def export_csv(artifact: dict, path: Path) -> None:
         for result in artifact["results"]:
             for baseline, comparison in result.get("comparisons", {}).items() or [("", {})]:
                 row = {name: result.get(name, comparison.get(name, "")) for name in names}
-                writer.writerow({**row, "baseline": baseline})
+                writer.writerow(
+                    {
+                        **row,
+                        "baseline": baseline,
+                        "runtime_udfs": ", ".join(result.get("runtime_udfs", [])),
+                    }
+                )
 
 
 def main(arguments: list[str] | None = None) -> None:

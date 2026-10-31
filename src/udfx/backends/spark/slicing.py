@@ -32,6 +32,7 @@ def str_getitem(text: Column, index: Column) -> Column:
 
 
 @RULES("__getitem__", Kind.LIST, Kind.INT)
+@RULES("optional_item", Kind.LIST, Kind.INT)
 def list_getitem(container: Column, index: Column) -> Column:
     return functions.try_element_at(container, bounded_native_index(index))
 
