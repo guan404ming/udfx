@@ -51,7 +51,4 @@ Declare nullable columns with `.or_none()`. Unsupported functions return `ok == 
 - [Reference API](https://guan404ming.github.io/udfx/api/): compile, types, and explain
 - [Contributor Guide](https://guan404ming.github.io/udfx/contributor-guide/): development and documentation
 
-Explore [measured speedups and trade-offs](https://guan404ming.github.io/udfx/#performance)
-across all four engines.
-
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Apache-2.0 license](LICENSE)
