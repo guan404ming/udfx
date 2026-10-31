@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/guan404ming/udfx/main/docs/assets/logo.svg" alt="" height="32"> udfx
+# <img src="https://raw.githubusercontent.com/guan404ming/udfx/main/docs/assets/logo.svg" alt="" height="24"> udfx
 
 [![CI](https://github.com/guan404ming/udfx/actions/workflows/ci.yml/badge.svg)](https://github.com/guan404ming/udfx/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](pyproject.toml)

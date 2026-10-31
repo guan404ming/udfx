@@ -40,7 +40,7 @@
     <path d="M 480 129 V 178" fill="none" stroke="var(--arrow)" stroke-width="2" marker-end="url(#arrow)"/>
 
     <rect x="20" y="185" width="920" height="145" rx="18" fill="var(--compiler)" stroke="var(--arrow)" stroke-width="2"/>
-    <svg x="44" y="207" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#ededed"/><path d="M43 21 L37.5 26.5 M26.5 37.5 L21 43" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/><path d="M21 21 L43 43" stroke="#181818" stroke-width="9" stroke-linecap="round"/></svg>
+    <svg x="44" y="207" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#ededed"/><path d="M45 17 L35.5 26.5 M24.5 37.5 L20 42" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/><path d="M20 22 L45 47" stroke="#181818" stroke-width="9" stroke-linecap="round"/></svg>
     <text x="80" y="228" font-size="24" font-weight="700" fill="#ffffff">Shared udfx compiler</text>
     <rect x="44" y="246" width="260" height="54" rx="10" fill="var(--surface)" stroke="var(--surface)" stroke-width="1.5"/>
     <text x="174" y="280" text-anchor="middle" font-size="18" font-weight="600">Trace Python</text>
