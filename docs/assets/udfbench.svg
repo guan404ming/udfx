@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 352.8" version="1.1" role="img" aria-labelledby="title description">
+  <title id="title">UDFBench speedups by engine</title>
+  <desc id="description">Geometric mean speedups over 24 selected UDFs. Python UDF baseline is 1×. Polars: memory 2.05×, query 1.57×. DuckDB: memory 1.41×, query 1.19×. Apache DataFusion: memory 1.12×, query 1.18×. Apache Spark: memory 1.58×, query 1.10×.</desc>
+  <style>
+    text { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; }
+    :root { --memory: #363636; --query: #a3a3a3; --text: #303030; --grid: #dedede; --baseline: #707070; }
+    @media (prefers-color-scheme: dark) {
+      :root { --memory: #ededed; --query: #858585; --text: #d6d6d6; --grid: #414141; --baseline: #b8b8b8; }
+    }
+  </style>
+  <defs>
+    <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+  </defs>
+  <g id="figure_1">
+    <g id="patch_1">
+      <path d="M 0 352.8 L 720 352.8 L 720 0 L 0 0 L 0 352.8 z" style="fill: none" />
+    </g>
+    <g id="axes_1">
+      <g id="patch_2">
+        <path d="M 180 292.824 L 698.4 292.824 L 698.4 56.448 L 180 56.448 L 180 292.824 z" style="fill: none" />
+      </g>
+      <g id="matplotlib.axis_1">
+        <g id="xtick_1">
+          <g id="line2d_1">
+            <path d="M 180 292.824 L 180 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+          </g>
+          <g id="line2d_2" />
+          <g id="text_1">
+            <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="180" y="311.941188" transform="rotate(-0 180 311.941188)">0</text>
+          </g>
+        </g>
+        <g id="xtick_2">
+          <g id="line2d_3">
+            <path d="M 283.68 292.824 L 283.68 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+          </g>
+          <g id="line2d_4" />
+          <g id="text_2">
+            <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="283.68" y="311.941188" transform="rotate(-0 283.68 311.941188)">0.5×</text>
+          </g>
+        </g>
+        <g id="xtick_3">
+          <g id="line2d_5">
+            <path d="M 387.36 292.824 L 387.36 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+          </g>
+          <g id="line2d_6" />
+          <g id="text_3">
+            <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="387.36" y="311.941188" transform="rotate(-0 387.36 311.941188)">1×</text>
+          </g>
+        </g>
+        <g id="xtick_4">
+          <g id="line2d_7">
+            <path d="M 491.04 292.824 L 491.04 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+          </g>
+          <g id="line2d_8" />
+          <g id="text_4">
+            <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="491.04" y="311.941188" transform="rotate(-0 491.04 311.941188)">1.5×</text>
+          </g>
+        </g>
+        <g id="xtick_5">
+          <g id="line2d_9">
+            <path d="M 594.72 292.824 L 594.72 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+          </g>
+          <g id="line2d_10" />
+          <g id="text_5">
+            <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="594.72" y="311.941188" transform="rotate(-0 594.72 311.941188)">2×</text>
+          </g>
+        </g>
+        <g id="xtick_6">
+          <g id="line2d_11">
+            <path d="M 698.4 292.824 L 698.4 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+          </g>
+          <g id="line2d_12" />
+          <g id="text_6">
+            <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="698.4" y="311.941188" transform="rotate(-0 698.4 311.941188)">2.5×</text>
+          </g>
+        </g>
+        <g id="text_7">
+          <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="439.2" y="337.942125" transform="rotate(-0 439.2 337.942125)">Speedup vs. Python UDF · higher is faster</text>
+        </g>
+      </g>
+      <g id="matplotlib.axis_2">
+        <g id="ytick_1">
+          <g id="line2d_13" />
+          <g id="text_8">
+            <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="89.158496" transform="rotate(-0 170 89.158496)">Polars</text>
+          </g>
+        </g>
+        <g id="ytick_2">
+          <g id="line2d_14" />
+          <g id="text_9">
+            <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="149.182874" transform="rotate(-0 170 149.182874)">DuckDB</text>
+          </g>
+        </g>
+        <g id="ytick_3">
+          <g id="line2d_15" />
+          <g id="text_10">
+            <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="209.207251" transform="rotate(-0 170 209.207251)">Apache DataFusion</text>
+          </g>
+        </g>
+        <g id="ytick_4">
+          <g id="line2d_16" />
+          <g id="text_11">
+            <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="269.231629" transform="rotate(-0 170 269.231629)">Apache Spark</text>
+          </g>
+        </g>
+      </g>
+      <g id="patch_3">
+        <path d="M 180 67.192364 L 605.088 67.192364 L 605.088 82.798702 L 180 82.798702 z" clip-path="url(#pd7974fed2f)" style="fill: var(--memory)" />
+      </g>
+      <g id="patch_4">
+        <path d="M 180 127.216741 L 472.3776 127.216741 L 472.3776 142.82308 L 180 142.82308 z" clip-path="url(#pd7974fed2f)" style="fill: var(--memory)" />
+      </g>
+      <g id="patch_5">
+        <path d="M 180 187.241119 L 412.2432 187.241119 L 412.2432 202.847458 L 180 202.847458 z" clip-path="url(#pd7974fed2f)" style="fill: var(--memory)" />
+      </g>
+      <g id="patch_6">
+        <path d="M 180 247.265497 L 507.6288 247.265497 L 507.6288 262.871835 L 180 262.871835 z" clip-path="url(#pd7974fed2f)" style="fill: var(--memory)" />
+      </g>
+      <g id="text_12">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="612.088" y="78.11272" transform="rotate(-0 612.088 78.11272)">2.05×</text>
+      </g>
+      <g id="text_13">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="479.3776" y="138.137098" transform="rotate(-0 479.3776 138.137098)">1.41×</text>
+      </g>
+      <g id="text_14">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="419.2432" y="198.161476" transform="rotate(-0 419.2432 198.161476)">1.12×</text>
+      </g>
+      <g id="text_15">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="514.6288" y="258.185854" transform="rotate(-0 514.6288 258.185854)">1.58×</text>
+      </g>
+      <g id="patch_7">
+        <path d="M 180 86.400165 L 505.5552 86.400165 L 505.5552 102.006503 L 180 102.006503 z" clip-path="url(#pd7974fed2f)" style="fill: var(--query)" />
+      </g>
+      <g id="patch_8">
+        <path d="M 180 146.424542 L 426.7584 146.424542 L 426.7584 162.030881 L 180 162.030881 z" clip-path="url(#pd7974fed2f)" style="fill: var(--query)" />
+      </g>
+      <g id="patch_9">
+        <path d="M 180 206.44892 L 424.6848 206.44892 L 424.6848 222.055259 L 180 222.055259 z" clip-path="url(#pd7974fed2f)" style="fill: var(--query)" />
+      </g>
+      <g id="patch_10">
+        <path d="M 180 266.473298 L 408.096 266.473298 L 408.096 282.079636 L 180 282.079636 z" clip-path="url(#pd7974fed2f)" style="fill: var(--query)" />
+      </g>
+      <g id="text_16">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="512.5552" y="97.320521" transform="rotate(-0 512.5552 97.320521)">1.57×</text>
+      </g>
+      <g id="text_17">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="433.7584" y="157.344899" transform="rotate(-0 433.7584 157.344899)">1.19×</text>
+      </g>
+      <g id="text_18">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="431.6848" y="217.369277" transform="rotate(-0 431.6848 217.369277)">1.18×</text>
+      </g>
+      <g id="text_19">
+        <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="415.096" y="277.393655" transform="rotate(-0 415.096 277.393655)">1.10×</text>
+      </g>
+      <g id="text_20">
+        <text style="font-size: 11px; text-anchor: middle; fill: var(--baseline)" x="387.36" y="44.6292" transform="rotate(-0 387.36 44.6292)">Python UDF · 1×</text>
+      </g>
+      <g id="line2d_17">
+        <path d="M 387.36 292.824 L 387.36 56.448" clip-path="url(#pd7974fed2f)" style="fill: none; stroke-dasharray: 4.4,4.4; stroke-dashoffset: 0; stroke: var(--baseline); stroke-width: 1.1" />
+      </g>
+      <g id="legend_1">
+        <g id="patch_11">
+          <path d="M 4.176 29.090925 L 18.576 29.090925 L 18.576 20.690925 L 4.176 20.690925 z" style="fill: var(--memory)" />
+        </g>
+        <g id="text_21">
+          <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="28.176" y="29.090925" transform="rotate(-0 28.176 29.090925)">Memory</text>
+        </g>
+        <g id="patch_12">
+          <path d="M 98.580375 29.090925 L 112.980375 29.090925 L 112.980375 20.690925 L 98.580375 20.690925 z" style="fill: var(--query)" />
+        </g>
+        <g id="text_22">
+          <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="122.580375" y="29.090925" transform="rotate(-0 122.580375 29.090925)">Query</text>
+        </g>
+      </g>
+    </g>
+  </g>
+  <defs>
+    <clipPath id="pd7974fed2f">
+      <rect x="180" y="56.448" width="518.4" height="236.376" />
+    </clipPath>
+  </defs>
+</svg>

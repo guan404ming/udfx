@@ -1,25 +1,47 @@
-# How it works
+# How It Works
 
-## 1. Compile your function
+## Compile
 
-Pass a Python function, its input types (the schema), and a backend to `udfx.compile`.
-udfx translates supported operations into an engine expression. For example,
-`text.strip().lower()` becomes string operations for your chosen engine.
-Compilation does not process your input rows.
+Pass your function, input types, and backend to [udfx.compile](compile.md).
+The compiler returns an engine expression or a reason it cannot compile the function.
 
-## 2. Run it in your query
+```mermaid
+flowchart LR
+    accTitle: Compilation result
+    accDescr: udfx compiles a function with input types and a backend into an engine expression, or reports why it is unsupported.
+    function["Python function"] --> compiler["udfx.compile"]
+    inputs["Input types + backend"] --> compiler
+    compiler --> supported{"Supported?"}
+    supported -->|Yes| expression["translation.expr"]
+    supported -->|No| reason["translation.unsupported"]
+```
+
+Compilation does not process input rows. For example, `text.strip().lower()` becomes
+string operations for your engine.
+
+## Execute
 
 Check `translation.ok`, then pass `translation.expr` to your dataframe query.
-Your engine executes the expression when you run the query. Native operations avoid
-calling the Python function for each row they handle.
+Your engine optimizes and executes the query.
 
-## 3. Preserve Python behavior
+## Fallback
 
-When native behavior can differ from Python, udfx adds checks to choose the correct path.
-Rows that fail those checks run the original Python function as a fallback.
-If udfx cannot compile the function, `translation.ok` is false and `translation.unsupported`
-explains why.
+Guards select native results where they preserve Python behavior.
+Other rows run the original Python function.
 
-Use [explain](explain.md) to inspect native execution and fallback conditions.
+```mermaid
+flowchart LR
+    accTitle: Row execution
+    accDescr: Guards select a native result when valid. Other rows run the original Python function.
+    row["Input row"] --> guard{"Native path valid?"}
+    guard -->|Yes| native["Use native result"]
+    guard -->|No| fallback["Run Python UDF"]
+    native --> result["Result"]
+    fallback --> result
+```
 
-Next: [run your first query](quickstart.md).
+Native errors or Python fallback can raise an exception and fail the query.
+
+Use [udfx.explain](explain.md) to inspect native execution and fallback conditions.
+
+Compile your first function with [Quick Start](quickstart.md).

@@ -1,4 +1,4 @@
-# Public datasets
+# Public Datasets
 
 ## Included suites
 
@@ -18,13 +18,14 @@ uv run pytest -m public
 Downloads live under `.cache/workloads`. Source manifests pin URLs, checksums, selection,
 and provenance. A checksum change fails preparation. Tests never fetch data.
 The repository contains 32-row BTS and NYC samples for offline checks.
-`--rows` takes a prefix; it never repeats rows to claim a larger dataset.
+`--rows` takes a prefix without repeating rows.
 
 UDFBench source stays in the local cache with its upstream GPL provenance. Its README
-lists 24 scalar UDFs; the Spark directory contains 25 Python files, including `jsonparse`.
-The inventory keeps all 25. `addnoise` has an explicit nondeterminism exclusion.
-Unsupported deterministic functions remain in scope. Aggregate and table UDFs are outside
-this scalar compiler evaluation.
+lists 24 scalar UDFs. The `Spark` directory contains 25 Python files, including `jsonparse`.
+The inventory keeps all 25. `addnoise` uses distribution validation because it is random.
+Unsupported deterministic functions remain in the inventory. The current
+[Performance](index.md#performance) covers 24 functions and excludes `stem` because of
+large-plan costs. Aggregate and table UDFs are outside this scalar compiler evaluation.
 
 ## Extend
 

@@ -1,4 +1,4 @@
-# udfx
+# <img src="https://raw.githubusercontent.com/guan404ming/udfx/main/docs/assets/logo.svg" alt="" height="32"> udfx
 
 [![CI](https://github.com/guan404ming/udfx/actions/workflows/ci.yml/badge.svg)](https://github.com/guan404ming/udfx/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue.svg)](pyproject.toml)
@@ -6,7 +6,7 @@
 
 **An optimizing compiler for Python UDFs**
 
-Run your Python UDFs as native expressions in Polars, DuckDB, DataFusion, and Spark,
+Run your Python UDFs as native expressions in Polars, DuckDB, Apache DataFusion, and Apache Spark,
 without any manual rewrites.
 
 ## Install
@@ -16,7 +16,7 @@ pip install "udfx[polars]"
 ```
 
 Choose the extra for your backend: `polars`, `duckdb`, `datafusion`, or `spark`.
-Spark also needs Java 21.
+Apache Spark also needs Java 21.
 
 ## Quick start
 
@@ -47,11 +47,11 @@ Declare nullable columns with `.or_none()`. Unsupported functions return `ok == 
 
 ## Documentation
 
-- [User Guide](https://guan404ming.github.io/udfx/): installation, backends, and Python support
-- [API Reference](https://guan404ming.github.io/udfx/api/): compile, types, and explain
-- [Contributor Guide](https://guan404ming.github.io/udfx/contributing/): development and documentation
+- [User Guide](https://guan404ming.github.io/udfx/user-guide/): installation, backends, and Python support
+- [Reference API](https://guan404ming.github.io/udfx/api/): compile, types, and explain
+- [Contributor Guide](https://guan404ming.github.io/udfx/contributor-guide/): development and documentation
 
-Explore [measured speedups and trade-offs](https://guan404ming.github.io/udfx/performance/)
+Explore [measured speedups and trade-offs](https://guan404ming.github.io/udfx/#performance)
 across all four engines.
 
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Apache-2.0 license](LICENSE)

@@ -1,4 +1,4 @@
-# Spark
+# Apache Spark
 
 ## Install
 
@@ -33,14 +33,14 @@ The result contains `hel` and `wor`.
 
 ## Execution
 
-udfx uses Spark expressions and a bundled JVM runtime for word frequency ranking
-and JSON string encoding. Spark loads the runtime when a query first needs it.
+udfx uses Apache Spark expressions and a bundled JVM runtime for word frequency ranking
+and JSON string encoding. Apache Spark loads the runtime when a query first needs it.
 No additional download or compilation is required.
 
 `udfx.explain()` identifies runtime UDFs separately from built-in expressions
-and Python fallback. If Spark rejects runtime registration, udfx reports a warning
+and Python fallback. If Apache Spark rejects runtime registration, udfx reports a warning
 and uses its existing expression implementation.
 
-Runtime UDFs execute in Spark's JVM. They do not imply native execution in Comet.
+Runtime UDFs execute in Apache Spark's JVM. They do not imply native execution in Apache DataFusion Comet.
 
-See [Comet integration](../comet.md) for native execution with Comet.
+See [Apache DataFusion Comet](../comet.md) for native execution with Apache DataFusion Comet.

@@ -1,18 +1,18 @@
-# Spark benchmark record
+# Apache Spark benchmark record
 
 udfx can remove Python UDF execution, but native expressions can also be slower. Measure the
 query and data distribution you intend to deploy. A correct fallback does not guarantee a
 speedup.
 
-## Recorded Spark development run
+## Recorded Apache Spark development run
 
 The [measurements](spark.csv) contain all 165 cases from each of three complete
 sweeps. Each case used one million rows and the best of three timings. Each sweep measured
-both pickled and Arrow Python UDFs and selected the faster baseline. Output values were
+both pickled and Apache Arrow Python UDFs and selected the faster baseline. Output values were
 checked before timing. No cases were skipped.
 
-The machine used an AMD Ryzen 9 9950X with 32 logical CPUs, CPython 3.12.13, Spark 4.2.0,
-and Java 21. Spark ran locally; the GPU was not used. These are results from a development
+The machine used an AMD Ryzen 9 9950X with 32 logical CPUs, CPython 3.12.13, Apache Spark 4.2.0,
+and Java 21. Apache Spark ran locally without the GPU. These are results from a development
 snapshot before the release-packaging and explain changes, not results for a published tag.
 The benchmark used `local[*]`, an 8 GB driver, UTC, and `TIMESTAMP_NTZ`. It timed a hash-and-sum
 action over cached input. Input creation, compilation, and result checks were outside the timed

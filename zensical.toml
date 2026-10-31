@@ -8,46 +8,70 @@ edit_uri = "edit/main/docs/"
 exclude_docs = "benchmarks/*.md"
 extra_css = ["stylesheets/extra.css"]
 nav = [
-    { "Home" = [
-        { "Overview" = "index.md" },
-        { "How It Works" = "how-it-works.md" },
-        { "Performance" = "performance.md" },
-    ] },
+    { "Home" = "index.md" },
     { "User Guide" = [
+        { "Overview" = "user-guide.md" },
         { "Getting Started" = [
             { "Installation" = "installation.md" },
             { "Quick Start" = "quickstart.md" },
+        ] },
+        { "Core Concepts" = [
+            { "How It Works" = "how-it-works.md" },
+            { "Supported Patterns" = "python.md" },
         ] },
         { "Backends" = [
             { "Overview" = "backends.md" },
             { "Polars" = "backends/polars.md" },
             { "DuckDB" = "backends/duckdb.md" },
-            { "DataFusion" = "backends/datafusion.md" },
-            { "Spark" = [
+            { "Apache DataFusion" = "backends/datafusion.md" },
+            { "Apache Spark" = [
                 { "Overview" = "backends/spark.md" },
-                { "Comet" = "comet.md" },
+                { "Apache DataFusion Comet" = "comet.md" },
             ] },
         ] },
-        { "Python Support" = "python.md" },
     ] },
-    { "API Reference" = [
-        { "Compile and Types" = "api.md" },
-        { "Explain" = "explain.md" },
+    { "Reference API" = [
+        { "Overview" = "api.md" },
+        { "Python API" = [
+            { "udfx.compile" = "compile.md" },
+            { "udfx.explain" = "explain.md" },
+            { "udfx.types" = "types.md" },
+        ] },
     ] },
     { "Contributor Guide" = [
-        { "Development" = "contributing.md" },
-        { "Compiler Structure" = "architecture.md" },
-        { "Tests and Coverage" = "testing.md" },
-        { "Benchmarking" = "benchmarking.md" },
-        { "Public Datasets" = "datasets.md" },
+        { "Overview" = "contributor-guide.md" },
+        { "Development" = [
+            { "Development Setup" = "contributing.md" },
+            { "Compiler Structure" = "architecture.md" },
+        ] },
+        { "Validation" = [
+            { "Testing" = "testing.md" },
+            { "Benchmarking" = "benchmarking.md" },
+            { "Public Datasets" = "datasets.md" },
+        ] },
     ] },
 ]
 
 [project.theme]
 language = "en"
+logo = "assets/logo.svg"
+favicon = "assets/logo.svg"
 features = [
     "navigation.tabs",
+    "navigation.sections",
     "navigation.path",
     "navigation.footer",
     "content.code.copy",
 ]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"

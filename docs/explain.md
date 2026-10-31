@@ -1,9 +1,9 @@
-# Explain
+# udfx.explain
 
 ## Generate a report
 
-Use `udfx.explain(function, schema, backend="polars")` to inspect a compilation.
-It returns diagnostic text.
+`udfx.explain(function, schema, backend="polars", *, result=None)` returns diagnostic text.
+Use the same schema and result type as [udfx.compile](compile.md).
 
 ```python
 import udfx
@@ -24,19 +24,20 @@ print(udfx.explain(float_text, {"value": FLOAT}))
 | `Status: native` | Engine expressions need no Python fallback or runtime UDF |
 | `Status: runtime` | Compiled runtime UDFs run without Python fallback |
 | `Status: guarded` | Some rows may need Python fallback |
-| `Status: unsupported` | Compilation failed; a reason follows |
+| `Status: Python` | Nondeterministic functions run all rows in Python |
+| `Status: unsupported` | Compilation failed with a reason |
 | `Native guard` | False or null sends a row to Python |
 | `Reason` | Why a fallback path exists |
 | `Fault handling` | Native errors, Python fallback, or no fault path |
 | `Compile time` | Compilation time, including engine setup and probes |
-| `Runtime UDFs` | Runtime calls emitted during lowering; not measured invocations |
+| `Runtime UDFs` | Emitted runtime calls, not measured invocations |
 
 ## Limits
 
 The report uses the normal compilation path. It does not run input rows or measure the share
-of fallback rows. Spark still needs a session and Java.
+of fallback rows. Apache Spark still needs a session and Java.
 
 A native plan can be slower than a Python UDF. Measure the actual query with your data.
 The report format is diagnostic text and is not a stable API.
 
-Next: [performance measurements](performance.md).
+See [Performance](index.md#performance) for measured speedups.

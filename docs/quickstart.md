@@ -1,6 +1,6 @@
-# Quick start
+# Quick Start
 
-Install [the Polars extra](installation.md), then run these steps in order.
+Install the Polars extra using [Installation](installation.md), then follow these steps.
 
 ## 1. Compile a function
 
@@ -35,4 +35,4 @@ print(result["name"].to_list())
 Use `udfx.explain(normalize, {"text": STR})` to inspect native execution and fallback reasons.
 Declare nullable columns with `.or_none()`. Unsupported functions return `ok == False` with a reason.
 
-Next, choose a [backend](backends.md).
+See [Backends](backends.md) for examples on each engine.

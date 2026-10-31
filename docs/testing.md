@@ -1,4 +1,4 @@
-# Tests and coverage
+# Testing
 
 ## Run checks
 
@@ -10,7 +10,7 @@ uv run pytest -m public
 ```
 
 The fast tier checks conformance and offline data workloads on all four engines.
-The full tier adds every frontend backend and Spark with ANSI off.
+The full tier adds every frontend backend and Apache Spark with ANSI off.
 Nightly CI also checks Python 3.12, 3.13, and 3.14.
 The public test checks upstream UDF results against Python without running benchmark timings.
 It requires at least 22 of 24 deterministic UDFBench UDFs on each engine. Guarded cases must

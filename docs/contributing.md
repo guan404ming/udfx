@@ -1,6 +1,6 @@
-# Development
+# Development Setup
 
-## Set up and check
+## Setup
 
 ```sh
 uv sync --locked
@@ -11,10 +11,10 @@ uv run pytest
 uv run pytest -m corpus
 ```
 
-Spark needs Java 21. Use `UDFX_TESTS=full uv run pytest` for all engine configurations.
+Apache Spark needs Java 21. Use `UDFX_TESTS=full uv run pytest` for all engine configurations.
 The default test run uses the fast tier.
 
-After editing Spark runtime Java sources, run
+After editing Apache Spark runtime Java sources, run
 `uv run python tools/build_spark_runtime.py` with JDK 21.
 Commit the sources, bundled JAR, and runtime metadata together.
 CI checks them with `uv run python tools/build_spark_runtime.py --check`.
@@ -31,7 +31,7 @@ Open `http://localhost:8000`. The build writes static files to `site/`.
 Dependencies use the existing `pyproject.toml` and `uv.lock`.
 
 Keep one topic per page. Aim for 150–250 words and stay below 350 words, including examples.
-Put detailed measurement records in linked reports. Keep `zensical.toml` navigation in sync.
+List every published page in `zensical.toml`. Keep detailed measurement records outside the site.
 
 Use one H1 per page. Use H2 for sections and H3 for subsections. Do not skip heading levels.
 
@@ -43,7 +43,7 @@ Pull requests build the docs without deploying them.
 ## Make a change
 
 Keep Python semantics in shared modules and engine calls in each backend.
-Follow the [compiler structure](architecture.md) and the repository's
+Follow [Compiler Structure](architecture.md) and the repository's
 [contribution rules](https://github.com/guan404ming/udfx/blob/main/CONTRIBUTING.md).
 
 Add trap values when a change fixes a semantic gap. Keep each code file at 250 lines or fewer.

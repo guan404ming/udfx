@@ -1,4 +1,4 @@
-# DataFusion
+# Apache DataFusion
 
 ## Install
 
@@ -30,7 +30,7 @@ The result contains `hel` and `wor`.
 ## Large functions
 
 Large helper chains require an engine with the nested lambda planning fixes.
-The stock DataFusion Python 55.0.0 build does not support these plans.
+The stock Apache DataFusion Python 55.0.0 build does not support these plans.
 udfx checks planning support and reports unsupported functions before execution.
 
 The [engine patches](https://github.com/guan404ming/udfx/tree/main/patches/datafusion)
