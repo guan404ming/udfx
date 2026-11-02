@@ -5,7 +5,7 @@ import pytest
 from tests.frontend.streams import VERSION_IDS, VERSIONS, Version, traced
 from udfx.errors import Unsupported
 from udfx.frontend import trace
-from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
+from udfx.frontend.core.logic import disjunction, fold
 from udfx.ir import FALSE, Col, Lit
 from udfx.ops import apply
 from udfx.types import INT, STR
@@ -47,7 +47,7 @@ def test_nullable_container_faults_first() -> None:
     program = trace(first, {"s": s.type})
     missing = apply("is_none", s)
     (index,) = apply("__getitem__", s, Lit(0, INT)).op.faults(s, Lit(0, INT))
-    assert program.fault == disjunction(missing, conjunction(negate(missing), index.when))
+    assert program.fault == disjunction(missing, index.when)
 
 
 def test_literal_slice_step() -> None:
@@ -104,7 +104,7 @@ def test_suffix_slice_reuses_split(pattern: str, offset: int, rewritten: bool) -
     start = apply("__add__", apply(".rfind", S, separator), Lit(offset, INT))
     node = apply("slice", S, start, OPEN)
     expected = apply("last_split", S, separator)
-    assert fold(node) == (expected if rewritten else node)
+    assert fold(node) == (expected if rewritten else apply("slice", S, fold(start), OPEN))
 
 
 def test_suffix_slice_compiles_without_search() -> None:

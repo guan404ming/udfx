@@ -4,31 +4,15 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, cast
 
+from udfx.backends.graph_cost import operation_count
 from udfx.backends.rules import Lowered, Scope
 from udfx.errors import Unsupported
+from udfx.graphs import free
 from udfx.ir import Call, Col, Comprehension, Element, If, Node, children
 from udfx.types import Kind
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
-
-
-def free(node: Node) -> frozenset[Element]:
-    seen: dict[int, frozenset[Element]] = {}
-
-    def visit(part: Node) -> frozenset[Element]:
-        if id(part) not in seen:
-            if isinstance(part, Element):
-                result = frozenset({part})
-            elif isinstance(part, Comprehension):
-                inner = visit(part.value) | visit(part.condition) | visit(part.fault)
-                result = visit(part.source) | (inner - {part.element})
-            else:
-                result = frozenset().union(*(visit(child) for child in children(part)))
-            seen[id(part)] = result
-        return seen[id(part)]
-
-    return visit(node)
 
 
 def reads_input(node: Node) -> bool:
@@ -146,12 +130,9 @@ def hoist[E](
             definition, lambda reference: cast("E", getattr(inner(reference), field))
         )
 
-    return Lowered(expr, bound("exact"), bound("overflow"))
+    exact = False if found[0].exact is False else bound("exact")
+    return Lowered(expr, exact, bound("overflow"))
 
 
 def worth_binding(node: Node, occurrences: int) -> bool:
-    def cost(part: Node) -> int:
-        parts = children(part)
-        return int(bool(parts)) + sum(cost(child) for child in parts)
-
-    return cost(node) * (occurrences - 1) > 3
+    return operation_count(node) * (occurrences - 1) > 3

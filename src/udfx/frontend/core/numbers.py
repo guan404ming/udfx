@@ -1,8 +1,55 @@
 from udfx.ir import Call, Lit, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics.assumptions import NEGATED, REVERSED
-from udfx.semantics.numbers import integer_comparison
+from udfx.semantics.numbers import FLOAT_INT_MAX, integer_comparison
 from udfx.types import INT64_MAX, INT64_MIN, Kind
+
+ARITHMETIC = frozenset(
+    {"__add__", "__sub__", "__mul__", "__truediv__", "__floordiv__", "__mod__", "__pow__"}
+)
+
+
+def float_literal(node: Node) -> Node:
+    if not isinstance(node, Lit) or node.type.kind is not Kind.INT:
+        return node
+    value = node.value
+    if not isinstance(value, int) or abs(value) > FLOAT_INT_MAX:
+        return node
+    return lit(float(value))
+
+
+def widen_literals(node: Call) -> Node:
+    if node.op.name not in NEGATED and node.op.name not in ARITHMETIC:
+        return node
+    if {argument.type.kind for argument in node.arguments} != {Kind.FLOAT, Kind.INT}:
+        return node
+    arguments = tuple(float_literal(argument) for argument in node.arguments)
+    if arguments == node.arguments:
+        return node
+    return apply(node.op.name, *arguments)
+
+
+IDENTITIES = {
+    ("__add__", Kind.STR): ("", True),
+    ("__add__", Kind.INT): (0, True),
+    ("__sub__", Kind.INT): (0, False),
+    ("__mul__", Kind.INT): (1, True),
+    ("__mul__", Kind.FLOAT): (1.0, True),
+    ("__truediv__", Kind.FLOAT): (1.0, False),
+}
+
+
+def identity(node: Call) -> Node:
+    found = IDENTITIES.get((node.op.name, node.type.kind))
+    if found is None:
+        return node
+    value, commutative = found
+    left, right = node.arguments
+    if right == lit(value) and left.type == node.type:
+        return left
+    if commutative and left == lit(value) and right.type == node.type:
+        return right
+    return node
 
 
 def simplify_number(node: Call) -> Node:

@@ -1,8 +1,9 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from udfx.ir import Call, Node
+from udfx.ir import Call, Node, children
+from udfx.semantics.bindings import source
 from udfx.semantics.numbers import ARITHMETIC
 from udfx.semantics.ranges import integer_bounds
 from udfx.types import INT64_MAX, INT64_MIN, Kind
@@ -24,6 +25,19 @@ def integer_arithmetic(node: Node) -> bool:
         and node.op.name in ARITHMETIC
         and all(argument.type.kind is Kind.INT for argument in node.arguments)
     )
+
+
+def integer_dependencies(node: Node) -> Iterator[Node]:
+    pending = [node]
+    seen: set[int] = set()
+    while pending:
+        part = pending.pop()
+        if id(part) in seen:
+            continue
+        seen.add(id(part))
+        if part is node or part.type.kind is Kind.INT:
+            yield part
+        pending.extend(children(source(part)))
 
 
 def integer_region(node: Node, maximum: int, size_limit: int) -> frozenset[Node]:

@@ -47,7 +47,7 @@ def test_guarded_cases_share_one_pending_fallback(backend: Backend[Any], nested_
     assert backend.evaluate([expr], schema, rows) == [program.run(rows)]
     assert backend.evaluate([fallback.call_args.args[1]], schema, rows) == [[False] * len(rows)]
     assert details[-1].exact is not None
-    native = backend.evaluate([details[-1].exact], schema, rows)[0]
+    native = backend.evaluate([backend.predicate(details[-1].exact)], schema, rows)[0]
     assert [flag is True for flag in native] == [
         valid is True and (exact is True if bool(first) == nested_then else True)
         for first, valid, _second, exact in rows

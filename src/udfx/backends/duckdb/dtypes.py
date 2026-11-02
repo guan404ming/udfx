@@ -6,6 +6,7 @@ from duckdb import sqltypes
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, sqltypes.DuckDBPyType] = {
+    Kind.DATE: sqltypes.DATE,
     Kind.DATETIME: sqltypes.TIMESTAMP,
     Kind.JSON: sqltypes.VARCHAR,
     Kind.STR: sqltypes.VARCHAR,

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -37,9 +38,11 @@ def resolution_hours(created: datetime | None, closed: datetime | None) -> float
     return (closed - created).total_seconds() / 3600.0
 
 
-def load(root: Path) -> list[Workload]:
+def load(
+    root: Path, cases: set[str] | None = None, *, load_functions: bool = True
+) -> list[Workload]:
     table = root / "nyc311" / "requests.parquet"
-    return [
+    workloads = [
         Workload(
             "nyc311",
             "postal_code",
@@ -80,4 +83,10 @@ def load(root: Path) -> list[Workload]:
             {"created": "created_date", "closed": "closed_date"},
             "agency",
         ),
+    ]
+
+    return [
+        workload if load_functions else replace(workload, function=None)
+        for workload in workloads
+        if cases is None or workload.identifier in cases
     ]

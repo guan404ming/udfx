@@ -11,6 +11,7 @@ from udfx.program import Program
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, pa.DataType] = {
+    Kind.DATE: pa.date32(),
     Kind.DATETIME: pa.timestamp("us"),
     Kind.JSON: pa.string(),
     Kind.STR: pa.string(),

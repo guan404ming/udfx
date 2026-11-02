@@ -9,6 +9,7 @@ from udfx.backends.spark.rules import INTEGER_FITS, RULES, when
 from udfx.backends.spark.runtime import call
 from udfx.backends.spark.slicing import SEQUENCE
 from udfx.backends.spark.strings import characters, list_contains
+from udfx.frontend.core.comprehensions import character_count
 from udfx.semantics.facts import nullable_arguments, simple_arguments
 from udfx.semantics.frequencies import (
     FrequencyOffsetPrimitives,
@@ -16,12 +17,21 @@ from udfx.semantics.frequencies import (
     offset_frequencies,
     ordered_frequencies,
 )
-from udfx.semantics.lists import ListPrimitives, SetPrimitives
+from udfx.semantics.lists import ListPrimitives, SetPrimitives, literal_index
 from udfx.semantics.sequences import take_prefix
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
+
+
+@RULES(".index", Kind.LIST, Kind.STR, literals=(0,))
+def index(value: Column | list[str] | tuple[str, ...] | None, item: Column) -> Column:
+    if value is None:
+        return functions.lit(0)
+    if not isinstance(value, Column):
+        return literal_index(functions.lit, when, value, item)
+    return functions.array_position(value, item) - functions.lit(1)
 
 
 @RULES("__contains__", Kind.LIST, Kind.STR, literals=(0,), facts={"nullable": nullable_arguments})
@@ -195,3 +205,6 @@ register_lists(
         difference=functions.array_except,
     ),
 )
+
+
+RULES.rewrite("sum", Kind.LIST)(character_count)

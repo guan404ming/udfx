@@ -47,7 +47,12 @@ def measure(
     native_rows = (
         data.table.num_rows
         if exact is None
-        else sum(value is True for value in adapter.execute(exact, "memory").column(1).to_pylist())
+        else sum(
+            value is True
+            for value in adapter.execute(adapter.backend.predicate(exact), "memory")
+            .column(1)
+            .to_pylist()
+        )
     )
     runtime_udfs = details[-1].runtime_udfs
     status = (

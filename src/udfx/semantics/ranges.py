@@ -15,6 +15,8 @@ from udfx.semantics.assumptions import (
     predicates,
 )
 from udfx.semantics.bindings import SOURCES, source
+from udfx.semantics.comparisons import constant_comparison, float_fact
+from udfx.semantics.dates import MAXIMUM_DIFFERENCE
 from udfx.semantics.lists import SET_OPERATIONS
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -91,6 +93,16 @@ def integer_bounds(
     return bounds
 
 
+def count_bounds(node: Call, size_limit: int) -> tuple[int, int]:
+    text, pattern = node.arguments
+    length = maximum_length(text)
+    maximum = size_limit if length is None else length
+    pattern = source(pattern)
+    if isinstance(pattern, Lit) and isinstance(pattern.value, str):
+        return (0, maximum // len(pattern.value)) if pattern.value else (1, maximum + 1)
+    return 0, maximum + 1
+
+
 def intrinsic_bounds(node: Node, size_limit: int, conditions: Conditions) -> tuple[int, int] | None:
     if node.type.kind not in (Kind.INT, Kind.BOOL):
         return None
@@ -108,6 +120,8 @@ def intrinsic_bounds(node: Node, size_limit: int, conditions: Conditions) -> tup
         return combine(left, right)
     if not isinstance(node, Call):
         return None
+    if node.op.name == "date_difference":
+        return -MAXIMUM_DIFFERENCE, MAXIMUM_DIFFERENCE
     return call_bounds(node, size_limit, conditions)
 
 
@@ -121,7 +135,7 @@ def call_bounds(node: Call, size_limit: int, conditions: Conditions) -> tuple[in
     if node.op.name in {".find", ".rfind"}:
         return -1, size_limit
     if node.op.name == ".count":
-        return 0, size_limit + 1
+        return count_bounds(node, size_limit)
     if node.op.name == "__getitem__":
         return element_bounds(node.arguments[0], size_limit, conditions)
     if node.op.name == "__mod__":
@@ -208,30 +222,11 @@ def proven(node: Node) -> bool | None:
     for predicate, truth in CONDITIONS.get():
         if node == predicate:
             return truth
-    if not isinstance(node, Call) or node.op.name not in NEGATED:
-        return None
+    floating = float_fact(node) if isinstance(node, Call) else None
+    if floating is not None or not isinstance(node, Call) or node.op.name not in NEGATED:
+        return floating
     constant = constant_comparison(node)
     if constant is not None:
         return constant
     left, right = (integer_bounds(argument, INT64_MAX) for argument in node.arguments)
     return compare(node.op.name, left, right) if left is not None and right is not None else None
-
-
-def constant_comparison(node: Call) -> bool | None:
-    left, right = node.arguments
-    for index, argument in enumerate(node.arguments):
-        if isinstance(argument, If) and isinstance(node.arguments[1 - index], Lit):
-            results = [
-                constant_comparison(
-                    Call(node.op, (branch, right) if index == 0 else (left, branch))
-                )
-                for branch in (argument.then, argument.orelse)
-            ]
-            return results[0] if results[0] is not None and results[0] == results[1] else None
-    if not isinstance(left, Lit) or not isinstance(right, Lit):
-        return None
-    try:
-        result = node.op.reference(left.value, right.value)
-        return result if isinstance(result, bool) else None
-    except (TypeError, ValueError):
-        return None

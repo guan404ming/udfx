@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Container, Sequence
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from udfx.backends.rules import Lowered, Scope
-from udfx.graphs import substitute
-from udfx.ir import FALSE, TRUE, Col, Comprehension, Element, Lit, Node, children
+from udfx.graphs import free, substitute
+from udfx.ir import FALSE, Col, Comprehension, Element, Lit, Node, children
 from udfx.semantics.bindings import bound_sources
 
 if TYPE_CHECKING:
@@ -14,7 +15,23 @@ if TYPE_CHECKING:
 
 
 def dependencies(node: Node) -> tuple[Node, ...]:
-    return (node.source,) if isinstance(node, Comprehension) else children(node)
+    if not isinstance(node, Comprehension):
+        return children(node)
+    outer = free(node)
+    found: dict[int, Node] = {}
+
+    def visit(part: Node) -> None:
+        if id(part) in found or isinstance(part, Element | Lit):
+            return
+        if free(part) <= outer:
+            found[id(part)] = part
+            return
+        for child in children(part):
+            visit(child)
+
+    for part in (node.value, node.condition, node.fault):
+        visit(part)
+    return (node.source, *found.values())
 
 
 def layers(roots: Sequence[Node], incoming: Scope[object]) -> tuple[list[Node], list[list[Node]]]:
@@ -95,7 +112,7 @@ def lower_block[E](
             ]
         )
     }
-    metadata: list[tuple[bool, bool]] = []
+    metadata: list[tuple[bool | None, bool]] = []
     sources = {
         symbols[id(node)]: substitute(
             node, {key: symbol for key, symbol in symbols.items() if key != id(node)}
@@ -112,31 +129,36 @@ def lower_block[E](
                 {symbols[key]: value for key, value in local.items()},
             )
 
-    def pack(local: dict[int, Lowered[E]]) -> tuple[E, dict[int, tuple[int, bool, bool]]]:
+    def exact_state(value: Lowered[E]) -> bool | None:
+        return None if value.exact is None else value.exact is not False
+
+    def pack(local: dict[int, Lowered[E]]) -> tuple[E, dict[int, tuple[int, bool | None, bool]]]:
         values: list[E] = []
-        offsets: dict[int, tuple[int, bool, bool]] = {}
+        offsets: dict[int, tuple[int, bool | None, bool]] = {}
         for key, value in local.items():
-            offsets[key] = len(values), value.exact is not None, value.overflow is not None
+            offsets[key] = len(values), exact_state(value), value.overflow is not None
             values.append(value.expr)
-            if value.exact is not None:
-                values.append(value.exact)
+            if value.exact is not None and value.exact is not False:
+                values.append(backend.predicate(value.exact))
             if value.overflow is not None:
                 values.append(value.overflow)
         return backend.record(values), offsets
 
-    def unpack(record: E, offsets: dict[int, tuple[int, bool, bool]]) -> dict[int, Lowered[E]]:
+    def unpack(
+        record: E, offsets: dict[int, tuple[int, bool | None, bool]]
+    ) -> dict[int, Lowered[E]]:
         return {
             key: Lowered(
                 backend.field(record, offset),
-                backend.field(record, offset + 1) if exact else None,
-                backend.field(record, offset + 1 + exact) if overflow else None,
+                False if exact is False else backend.field(record, offset + 1) if exact else None,
+                backend.field(record, offset + 1 + (exact is True)) if overflow else None,
             )
             for key, (offset, exact, overflow) in offsets.items()
         }
 
     def advance(
         index: int, local: dict[int, Lowered[E]]
-    ) -> tuple[E, dict[int, tuple[int, bool, bool]]]:
+    ) -> tuple[E, dict[int, tuple[int, bool | None, bool]]]:
         variables = {**local, **{id(node): lower(node, local) for node in groups[index]}}
         required = needed(
             [*roots, *(node for group in groups[index + 1 :] for node in group)], variables
@@ -156,11 +178,11 @@ def lower_block[E](
     def output(value: E) -> E:
         local = unpack(value, offsets)
         lowered = finish([lower(node, local) for node in roots])
-        metadata.append((lowered.exact is not None, lowered.overflow is not None))
+        metadata.append((exact_state(lowered), lowered.overflow is not None))
         return backend.record(
             [
                 lowered.expr,
-                lowered.exact if lowered.exact is not None else backend.literal(TRUE),
+                backend.predicate(lowered.exact),
                 lowered.overflow if lowered.overflow is not None else backend.literal(FALSE),
             ]
         )
@@ -169,8 +191,17 @@ def lower_block[E](
         record, [*(step(index) for index in range(1, len(groups))), output]
     )
     exact, overflow = metadata[0]
-    return Lowered(
-        backend.field(result, 0),
-        backend.field(result, 1) if exact else None,
-        backend.field(result, 2) if overflow else None,
+
+    def fields(value: E) -> Lowered[E]:
+        return Lowered(
+            backend.field(value, 0),
+            False if exact is False else backend.field(value, 1) if exact else None,
+            backend.field(value, 2) if overflow else None,
+        )
+
+    return replace(
+        fields(result),
+        prepare=(lambda finish: backend.bind(result, lambda value: finish(fields(value))))
+        if exact is True or overflow
+        else None,
     )

@@ -2,6 +2,7 @@ import importlib
 import json
 import random
 from dataclasses import replace
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from bench.runner import ENGINES, run
 from bench.timing import Settings
 from bench.validation import validate
 from udfx.frontend import trace
-from udfx.types import FLOAT, INT, STR
+from udfx.types import DATE, FLOAT, INT, STR
 from workloads.catalog import load
 from workloads.models import Workload
 from workloads.storage import FIXTURES
@@ -153,3 +154,23 @@ def test_all_fallback_benchmark_reports_python_execution(engine: str, tmp_path: 
     assert all(result["status"] == "python" for result in results), results
     assert all(result["validation"] == "exact" for result in results)
     assert all(result["native_rows"] == result["compiled_udfs"] == 0 for result in results)
+
+
+@pytest.mark.parametrize("engine", PARAMETERS)
+def test_date_workload_preserves_dates_across_baselines(engine: str, tmp_path: Path) -> None:
+    path = tmp_path / "dates.parquet"
+    values = [date.min, date(1969, 12, 31), date(2000, 2, 28), date(9999, 12, 30), None]
+    parquet.write_table(pyarrow.table({"value": pyarrow.array(values, pyarrow.date32())}), path)
+    workload = Workload(
+        "test",
+        "date_shift",
+        lambda value: value + timedelta(days=1) if value is not None else None,
+        {"value": DATE.or_none()},
+        DATE.or_none(),
+        path,
+        {"value": "value"},
+    )
+    results = run(workload, [engine], Settings(warmups=0, rounds=1), tmp_path / "inputs")
+    assert all(result["status"] in {"native", "guarded"} for result in results), results
+    assert all(result["validation"] == "exact" for result in results)
+    assert all(result["total_rows"] == len(values) for result in results)

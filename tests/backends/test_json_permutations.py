@@ -58,7 +58,9 @@ def test_json_permutation_guard_uses_source(backend: Backend[Any], words: bool) 
     with patch.object(backend.rules, "rewrite_call", previous_serializer):
         previous = backend.lower_program(program)
     assert lowered.exact is not None and previous.exact is not None
-    current, original = backend.evaluate([lowered.exact, previous.exact], schema, rows)
+    current, original = backend.evaluate(
+        [backend.predicate(lowered.exact), backend.predicate(previous.exact)], schema, rows
+    )
     assert [flag is True for flag in current] == [flag is True for flag in original]
     assert current[1:5] == [True] * 4
     transform = "list_transform" if backend.name == "duckdb" else "array_transform"

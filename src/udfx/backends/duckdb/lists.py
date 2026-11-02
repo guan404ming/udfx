@@ -12,8 +12,7 @@ from udfx.backends.duckdb.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
 from udfx.frontend.core.comprehensions import lowercase_words
 from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
-from udfx.semantics.lists import ListPrimitives, SetPrimitives
-from udfx.semantics.regex_patterns import literal_union
+from udfx.semantics.lists import ListPrimitives, SetPrimitives, literal_index
 from udfx.semantics.sequences import take_prefix
 from udfx.types import Kind
 
@@ -21,18 +20,25 @@ for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
 
 
+@RULES(".index", Kind.LIST, Kind.STR, literals=(0,))
+def index(value: Expression | list[str] | tuple[str, ...] | None, item: Expression) -> Expression:
+    if value is None:
+        return constant(0)
+    if not isinstance(value, Expression):
+        return literal_index(constant, when, value, item)
+    return function("list_position", value, item) - constant(1)
+
+
 @RULES("__contains__", Kind.LIST, Kind.STR, literals=(0,))
 def contains_strings(container: Expression | list | tuple, item: Expression) -> Expression:
     if isinstance(container, list | tuple):
-        pattern = literal_union(tuple(value for value in container if value is not None))
+        values = [constant(value) for value in container if value is not None]
         found = (
-            function("regexp_full_match", item, constant(pattern))
-            if pattern is not None
+            duckdb.CoalesceOperator(item.isin(*values), constant(False))
+            if values
             else constant(False)
         )
-        return duckdb.CoalesceOperator(found, constant(False)) | (
-            item.isnull() & constant(None in container)
-        )
+        return found | item.isnull() if None in container else found
     return list_contains(container, item)
 
 

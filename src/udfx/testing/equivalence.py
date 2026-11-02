@@ -9,7 +9,7 @@ from typing import Any
 from udfx.api import Translation, compile
 from udfx.backends.base import Backend, Row
 from udfx.errors import Unsupported
-from udfx.ir import TRUE, Call, Col, Lit
+from udfx.ir import Call, Col, Lit
 from udfx.ops import Fault, Op
 from udfx.testing.allocation import allocation_batches
 from udfx.testing.observation import record
@@ -194,7 +194,7 @@ def _prepare_op(
     faults = op.faults(*arguments)
     lowered = [backend.lower(fault.when) for fault in faults]
     exact_parts = [backend.exact(value), *(backend.exact(item) for item in lowered)]
-    exact = [part if part is not None else backend.literal(TRUE) for part in exact_parts]
+    exact = [backend.predicate(part) for part in exact_parts]
 
     exprs = [backend.column(columns[0]), value.expr, *exact, *(item.expr for item in lowered)]
     types = [columns[0].type, op.result, *([BOOL] * (len(exprs) - 2))]

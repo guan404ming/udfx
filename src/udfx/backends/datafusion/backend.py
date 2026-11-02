@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
+from functools import reduce
 from itertools import count
 from typing import ClassVar, cast
 
@@ -34,10 +36,14 @@ ROW = f"{RESERVED}row"
 FALLBACKS = count()
 
 
+LAMBDA_COST = 1000
+
+
 class DataFusionBackend(Backend[Expr]):
     name: ClassVar[str] = "datafusion"
     rules: ClassVar[RuleSet[Expr]] = RULES
     graphs: ClassVar[bool] = True
+    choose_graphs: ClassVar[bool] = True
 
     def __init__(self, context: SessionContext | None = None) -> None:
         self._context = context
@@ -48,11 +54,21 @@ class DataFusionBackend(Backend[Expr]):
             self._graphs = graphs.supported(self.context)
         return self._graphs
 
+    def expression_cost(self, expr: Expr) -> int:
+        text = expr.canonical_name()
+        return len(text) + LAMBDA_COST * text.count(") -> ")
+
     @property
     def context(self) -> SessionContext:
         if self._context is None:
             self._context = SessionContext()
         return self._context
+
+    def combine_guards(self, guards: Sequence[Expr]) -> Expr:
+        if len(guards) == 1:
+            return guards[0]
+        product = reduce(operator.mul, (guard.cast(pa.uint8()) for guard in guards))
+        return product == lit(1)
 
     def column(self, node: Col) -> Expr:
         return column(node.name)

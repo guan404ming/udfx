@@ -11,6 +11,7 @@ from udfx.ops.strings import out_of_range, slice_of
 from udfx.semantics.lists import (
     SET_OPERATIONS,
     SET_PREDICATES,
+    list_index,
     optional_item,
     range_list,
     set_list,
@@ -27,6 +28,13 @@ def frequency_order(values: list[str], count: int) -> list[str]:
 
 
 register(Op("frequency_order", (list_of(STR), INT), list_of(STR), frequency_order))
+
+
+def missing_item(values: Node, item: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("not", apply("__contains__", values, item))),)
+
+
+register(Op(".index", (list_of(STR), STR.or_none()), INT, list_index, missing_item))
 
 for item in (STR, INT, FLOAT, BOOL):
     sequence = list_of(item)

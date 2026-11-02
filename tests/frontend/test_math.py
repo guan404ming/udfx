@@ -60,6 +60,14 @@ CASES: list[tuple[Callable[..., object], dict[str, Type], str]] = [
     (lambda value: math.log(value, 2), {"value": INT}, "math.log"),
     (lambda value: math.log2(value), {"value": INT}, "math.log2"),
     (lambda value: math.exp(value), {"value": FLOAT}, "math.exp"),
+    (lambda value: math.sin(value), {"value": FLOAT}, "math.sin"),
+    (lambda value: math.cos(value), {"value": INT}, "math.cos"),
+    (lambda value: math.acos(value), {"value": FLOAT}, "math.acos"),
+    (
+        lambda vertical, horizontal: math.atan2(vertical, horizontal),
+        {"vertical": FLOAT, "horizontal": INT},
+        "math.atan2",
+    ),
 ]
 
 

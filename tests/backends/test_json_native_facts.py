@@ -84,7 +84,11 @@ def test_valid_json_reuses_native_shape(backend: Backend[Any], name: str, kind: 
     ]
     assert backend.evaluate([expr], program.schema, rows) == [program.run(rows)]
     assert before[-1].exact is not None and after[-1].exact is not None
-    flags = backend.evaluate([before[-1].exact, after[-1].exact], program.schema, rows)
+    flags = backend.evaluate(
+        [backend.predicate(before[-1].exact), backend.predicate(after[-1].exact)],
+        program.schema,
+        rows,
+    )
     assert flags[0] == flags[1]
 
 

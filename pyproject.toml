@@ -81,6 +81,7 @@ ignore = ["PLR2004", "PLR0911", "PLR0913", "N818"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/udfx/testing/strategies.py" = ["RUF001"]
+"src/udfx/testing/datetime_traps.py" = ["RUF001"]
 
 [tool.pyright]
 pythonVersion = "3.12"

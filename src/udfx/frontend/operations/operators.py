@@ -8,7 +8,7 @@ from udfx.frontend.core.evaluation import Evaluation, single
 from udfx.frontend.core.expressions import invoke, node_of, none_test, truth
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.values import Item, Opaque, Set, Tuple, Value
-from udfx.frontend.operations.datetimes import datetime_binary
+from udfx.frontend.operations.datetimes import datetime_binary, datetime_comparison
 from udfx.frontend.operations.formatting import format_percent
 from udfx.frontend.operations.sets import set_operator
 from udfx.frontend.resolve.constants import (
@@ -94,6 +94,9 @@ def comparison(symbol: str, left: Item, right: Item, where: str) -> Evaluation:
     name = COMPARE_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"comparison {symbol}", where)
+    temporal = datetime_comparison(symbol, left, right)
+    if temporal is not None:
+        return single(Value(temporal[0]), temporal[1])
     if name in ("__eq__", "__ne__"):
         if all(isinstance(item, Value) and isinstance(item.node, Lit) for item in (left, right)):
             return single(

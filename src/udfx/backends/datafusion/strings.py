@@ -9,7 +9,6 @@ import pyarrow as pa
 from datafusion import Expr, col, functions, lit
 
 from udfx.backends.datafusion.backend import DataFusionBackend
-from udfx.backends.datafusion.conversions import TEXT as TRANSLATION
 from udfx.backends.datafusion.rules import (
     RULES,
     array_transform,
@@ -22,13 +21,13 @@ from udfx.backends.registration import (
     Lowered,
     RuleResult,
     register_string_predicates,
-    register_translation,
 )
 from udfx.frontend.core.sequences import join_words, word_item
 from udfx.frontend.core.splitting import join_filtered_words, joined_tokens, split_item
 from udfx.frontend.core.text import folded_case_chain
+from udfx.frontend.core.translation import combined_replacements
 from udfx.semantics import text
-from udfx.semantics.facts import pattern_is_empty
+from udfx.semantics.facts import nullable_arguments, pattern_is_empty
 from udfx.semantics.sequences import SearchPrimitives, count_occurrences, reverse_find
 from udfx.semantics.text import (
     CASE_METHODS,
@@ -115,8 +114,14 @@ def rfind(text: Expr, pattern: Expr) -> Expr:
     return reverse_find(SEARCH, text, pattern)
 
 
-@RULES(".count", Kind.STR, Kind.STR)
-def count(text: Expr, pattern: Expr) -> Expr:
+@RULES(".count", Kind.STR, Kind.STR, literals=(1,))
+def count(text: Expr, pattern: Expr | str | None) -> Expr:
+    if isinstance(pattern, str):
+        if not pattern:
+            return length(text) + lit(1)
+        pieces = functions.string_to_array(text, lit(pattern))
+        return functions.greatest(list_len(pieces) - lit(1), lit(0))
+    pattern = lit(None).cast(pa.string()) if pattern is None else pattern
     removed = length(text) - length(functions.replace(text, pattern, lit("")))
     occurrences = removed / functions.greatest(length(pattern), lit(1))
     return count_occurrences(SEARCH, text, pattern, occurrences)
@@ -170,12 +175,14 @@ def str_add(left: Expr, right: Expr) -> Expr:
     return functions.concat(left, right)
 
 
-RULES("__eq__", Kind.STR, Kind.STR)(null_safe_equal)
+@RULES("__eq__", Kind.STR, Kind.STR, facts={"nullable": nullable_arguments})
+def str_eq(left: Expr, right: Expr, nullable: bool = True) -> Expr:
+    return null_safe_equal(left, right) if nullable else left == right
 
 
-@RULES("__ne__", Kind.STR, Kind.STR)
-def str_ne(left: Expr, right: Expr) -> Expr:
-    return ~null_safe_equal(left, right)
+@RULES("__ne__", Kind.STR, Kind.STR, facts={"nullable": nullable_arguments})
+def str_ne(left: Expr, right: Expr, nullable: bool = True) -> Expr:
+    return ~null_safe_equal(left, right) if nullable else left != right
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)
@@ -220,6 +227,7 @@ RULES.rewrite(".join", Kind.STR, Kind.LIST)(
 )
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(lambda node: split_item(node) or word_item(node))
 RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
+RULES.rewrite(".replace", Kind.STR, Kind.STR, Kind.STR)(combined_replacements)
 
 
 for method in CASE_METHODS:
@@ -239,6 +247,3 @@ CASE = CasePrimitives(
         array_transform(characters(value), transform, pa.string()), lit("")
     ),
 )
-
-
-register_translation(RULES, TRANSLATION)

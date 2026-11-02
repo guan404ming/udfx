@@ -16,6 +16,7 @@ from udfx.frontend.core.values import (
 from udfx.semantics.randomness import GAUSS, gauss
 
 CALLABLES: tuple[tuple[object, str], ...] = (
+    (datetime.date, ".date"),
     (GAUSS, "random.gauss"),
     (gauss, "random.gauss"),
     (Counter, "collections.Counter"),
@@ -53,6 +54,10 @@ CALLABLES: tuple[tuple[object, str], ...] = (
     (math.exp, "math.exp"),
     (math.log10, "math.log10"),
     (math.sqrt, "math.sqrt"),
+    (math.sin, "math.sin"),
+    (math.cos, "math.cos"),
+    (math.acos, "math.acos"),
+    (math.atan2, "math.atan2"),
     (re.compile, "re.compile"),
     (re.sub, "re.sub"),
     (re.search, "re.search"),

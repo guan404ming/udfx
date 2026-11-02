@@ -66,6 +66,7 @@ class DuckDBBackend(Backend[Expression]):
     rules: ClassVar[RuleSet[Expression]] = RULES
     binds: ClassVar[bool] = True
     graphs: ClassVar[bool] = True
+    choose_graphs: ClassVar[bool] = True
 
     def __init__(self, connection: duckdb.DuckDBPyConnection | None = None) -> None:
         self._connection = connection
@@ -81,9 +82,9 @@ class DuckDBBackend(Backend[Expression]):
         )
         return super().compose(value, program)
 
-    def build(self, program: Program) -> Expression:
-        with lowering_context() as context:
-            expr = super().build(program)
+    def build_candidate(self, program: Program) -> Expression:
+        with lowering_context(binds=self.binds) as context:
+            expr = super().build_candidate(program)
         if (
             context.has_bindings
             and program.schema
@@ -207,7 +208,7 @@ class DuckDBBackend(Backend[Expression]):
             )
         packed = function(
             "struct_pack",
-            exact.alias(EXACT),
+            constant(False).alias(EXACT),
             constant(None).cast(dtype(program.result)).alias(NATIVE),
             *(column(field).alias(field) for field in program.schema),
         )

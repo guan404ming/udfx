@@ -28,11 +28,11 @@ from udfx.backends.registration import (
     register_translation,
 )
 from udfx.frontend.core.sequences import join_words, word_item
-from udfx.frontend.core.splitting import joined_tokens
+from udfx.frontend.core.splitting import joined_tokens, split_item
 from udfx.frontend.core.text import folded_case_chain
 from udfx.semantics import casing, text
 from udfx.semantics.clusters import CLUSTER_JOINERS
-from udfx.semantics.facts import pattern_is_empty
+from udfx.semantics.facts import nullable_arguments, pattern_is_empty
 from udfx.semantics.sequences import SearchPrimitives, count_occurrences, reverse_find
 from udfx.semantics.text import (
     CASE_METHODS,
@@ -110,9 +110,10 @@ def rfind(text: Expression, pattern: Expression) -> Lowered[Expression]:
     return Lowered(found, single_code_point_clusters(text) & single_code_point_clusters(pattern))
 
 
-@RULES(".count", Kind.STR, Kind.STR)
-def count(text: Expression, pattern: Expression) -> Expression:
-    pieces = length(function("string_split", text, pattern)) - constant(1)
+@RULES(".count", Kind.STR, Kind.STR, literals=(1,))
+def count(text: Expression, pattern: Expression | str | None) -> Expression:
+    native = pattern if isinstance(pattern, Expression) else constant(pattern)
+    pieces = length(function("string_split", text, native)) - constant(1)
     return count_occurrences(SEARCH, text, pattern, pieces)
 
 
@@ -166,12 +167,14 @@ def str_add(left: Expression, right: Expression) -> Expression:
     return function("concat", left, right)
 
 
-RULES("__eq__", Kind.STR, Kind.STR)(null_safe_equal)
+@RULES("__eq__", Kind.STR, Kind.STR, facts={"nullable": nullable_arguments})
+def str_eq(left: Expression, right: Expression, nullable: bool = True) -> Expression:
+    return null_safe_equal(left, right) if nullable else left == right
 
 
-@RULES("__ne__", Kind.STR, Kind.STR)
-def str_ne(left: Expression, right: Expression) -> Expression:
-    return ~null_safe_equal(left, right)
+@RULES("__ne__", Kind.STR, Kind.STR, facts={"nullable": nullable_arguments})
+def str_ne(left: Expression, right: Expression, nullable: bool = True) -> Expression:
+    return ~null_safe_equal(left, right) if nullable else left != right
 
 
 @RULES("__contains__", Kind.STR, Kind.STR)
@@ -210,7 +213,7 @@ register_string_predicates(
     RULES, lambda value, pattern: function("regexp_matches", value, constant(pattern))
 )
 RULES.rewrite(".join", Kind.STR, Kind.LIST)(lambda node: joined_tokens(node) or join_words(node))
-RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(word_item)
+RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(lambda node: split_item(node) or word_item(node))
 RULES.rewrite(".casefold", Kind.STR)(folded_case_chain)
 
 

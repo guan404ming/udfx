@@ -1,7 +1,7 @@
 import math
 from collections.abc import Callable
 from contextlib import redirect_stdout
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from io import StringIO
 from typing import Any
 from unittest.mock import patch
@@ -15,7 +15,7 @@ from udfx.backends.spark import SparkBackend
 from udfx.ir import TRUE, Col, Guarded, If, Lit, lit
 from udfx.ops import apply
 from udfx.program import Program
-from udfx.types import BOOL, DATETIME, FLOAT, INT, INT64_MAX, INT64_MIN, STR, Type, list_of
+from udfx.types import BOOL, DATE, DATETIME, FLOAT, INT, INT64_MAX, INT64_MIN, STR, Type, list_of
 
 
 def integer(value: Any) -> int:
@@ -28,6 +28,14 @@ def length(value: Any) -> int:
 
 def total(value: Any) -> int:
     return sum(value)
+
+
+def sine(value: float) -> float:
+    return math.sin(value)
+
+
+def arc_cosine(value: float) -> float:
+    return math.acos(value)
 
 
 FAULTS = [
@@ -47,6 +55,9 @@ FAULTS = [
     (lambda value: value * 2, INT, INT64_MAX),
     (lambda value: value // -1, INT, INT64_MIN),
     (total, list_of(INT), [INT64_MAX, 1]),
+    (lambda value: value + timedelta(days=1), DATE, date.max),
+    (sine, FLOAT, math.inf),
+    (arc_cosine, FLOAT, math.nextafter(1.0, math.inf)),
 ]
 
 
@@ -79,6 +90,8 @@ def test_fault_payload_restores_all_input_types(backend: Backend[Any]) -> None:
         "dates": list_of(DATETIME.or_none()),
         "numbers": list_of(FLOAT.or_none()),
         "strings": list_of(STR.or_none()),
+        "calendar_date": DATE,
+        "calendar_dates": list_of(DATE.or_none()),
     }
     row = (
         None,
@@ -92,6 +105,8 @@ def test_fault_payload_restores_all_input_types(backend: Backend[Any]) -> None:
         [None, datetime.max],
         [None, float("nan"), -0.0, float("inf"), 5e-324],
         [None, "", "\x00\n😀"],
+        date.min,
+        [None, date.max],
     )
 
     def fail(*values: Any) -> int:

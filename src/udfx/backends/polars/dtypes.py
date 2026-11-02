@@ -5,6 +5,7 @@ import polars as pl
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, pl.DataType] = {
+    Kind.DATE: pl.Date(),
     Kind.DATETIME: pl.Datetime("us"),
     Kind.JSON: pl.String(),
     Kind.STR: pl.String(),

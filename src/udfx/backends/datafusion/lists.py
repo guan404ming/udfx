@@ -9,7 +9,7 @@ from udfx.backends.datafusion.slicing import SEQUENCE
 from udfx.backends.datafusion.strings import characters, list_contains, list_len
 from udfx.backends.lowering_context import bindings_enabled
 from udfx.backends.registration import Lowered, register_lists
-from udfx.frontend.core.comprehensions import lowercase_words
+from udfx.frontend.core.comprehensions import character_count, lowercase_words
 from udfx.semantics.facts import nullable_arguments
 from udfx.semantics.frequencies import (
     FrequencyPrimitives,
@@ -17,12 +17,27 @@ from udfx.semantics.frequencies import (
     ordered_frequencies,
     sorted_frequencies,
 )
-from udfx.semantics.lists import ListPrimitives, SetPrimitives, SumPrimitives, integer_sum_exact
+from udfx.semantics.lists import (
+    ListPrimitives,
+    SetPrimitives,
+    SumPrimitives,
+    integer_sum_exact,
+    literal_index,
+)
 from udfx.semantics.sequences import take_prefix
 from udfx.types import BOOL, INT, Kind
 
 for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
+
+
+@RULES(".index", Kind.LIST, Kind.STR, literals=(0,))
+def index(value: Expr | list[str] | tuple[str, ...] | None, item: Expr) -> Expr:
+    if value is None:
+        return lit(0)
+    if not isinstance(value, Expr):
+        return literal_index(lit, when, value, item)
+    return functions.array_position(value, item).cast(pa.int64()) - lit(1)
 
 
 @RULES("__contains__", Kind.LIST, Kind.STR, literals=(0,), facts={"nullable": nullable_arguments})
@@ -183,3 +198,6 @@ register_lists(
         difference=functions.array_except,
     ),
 )
+
+
+RULES.rewrite("sum", Kind.LIST)(character_count)

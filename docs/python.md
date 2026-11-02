@@ -7,7 +7,7 @@ udfx supports a subset of Python. Always check `translation.ok` before using its
 | Category | Supported patterns |
 | --- | --- |
 | Numbers | Arithmetic, comparisons, conversions, and selected `math` and NumPy scalar functions |
-| Values | String operations, literal regex patterns, lists, string sets, and naive datetimes |
+| Values | String operations, literal regex patterns, lists, string sets, dates, and naive datetimes |
 | JSON encoding | `json.dumps` for strings, nulls, and nested string lists, with default formatting |
 | JSON decoding | `json.loads`, nested JSON indexing, dictionary `get`, type checks, and scalar conversions |
 | Control flow | Branches, exception handlers, helpers, and constant container lookups |

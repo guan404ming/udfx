@@ -7,6 +7,32 @@ from pathlib import Path
 from bench.artifacts import read
 
 
+def public_results(artifact: dict) -> dict:
+    fields = (
+        "workload",
+        "suite",
+        "origin",
+        "engine",
+        "mode",
+        "status",
+        "runtime_udfs",
+        "validation",
+        "primary_baseline",
+        "native_row_fraction",
+        "comparisons",
+        "fingerprint",
+    )
+    return {
+        "commit": artifact["commit"],
+        "python": artifact["python"],
+        "complete": artifact.get("complete", False),
+        "results": [
+            {name: result[name] for name in fields if name in result}
+            for result in artifact["results"]
+        ],
+    }
+
+
 def geometric_mean(values: list[float]) -> float | None:
     return math.exp(sum(map(math.log, values)) / len(values)) if values else None
 
@@ -70,9 +96,9 @@ def markdown(artifact: dict) -> str:
             "",
             "## Cases",
             "",
-            "| Workload | Engine | Mode | Status | Runtime UDFs | Validation | Baseline |"
+            "| Workload | Origin | Engine | Mode | Status | Runtime UDFs | Validation | Baseline |"
             " Speedup | Non-Python rows |",
-            "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: |",
         ]
     )
     for result in artifact["results"]:
@@ -81,7 +107,8 @@ def markdown(artifact: dict) -> str:
         for baseline, comparison in comparisons.items() or [("N/A", {})]:
             speedup = f"{comparison['median_speedup']:.2f}x" if comparison else "N/A"
             lines.append(
-                f"| {result['workload']} | {result['engine']} | {result['mode']} | "
+                f"| {result['workload']} | {result.get('origin', '')} | "
+                f"{result['engine']} | {result['mode']} | "
                 f"{result['status']} | {', '.join(result.get('runtime_udfs', [])) or 'none'} | "
                 f"{result.get('validation', 'exact')} | "
                 f"{baseline} | {speedup} | {share} |"
@@ -102,6 +129,7 @@ def markdown(artifact: dict) -> str:
 def export_csv(artifact: dict, path: Path) -> None:
     names = [
         "workload",
+        "origin",
         "engine",
         "mode",
         "status",
@@ -135,8 +163,11 @@ def main(arguments: list[str] | None = None) -> None:
     parser.add_argument("artifact", type=Path)
     parser.add_argument("--markdown", type=Path)
     parser.add_argument("--csv", type=Path)
+    parser.add_argument("--public", action="store_true", help="Omit private diagnostics and inputs")
     options = parser.parse_args(arguments)
     artifact = read(options.artifact)
+    if options.public:
+        artifact = public_results(artifact)
     if options.markdown:
         options.markdown.write_text(markdown(artifact))
     if options.csv:

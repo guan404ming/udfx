@@ -3,8 +3,14 @@ from __future__ import annotations
 from duckdb import Expression
 
 from udfx.backends.duckdb.rules import RULES, constant, function, null_safe_equal, when
-from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
+from udfx.backends.registration import (
+    register_date_arithmetic,
+    register_datetime_arithmetic,
+    register_datetimes,
+)
+from udfx.semantics.dates import DateArithmeticPrimitives
 from udfx.semantics.datetimes import (
+    EPOCH_ORDINAL,
     TIMESTAMP_LITERAL,
     DatetimeArithmeticPrimitives,
     DatetimePrimitives,
@@ -45,6 +51,7 @@ register_datetimes(
         is_null=Expression.isnull,
     ),
     null_safe_equal,
+    lambda value: value.cast("DATE"),
 )
 
 
@@ -55,6 +62,19 @@ register_datetime_arithmetic(
         difference=lambda left, right: function("epoch_us", left) - function("epoch_us", right),
         to_microseconds=lambda value: function("epoch_us", value),
         from_microseconds=lambda value: function("make_timestamp", value),
+        select=when,
+    ),
+)
+
+
+register_date_arithmetic(
+    RULES,
+    DateArithmeticPrimitives(
+        literal=constant,
+        to_ordinal=lambda value: part(value, "epoch_day") + constant(EPOCH_ORDINAL),
+        from_ordinal=lambda value: (
+            constant("1970-01-01").cast("DATE") + (value - constant(EPOCH_ORDINAL)).cast("INTEGER")
+        ),
         select=when,
     ),
 )

@@ -585,3 +585,466 @@ index 0000000..9187ed0
 +    );
 +    Ok(())
 +}
+diff --git a/datafusion/expr/src/expr_schema.rs b/datafusion/expr/src/expr_schema.rs
+index cdd66f9..4dab064 100644
+--- a/datafusion/expr/src/expr_schema.rs
++++ b/datafusion/expr/src/expr_schema.rs
+@@ -209,7 +209,7 @@ impl ExprSchemable for Expr {
+             Expr::ScalarFunction(_)
+             | Expr::WindowFunction(_)
+             | Expr::AggregateFunction(_) => {
+-                Ok(self.to_field(schema)?.1.data_type().clone())
++                Ok(unnamed_field(self, schema, "")?.data_type().clone())
+             }
+             Expr::Not(_)
+             | Expr::IsNull(_)
+@@ -251,7 +251,7 @@ impl ExprSchemable for Expr {
+                 Ok(DataType::Null)
+             }
+             Expr::HigherOrderFunction(_func) => {
+-                Ok(self.to_field(schema)?.1.data_type().clone())
++                Ok(unnamed_field(self, schema, "")?.data_type().clone())
+             }
+             Expr::Lambda(_lambda) => Ok(DataType::Null),
+             Expr::LambdaVariable(LambdaVariable { field, .. }) => match field {
+@@ -382,7 +382,9 @@ impl ExprSchemable for Expr {
+             Expr::Cast(Cast { expr, .. }) => expr.nullable(input_schema),
+             Expr::ScalarFunction(_)
+             | Expr::AggregateFunction(_)
+-            | Expr::WindowFunction(_) => Ok(self.to_field(input_schema)?.1.is_nullable()),
++            | Expr::WindowFunction(_) => {
++                Ok(unnamed_field(self, input_schema, "")?.is_nullable())
++            }
+             Expr::ScalarVariable(field, _) => Ok(field.is_nullable()),
+             Expr::TryCast { .. } | Expr::Unnest(_) | Expr::Placeholder(_) => Ok(true),
+             Expr::IsNull(_)
+@@ -421,7 +423,7 @@ impl ExprSchemable for Expr {
+                 Ok(true)
+             }
+             Expr::HigherOrderFunction(_func) => {
+-                Ok(self.to_field(input_schema)?.1.is_nullable())
++                Ok(unnamed_field(self, input_schema, "")?.is_nullable())
+             }
+             Expr::Lambda(_lambda) => Ok(true),
+             Expr::LambdaVariable(LambdaVariable { field, .. }) => match field {
+@@ -434,8 +436,7 @@ impl ExprSchemable for Expr {
+     }
+ 
+     fn metadata(&self, schema: &dyn ExprSchema) -> Result<FieldMetadata> {
+-        self.to_field(schema)
+-            .map(|(_, field)| FieldMetadata::from(field.metadata()))
++        unnamed_field(self, schema, "").map(|field| FieldMetadata::from(field.metadata()))
+     }
+ 
+     /// Returns the datatype and nullability of the expression based on [ExprSchema].
+@@ -452,7 +453,7 @@ impl ExprSchemable for Expr {
+         &self,
+         schema: &dyn ExprSchema,
+     ) -> Result<(DataType, bool)> {
+-        let field = self.to_field(schema)?.1;
++        let field = unnamed_field(self, schema, "")?;
+ 
+         Ok((field.data_type().clone(), field.is_nullable()))
+     }
+@@ -513,200 +514,9 @@ impl ExprSchemable for Expr {
+         schema: &dyn ExprSchema,
+     ) -> Result<(Option<TableReference>, Arc<Field>)> {
+         let (relation, schema_name) = self.qualified_name();
+-        #[expect(deprecated)]
+-        let field = match self {
+-            Expr::Alias(Alias {
+-                expr,
+-                name: _,
+-                metadata,
+-                ..
+-            }) => {
+-                let mut combined_metadata = expr.metadata(schema)?;
+-                if let Some(metadata) = metadata {
+-                    combined_metadata.extend(metadata.clone());
+-                }
+-
+-                Ok(expr
+-                    .to_field(schema)
+-                    .map(|(_, f)| f)?
+-                    .with_field_metadata(&combined_metadata))
+-            }
+-            Expr::Negative(expr) => expr.to_field(schema).map(|(_, f)| f),
+-            Expr::Column(c) => schema.field_from_column(c).map(Arc::clone),
+-            Expr::OuterReferenceColumn(field, _) => {
+-                Ok(Arc::clone(field).renamed(&schema_name))
+-            }
+-            Expr::ScalarVariable(field, _) => Ok(Arc::clone(field).renamed(&schema_name)),
+-            Expr::Literal(l, metadata) => Ok(Arc::new(
+-                Field::new(&schema_name, l.data_type(), l.is_null())
+-                    .with_field_metadata_opt(metadata.as_ref()),
+-            )),
+-            Expr::IsNull(_)
+-            | Expr::IsNotNull(_)
+-            | Expr::IsTrue(_)
+-            | Expr::IsFalse(_)
+-            | Expr::IsUnknown(_)
+-            | Expr::IsNotTrue(_)
+-            | Expr::IsNotFalse(_)
+-            | Expr::IsNotUnknown(_)
+-            | Expr::Exists { .. } => {
+-                Ok(Arc::new(Field::new(&schema_name, DataType::Boolean, false)))
+-            }
+-            Expr::ScalarSubquery(subquery) => {
+-                Ok(Arc::clone(&subquery.subquery.schema().fields()[0]))
+-            }
+-            Expr::BinaryExpr(BinaryExpr { left, right, op }) => {
+-                let (left_field, right_field) =
+-                    (left.to_field(schema)?.1, right.to_field(schema)?.1);
+-
+-                let (lhs_type, lhs_nullable) =
+-                    (left_field.data_type(), left_field.is_nullable());
+-                let (rhs_type, rhs_nullable) =
+-                    (right_field.data_type(), right_field.is_nullable());
+-                let mut coercer = BinaryTypeCoercer::new(lhs_type, op, rhs_type);
+-                coercer.set_lhs_spans(left.spans().cloned().unwrap_or_default());
+-                coercer.set_rhs_spans(right.spans().cloned().unwrap_or_default());
+-                Ok(Arc::new(Field::new(
+-                    &schema_name,
+-                    coercer.get_result_type()?,
+-                    lhs_nullable || rhs_nullable,
+-                )))
+-            }
+-            Expr::WindowFunction(window_function) => {
+-                let WindowFunction {
+-                    fun,
+-                    params: WindowFunctionParams { args, .. },
+-                    ..
+-                } = window_function.as_ref();
+-
+-                let fields = args
+-                    .iter()
+-                    .map(|e| e.to_field(schema).map(|(_, f)| f))
+-                    .collect::<Result<Vec<_>>>()?;
+-                match fun {
+-                    WindowFunctionDefinition::AggregateUDF(udaf) => {
+-                        let new_fields =
+-                            verify_function_arguments(udaf.as_ref(), &fields)?;
+-                        let return_field = udaf.return_field(&new_fields)?;
+-                        Ok(return_field)
+-                    }
+-                    WindowFunctionDefinition::WindowUDF(udwf) => {
+-                        let new_fields =
+-                            verify_function_arguments(udwf.as_ref(), &fields)?;
+-                        let return_field = udwf
+-                            .field(WindowUDFFieldArgs::new(&new_fields, &schema_name))?;
+-                        Ok(return_field)
+-                    }
+-                }
+-            }
+-            Expr::AggregateFunction(AggregateFunction {
+-                func,
+-                params: AggregateFunctionParams { args, .. },
+-            }) => {
+-                let fields = args
+-                    .iter()
+-                    .map(|e| e.to_field(schema).map(|(_, f)| f))
+-                    .collect::<Result<Vec<_>>>()?;
+-                let new_fields = verify_function_arguments(func.as_ref(), &fields)?;
+-                func.return_field(&new_fields)
+-            }
+-            Expr::ScalarFunction(ScalarFunction { func, args }) => {
+-                let fields = args
+-                    .iter()
+-                    .map(|e| e.to_field(schema).map(|(_, f)| f))
+-                    .collect::<Result<Vec<_>>>()?;
+-                let new_fields = verify_function_arguments(func.as_ref(), &fields)?;
+-
+-                let arguments = args
+-                    .iter()
+-                    .map(|e| match e {
+-                        Expr::Literal(sv, _) => Some(sv),
+-                        _ => None,
+-                    })
+-                    .collect::<Vec<_>>();
+-                let args = ReturnFieldArgs {
+-                    arg_fields: &new_fields,
+-                    scalar_arguments: &arguments,
+-                };
+-
+-                func.return_field_from_args(args)
+-            }
+-            // _ => Ok((self.get_type(schema)?, self.nullable(schema)?)),
+-            Expr::Cast(Cast { expr, field }) => expr
+-                .to_field(schema)
+-                .map(|(_table_ref, src)| cast_output_field(&src, field, false)),
+-            Expr::Placeholder(Placeholder {
+-                id: _,
+-                field: Some(field),
+-            }) => Ok(Arc::clone(field).renamed(&schema_name)),
+-            Expr::TryCast(TryCast { expr, field }) => expr
+-                .to_field(schema)
+-                .map(|(_table_ref, src)| cast_output_field(&src, field, true)),
+-            Expr::LambdaVariable(LambdaVariable {
+-                field: Some(field), ..
+-            }) => Ok(Arc::clone(field).renamed(&schema_name)),
+-            Expr::Like(_)
+-            | Expr::SimilarTo(_)
+-            | Expr::Not(_)
+-            | Expr::Between(_)
+-            | Expr::Case(_)
+-            | Expr::InList(_)
+-            | Expr::InSubquery(_)
+-            | Expr::SetComparison(_)
+-            | Expr::Wildcard { .. }
+-            | Expr::GroupingSet(_)
+-            | Expr::Placeholder(_)
+-            | Expr::Unnest(_)
+-            | Expr::Lambda(_)
+-            | Expr::LambdaVariable(_) => Ok(Arc::new(Field::new(
+-                &schema_name,
+-                self.get_type(schema)?,
+-                self.nullable(schema)?,
+-            ))),
+-            Expr::HigherOrderFunction(func) => {
+-                let arg_fields = func
+-                    .args
+-                    .iter()
+-                    .map(|arg| match arg {
+-                        Expr::Lambda(Lambda { params: _, body }) => {
+-                            // use the name of the lambda instead of just the body to help with debugging
+-                            Ok(ValueOrLambda::Lambda(Arc::new(Field::new(
+-                                arg.qualified_name().1,
+-                                body.get_type(schema)?,
+-                                body.nullable(schema)?,
+-                            ))))
+-                        }
+-                        _ => Ok(ValueOrLambda::Value(arg.to_field(schema)?.1)),
+-                    })
+-                    .collect::<Result<Vec<_>>>()?;
+-
+-                let new_fields = value_fields_with_higher_order_udf_and_lambdas(
+-                    &arg_fields,
+-                    func.func.as_ref(),
+-                )?;
+-
+-                let arguments = func
+-                    .args
+-                    .iter()
+-                    .map(|e| match e {
+-                        Expr::Literal(sv, _) => Some(sv),
+-                        _ => None,
+-                    })
+-                    .collect::<Vec<_>>();
+-
+-                let args = HigherOrderReturnFieldArgs {
+-                    arg_fields: &new_fields,
+-                    scalar_arguments: &arguments,
+-                };
+-
+-                func.func.return_field_from_args(args)
+-            }
+-        }?;
+-
+         Ok((
+             relation,
+-            // todo avoid this rename / use the name above
+-            field.renamed(&schema_name),
++            unnamed_field(self, schema, &schema_name)?.renamed(&schema_name),
+         ))
+     }
+ 
+@@ -824,6 +634,199 @@ pub fn cast_subquery(subquery: Subquery, cast_to_type: &DataType) -> Result<Subq
+     })
+ }
+ 
++#[expect(deprecated)]
++fn unnamed_field(
++    node: &Expr,
++    schema: &dyn ExprSchema,
++    schema_name: &str,
++) -> Result<Arc<Field>> {
++    match node {
++        Expr::Alias(Alias {
++            expr,
++            name: _,
++            metadata,
++            ..
++        }) => {
++            let mut combined_metadata = expr.metadata(schema)?;
++            if let Some(metadata) = metadata {
++                combined_metadata.extend(metadata.clone());
++            }
++
++            Ok(unnamed_field(expr, schema, "")?.with_field_metadata(&combined_metadata))
++        }
++        Expr::Negative(expr) => unnamed_field(expr, schema, ""),
++        Expr::Column(c) => schema.field_from_column(c).map(Arc::clone),
++        Expr::OuterReferenceColumn(field, _) => {
++            Ok(Arc::clone(field).renamed(schema_name))
++        }
++        Expr::ScalarVariable(field, _) => Ok(Arc::clone(field).renamed(schema_name)),
++        Expr::Literal(l, metadata) => Ok(Arc::new(
++            Field::new(schema_name, l.data_type(), l.is_null())
++                .with_field_metadata_opt(metadata.as_ref()),
++        )),
++        Expr::IsNull(_)
++        | Expr::IsNotNull(_)
++        | Expr::IsTrue(_)
++        | Expr::IsFalse(_)
++        | Expr::IsUnknown(_)
++        | Expr::IsNotTrue(_)
++        | Expr::IsNotFalse(_)
++        | Expr::IsNotUnknown(_)
++        | Expr::Exists { .. } => {
++            Ok(Arc::new(Field::new(schema_name, DataType::Boolean, false)))
++        }
++        Expr::ScalarSubquery(subquery) => {
++            Ok(Arc::clone(&subquery.subquery.schema().fields()[0]))
++        }
++        Expr::BinaryExpr(BinaryExpr { left, right, op }) => {
++            let (left_field, right_field) = (
++                unnamed_field(left, schema, "")?,
++                unnamed_field(right, schema, "")?,
++            );
++
++            let (lhs_type, lhs_nullable) =
++                (left_field.data_type(), left_field.is_nullable());
++            let (rhs_type, rhs_nullable) =
++                (right_field.data_type(), right_field.is_nullable());
++            let mut coercer = BinaryTypeCoercer::new(lhs_type, op, rhs_type);
++            coercer.set_lhs_spans(left.spans().cloned().unwrap_or_default());
++            coercer.set_rhs_spans(right.spans().cloned().unwrap_or_default());
++            Ok(Arc::new(Field::new(
++                schema_name,
++                coercer.get_result_type()?,
++                lhs_nullable || rhs_nullable,
++            )))
++        }
++        Expr::WindowFunction(window_function) => {
++            let WindowFunction {
++                fun,
++                params: WindowFunctionParams { args, .. },
++                ..
++            } = window_function.as_ref();
++
++            let fields = args
++                .iter()
++                .map(|e| unnamed_field(e, schema, ""))
++                .collect::<Result<Vec<_>>>()?;
++            match fun {
++                WindowFunctionDefinition::AggregateUDF(udaf) => {
++                    let new_fields = verify_function_arguments(udaf.as_ref(), &fields)?;
++                    let return_field = udaf.return_field(&new_fields)?;
++                    Ok(return_field)
++                }
++                WindowFunctionDefinition::WindowUDF(udwf) => {
++                    let new_fields = verify_function_arguments(udwf.as_ref(), &fields)?;
++                    let return_field = udwf.field(WindowUDFFieldArgs::new(
++                        &new_fields,
++                        &node.schema_name().to_string(),
++                    ))?;
++                    Ok(return_field)
++                }
++            }
++        }
++        Expr::AggregateFunction(AggregateFunction {
++            func,
++            params: AggregateFunctionParams { args, .. },
++        }) => {
++            let fields = args
++                .iter()
++                .map(|e| unnamed_field(e, schema, ""))
++                .collect::<Result<Vec<_>>>()?;
++            let new_fields = verify_function_arguments(func.as_ref(), &fields)?;
++            func.return_field(&new_fields)
++        }
++        Expr::ScalarFunction(ScalarFunction { func, args }) => {
++            let fields = args
++                .iter()
++                .map(|e| unnamed_field(e, schema, ""))
++                .collect::<Result<Vec<_>>>()?;
++            let new_fields = verify_function_arguments(func.as_ref(), &fields)?;
++
++            let arguments = args
++                .iter()
++                .map(|e| match e {
++                    Expr::Literal(sv, _) => Some(sv),
++                    _ => None,
++                })
++                .collect::<Vec<_>>();
++            let args = ReturnFieldArgs {
++                arg_fields: &new_fields,
++                scalar_arguments: &arguments,
++            };
++
++            func.return_field_from_args(args)
++        }
++        // _ => Ok((node.get_type(schema)?, node.nullable(schema)?)),
++        Expr::Cast(Cast { expr, field }) => unnamed_field(expr, schema, "")
++            .map(|src| cast_output_field(&src, field, false)),
++        Expr::Placeholder(Placeholder {
++            id: _,
++            field: Some(field),
++        }) => Ok(Arc::clone(field).renamed(schema_name)),
++        Expr::TryCast(TryCast { expr, field }) => unnamed_field(expr, schema, "")
++            .map(|src| cast_output_field(&src, field, true)),
++        Expr::LambdaVariable(LambdaVariable {
++            field: Some(field), ..
++        }) => Ok(Arc::clone(field).renamed(schema_name)),
++        Expr::Like(_)
++        | Expr::SimilarTo(_)
++        | Expr::Not(_)
++        | Expr::Between(_)
++        | Expr::Case(_)
++        | Expr::InList(_)
++        | Expr::InSubquery(_)
++        | Expr::SetComparison(_)
++        | Expr::Wildcard { .. }
++        | Expr::GroupingSet(_)
++        | Expr::Placeholder(_)
++        | Expr::Unnest(_)
++        | Expr::Lambda(_)
++        | Expr::LambdaVariable(_) => Ok(Arc::new(Field::new(
++            schema_name,
++            node.get_type(schema)?,
++            node.nullable(schema)?,
++        ))),
++        Expr::HigherOrderFunction(func) => {
++            let arg_fields = func
++                .args
++                .iter()
++                .map(|arg| match arg {
++                    Expr::Lambda(Lambda { params: _, body }) => {
++                        // use the name of the lambda instead of just the body to help with debugging
++                        Ok(ValueOrLambda::Lambda(Arc::new(Field::new(
++                            arg.qualified_name().1,
++                            body.get_type(schema)?,
++                            body.nullable(schema)?,
++                        ))))
++                    }
++                    _ => Ok(ValueOrLambda::Value(unnamed_field(arg, schema, "")?)),
++                })
++                .collect::<Result<Vec<_>>>()?;
++
++            let new_fields = value_fields_with_higher_order_udf_and_lambdas(
++                &arg_fields,
++                func.func.as_ref(),
++            )?;
++
++            let arguments = func
++                .args
++                .iter()
++                .map(|e| match e {
++                    Expr::Literal(sv, _) => Some(sv),
++                    _ => None,
++                })
++                .collect::<Vec<_>>();
++
++            let args = HigherOrderReturnFieldArgs {
++                arg_fields: &new_fields,
++                scalar_arguments: &arguments,
++            };
++
++            func.func.return_field_from_args(args)
++        }
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use std::collections::HashMap;

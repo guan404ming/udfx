@@ -6,7 +6,12 @@ from datafusion import Expr, functions, lit
 from udfx.backends.datafusion.numbers import cast_float64, finite
 from udfx.backends.datafusion.regex import findall
 from udfx.backends.datafusion.rules import RULES, length, when
-from udfx.backends.registration import Lowered, register_json, register_text_conversions
+from udfx.backends.registration import (
+    Lowered,
+    register_json,
+    register_text_conversions,
+    register_translation,
+)
 from udfx.semantics.json import CONTROL_CHARACTERS, CONTROL_REPLACEMENTS, ESCAPE_PATTERNS
 from udfx.semantics.literals import (
     ASCII_SPACE,
@@ -88,6 +93,7 @@ def bool_str(value: Expr) -> Expr:
 RULES("str", Kind.STR)(lambda text: show_none(SPELLING, text))
 
 register_text_conversions(RULES, TEXT)
+register_translation(RULES, TEXT)
 register_json(
     RULES,
     TEXT,

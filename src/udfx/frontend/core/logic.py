@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.lists import optional_item, simplify_list
-from udfx.frontend.core.numbers import simplify_number
+from udfx.frontend.core.numbers import identity, simplify_number, widen_literals
 from udfx.frontend.core.sequences import simplify_sequence
 from udfx.frontend.core.sets import simplify_set
 from udfx.frontend.core.text import simplify_text
@@ -43,21 +43,21 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
     if not isinstance(node, Call):
         return node
     arguments = tuple(fold_shared(argument, seen) for argument in node.arguments)
-    folded = simplify_sequence(Call(node.op, arguments))
-    if isinstance(folded, Call):
-        folded = simplify_list(folded)
-    if isinstance(folded, Call):
-        folded = simplify_text(folded)
-    if isinstance(folded, Call):
-        folded = simplify_set(folded)
-    if isinstance(folded, Call):
-        folded = simplify_number(folded)
+    folded: Node = Call(node.op, arguments)
+    for simplify in SIMPLIFIERS:
+        if not isinstance(folded, Call):
+            return folded
+        folded = simplify(folded)
     if not isinstance(folded, Call) or not folded.op.deterministic:
         return folded
     values = [argument.value for argument in folded.arguments if isinstance(argument, Lit)]
     if len(values) < len(folded.arguments):
         return folded
-    if folded.type.kind is Kind.LIST and folded.op.name in {"range", "__mul__"}:
+    if folded.type.kind in {Kind.LIST, Kind.STR} and folded.op.name in {
+        "range",
+        "__mul__",
+        "format_fixed",
+    }:
         return folded
     try:
         value = folded.op.reference(*values)
@@ -66,6 +66,14 @@ def fold_node(node: Node, seen: dict[int, tuple[Node, Node]]) -> Node:
     if not fits(value, folded.type):
         return folded
     return Lit(tuple(value) if isinstance(value, list) else value, folded.type)
+
+
+def connective(node: Call) -> Node:
+    if node.op.name == "not":
+        return negate(*node.arguments)
+    if node.op.name == "and":
+        return conjunction(*node.arguments)
+    return disjunction(*node.arguments) if node.op.name == "or" else node
 
 
 def simplify_branch(node: If) -> Node:
@@ -145,7 +153,7 @@ def disjunction(left: Node, right: Node) -> Node:
         return right
     if right == FALSE:
         return left
-    if TRUE in (left, right):
+    if TRUE in (left, right) or negate(left) == right:
         return TRUE
     return apply("or", left, right)
 
@@ -207,3 +215,15 @@ def depends_on(node: Node, element: Element) -> bool:
         case _:
             return False
     return any(depends_on(child, element) for child in children)
+
+
+SIMPLIFIERS = (
+    connective,
+    simplify_sequence,
+    simplify_list,
+    simplify_text,
+    simplify_set,
+    widen_literals,
+    identity,
+    simplify_number,
+)

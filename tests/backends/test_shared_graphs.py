@@ -6,15 +6,15 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
-from udfx.backends.graph import lower_graph
-from udfx.backends.hoisting import free, reads_input, size
+from udfx.backends.graph import layers, lower_graph
+from udfx.backends.hoisting import reads_input, size
 from udfx.backends.indexing import matching
 from udfx.backends.lowering_context import lowering_context
 from udfx.backends.polars import PolarsBackend
 from udfx.frontend import trace
 from udfx.frontend.core.tracing import joining_helpers
 from udfx.frontend.flow import machine
-from udfx.graphs import canonicalize
+from udfx.graphs import canonicalize, free
 from udfx.ir import FALSE, TRUE, Call, Col, Comprehension, Element, If, Node, lit
 from udfx.ops import apply
 from udfx.program import Program
@@ -113,6 +113,17 @@ def test_comprehension_matching_keeps_shared_nodes_bounded() -> None:
         return part is element
 
     assert matching(node, accept) == frozenset({element})
+
+
+def test_comprehension_body_shares_invariant_values() -> None:
+    cleaned = apply(".strip", apply(".lower", Col("text", STR)))
+    element = Element("word", STR)
+    counts = Comprehension(
+        Col("words", list_of(STR)), element, apply(".count", cleaned, element), TRUE, FALSE
+    )
+    root = apply("__add__", apply("sum", counts), apply("len", cleaned))
+    _, groups = layers((root,), {})
+    assert any(part is cleaned for group in groups for part in group)
 
 
 def test_graph_keeps_intermediate_overflow() -> None:

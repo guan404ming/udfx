@@ -55,7 +55,9 @@ def test_literal_selection_preserves_source_guards(backend: Backend[Any]) -> Non
     assert lowered.overflow is None
     schema = {"value": INT, "valid": BOOL}
     rows = [(0, True), (1, True), (3, True), (1, False), (2**63 - 1, True)]
-    assert backend.evaluate([lowered.exact], schema, rows) == [[True, True, True, False, False]]
+    assert backend.evaluate([backend.predicate(lowered.exact)], schema, rows) == [
+        [True, True, True, False, False]
+    ]
     assert backend.evaluate([lowered.expr], schema, rows[:3]) == [[1.5, 2.5, 0.0]]
 
 

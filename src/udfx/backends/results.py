@@ -35,6 +35,8 @@ class ResultLowering[E]:
         return lowered.map(self.finish_overflow)
 
     def finish_overflow(self, lowered: Lowered[E]) -> Lowered[E]:
+        if lowered.exact is False:
+            return Lowered(lowered.expr, False)
         if lowered.overflow is None:
             return lowered
         if self.raised is None:
@@ -46,7 +48,7 @@ class ResultLowering[E]:
             return Lowered(lowered.recover_overflow(self.raised), guarantees=lowered.guarantees)
         condition = lowered.overflow
         if lowered.exact is not None:
-            condition = self.backend.both(condition, lowered.exact)
+            condition = self.backend.both(condition, self.backend.predicate(lowered.exact))
         return Lowered(
             self.backend.select(condition, self.raised, lowered.expr),
             lowered.exact,
@@ -85,7 +87,9 @@ class FallbackLowering[E](ResultLowering[E]):
                 condition = backend.lower(predicate, elements)
                 exact = backend.exact(condition)
                 if exact is not None:
-                    failed = backend.select(exact, backend.literal(FALSE), backend.literal(TRUE))
+                    failed = backend.select(
+                        backend.predicate(exact), backend.literal(FALSE), backend.literal(TRUE)
+                    )
                     cases.append((failed, self.fallback()))
                 inverted = isinstance(node.then, If) and isinstance(node.orelse, Lit)
                 with assuming(predicate, not inverted), assuming_exact(predicate):
@@ -107,10 +111,12 @@ class FallbackLowering[E](ResultLowering[E]):
         if lowered.exact is None and lowered.recover_overflow is not None:
             return Lowered(lowered.recover_overflow(self.fallback()))
         exact = self.backend.exact(lowered)
+        if exact is False:
+            return Lowered(self.fallback())
         return Lowered(
             lowered.expr
             if exact is None
-            else self.backend.select(exact, lowered.expr, self.fallback())
+            else self.backend.select(self.backend.predicate(exact), lowered.expr, self.fallback())
         )
 
 
@@ -119,7 +125,7 @@ def fallback_result[E](
     results: FallbackLowering[E],
     lower: Callable[[ResultLowering[E]], Lowered[E]],
 ) -> Lowered[E]:
-    if value.exact is None or not results.program.deterministic:
+    if value.exact is None or value.exact is False or not results.program.deterministic:
         return value
     with capture_lowering():
         return lower(results)

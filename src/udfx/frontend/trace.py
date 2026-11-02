@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Callable, Mapping
-from functools import reduce
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.bindings import Bindings
+from udfx.frontend.core.branches import factor_branches
 from udfx.frontend.core.evaluation import Raise, Return
-from udfx.frontend.core.logic import disjunction, fold
-from udfx.frontend.core.merge import merge
+from udfx.frontend.core.logic import fold
+from udfx.frontend.core.merge import fault_union, merge
 from udfx.frontend.core.tracing import collect_effects, joining_helpers
 from udfx.frontend.core.values import Row, Value, named
 from udfx.frontend.flow.frame import Flow, Frame
 from udfx.frontend.flow.machine import PathLimit, explore
 from udfx.frontend.resolve.frozen import Snapshot, closure
 from udfx.frontend.resolve.functions import parameters
-from udfx.ir import FALSE, TRUE, Col, If, Node
+from udfx.ir import TRUE, Col, If, Node
 from udfx.ops import apply
 from udfx.program import Program
 from udfx.semantics.json_values import RESULTS, result_name
@@ -71,11 +71,14 @@ def trace_function(
         raise Unsupported(f"inferred result {value.type} does not fit declared result {result}")
     if value.type.item is not None and value.type.item.kind is Kind.JSON:
         raise Unsupported("dynamic JSON lists require a scalar result conversion")
+    fault = fault_union(faults)
+    if not effects:
+        value, fault = factor_branches((value, fault))
     return Program(
         snapshot.callable(function),
         dict(schema),
         value,
-        reduce(disjunction, faults, FALSE),
+        fault,
         row_mode,
         not effects,
     )

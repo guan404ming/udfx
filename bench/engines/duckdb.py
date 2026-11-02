@@ -3,9 +3,9 @@ from typing import Any, cast
 
 import duckdb
 import pyarrow
-from duckdb.func import ARROW, NATIVE, SPECIAL
+from duckdb.func import ARROW, DEFAULT, NATIVE, SPECIAL
 
-from bench.callables import batched
+from bench.callables import batched, null_boundary
 from bench.data import CATEGORY, JOIN_KEY, LOOKUP_KEY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
@@ -26,6 +26,11 @@ class Engine(Adapter):
     def python(self) -> dict[str, Any]:
         function = self.workload.function
         assert function is not None
+        nullable = self.workload.result.nullable or any(
+            type.nullable for type in self.workload.schema.values()
+        )
+        if nullable:
+            function = null_boundary(function, tuple(self.workload.schema.values()))
         implementations = {
             "python_scalar": (function, NATIVE),
             "python_arrow": (
@@ -41,7 +46,7 @@ class Engine(Adapter):
                 [dtype(type) for type in self.workload.schema.values()],
                 dtype(self.workload.result),
                 type=form,
-                null_handling=SPECIAL,
+                null_handling=SPECIAL if nullable else DEFAULT,
                 side_effects=not self.workload.deterministic,
             )
             expressions[name] = duckdb.FunctionExpression(

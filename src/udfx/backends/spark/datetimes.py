@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
+from udfx.backends.registration import (
+    register_date_arithmetic,
+    register_datetime_arithmetic,
+    register_datetimes,
+)
 from udfx.backends.spark.rules import RULES, when
 from udfx.semantics.calendar import CalendarPrimitives
+from udfx.semantics.dates import DateArithmeticPrimitives
 from udfx.semantics.datetimes import (
+    EPOCH_ORDINAL,
     MICROSECONDS_PER_SECOND,
     TIMESTAMP_LITERAL,
     DatetimeArithmeticPrimitives,
@@ -67,6 +73,7 @@ register_datetimes(
         ),
     ),
     Column.eqNullSafe,
+    lambda value: value.cast("date"),
 )
 
 
@@ -83,5 +90,18 @@ register_datetime_arithmetic(
             + functions.make_dt_interval(secs=value.cast("decimal(20,0)") / MICROSECONDS_PER_SECOND)
         ),
         select=lambda condition, then, orelse: functions.when(condition, then).otherwise(orelse),
+    ),
+)
+
+
+register_date_arithmetic(
+    RULES,
+    DateArithmeticPrimitives(
+        literal=functions.lit,
+        to_ordinal=lambda value: part(value, "epoch_day") + EPOCH_ORDINAL,
+        from_ordinal=lambda value: functions.date_add(
+            functions.lit("1970-01-01").cast("date"), (value - EPOCH_ORDINAL).cast("int")
+        ),
+        select=when,
     ),
 )

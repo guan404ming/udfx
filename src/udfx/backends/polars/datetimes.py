@@ -3,8 +3,14 @@ from __future__ import annotations
 import polars as pl
 
 from udfx.backends.polars.rules import RULES
-from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
+from udfx.backends.registration import (
+    register_date_arithmetic,
+    register_datetime_arithmetic,
+    register_datetimes,
+)
+from udfx.semantics.dates import DateArithmeticPrimitives
 from udfx.semantics.datetimes import (
+    EPOCH_ORDINAL,
     TIMESTAMP_LITERAL,
     DatetimeArithmeticPrimitives,
     DatetimePrimitives,
@@ -35,6 +41,7 @@ register_datetimes(
         is_null=pl.Expr.is_null,
     ),
     pl.Expr.eq_missing,
+    lambda value: value.dt.date(),
 )
 
 
@@ -45,6 +52,17 @@ register_datetime_arithmetic(
         difference=lambda left, right: left.cast(pl.Int64) - right.cast(pl.Int64),
         to_microseconds=lambda value: value.cast(pl.Int64),
         from_microseconds=lambda value: value.cast(pl.Datetime("us")),
+        select=lambda condition, then, orelse: pl.when(condition).then(then).otherwise(orelse),
+    ),
+)
+
+
+register_date_arithmetic(
+    RULES,
+    DateArithmeticPrimitives(
+        literal=pl.lit,
+        to_ordinal=lambda value: value.cast(pl.Int64) + EPOCH_ORDINAL,
+        from_ordinal=lambda value: (value - EPOCH_ORDINAL).cast(pl.Date),
         select=lambda condition, then, orelse: pl.when(condition).then(then).otherwise(orelse),
     ),
 )

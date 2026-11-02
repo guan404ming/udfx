@@ -98,4 +98,4 @@ def test_contradictory_literals_keep_chain_order() -> None:
 def test_unrecognized_literal_is_still_checked() -> None:
     double = apply("not", apply("not", FIRST))
     tree = merge([Return(double, lit(1)), Return(TRUE, lit(0))], [])
-    assert render(tree) == "if(not(not(col first)), 1, 0)"
+    assert render(tree) == "if(col first, 1, 0)"

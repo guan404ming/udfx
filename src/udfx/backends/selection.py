@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from udfx.backends.rules import Lowered, Scope, fold_predicate
 from udfx.frontend.core.logic import disjunction
 from udfx.ir import Call, If, Lit, Node
-from udfx.types import Kind
+from udfx.types import BOOL, Kind
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
@@ -84,3 +84,19 @@ def lower_literal_cases[E](backend: Backend[E], node: If, elements: Scope[E]) ->
         backend.literal(current),
     )
     return None if expr is None else Lowered(expr, backend.exact(lowered))
+
+
+def boolean_select[E](
+    backend: Backend[E], node: If, condition: E, then: Lowered[E], orelse: Lowered[E]
+) -> E:
+    total = all(
+        branch.type == BOOL and part.overflow is None and part.prepare is None
+        for branch, part in ((node.then, then), (node.orelse, orelse))
+    )
+    literal, other = (node.orelse, then) if isinstance(node.orelse, Lit) else (node.then, orelse)
+    if not total or not isinstance(literal, Lit) or not isinstance(literal.value, bool):
+        return backend.select(condition, then.expr, orelse.expr)
+    guard = condition if (literal is node.orelse) != literal.value else backend.negate(condition)
+    if literal.value:
+        return cast("Any", guard) | other.expr
+    return backend.both(guard, other.expr)

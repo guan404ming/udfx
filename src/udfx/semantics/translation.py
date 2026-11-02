@@ -34,6 +34,17 @@ def translate_text(text: str, characters: str, replacements: Sequence[str]) -> s
     return text.translate(dict(zip(map(ord, characters), replacements, strict=False)))
 
 
+def compose_replacement(
+    characters: str, replacements: Sequence[str], old: str, new: str
+) -> tuple[str, tuple[str, ...]]:
+    mapping = {
+        ord(character): replacement.replace(old, new)
+        for character, replacement in zip(characters, replacements, strict=True)
+    }
+    mapping.setdefault(ord(old), new)
+    return translation_table(mapping)
+
+
 def lower_translation(
     primitives: TextPrimitives, text: Any, characters: Any, replacements: Any
 ) -> tuple[Any, Any]:

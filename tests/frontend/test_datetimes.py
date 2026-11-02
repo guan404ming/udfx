@@ -14,7 +14,7 @@ from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.ir import Call
 from udfx.testing import check_function
-from udfx.testing.strategies import DATETIME_TRAPS
+from udfx.testing.datetime_traps import DATETIME_TRAPS
 from udfx.types import DATETIME, FLOAT, INT, STR, Type
 
 PARSE = datetime.strptime
@@ -94,7 +94,6 @@ def test_nullable_datetimes(function: Callable[..., object], backend: Backend[An
         (lambda value: value.minute(), {"value": DATETIME}),
         (lambda value: value.second(), {"value": DATETIME}),
         (lambda value: value.microsecond(), {"value": DATETIME}),
-        (lambda value: value.date(), {"value": DATETIME}),
         (lambda value: value.tzinfo, {"value": DATETIME}),
         (lambda value: value.replace(year=2000), {"value": DATETIME}),
         (lambda value, format: value.strftime(format), {"value": DATETIME, "format": STR}),

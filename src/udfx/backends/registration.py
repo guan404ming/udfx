@@ -5,7 +5,16 @@ from collections.abc import Callable
 from functools import reduce
 from typing import Any
 
-from udfx.backends.registration_datetimes import register_datetime_arithmetic, register_datetimes
+from udfx.backends.registration_datetimes import (
+    register_date_arithmetic,
+    register_datetime_arithmetic,
+    register_datetimes,
+)
+from udfx.backends.registration_math import (
+    register_float_variants,
+    register_math,
+    register_trigonometry,
+)
 from udfx.backends.registration_text import (
     register_json,
     register_padding,
@@ -26,17 +35,13 @@ from udfx.semantics.lists import (
     native_set_operation,
     repeat_list,
 )
-from udfx.semantics.math import transcendental
 from udfx.semantics.numbers import (
     COMPARISONS,
     FLOAT_INT_MAX,
     Binary,
     OrderPrimitives,
-    RoundPrimitives,
     float_compare,
     float_extremum,
-    numpy_root,
-    signed_round,
     widened_exact,
 )
 from udfx.semantics.scalars import missing_expression
@@ -49,23 +54,19 @@ __all__ = [
     "RuleOptions",
     "RuleResult",
     "RuleSet",
+    "register_date_arithmetic",
     "register_datetime_arithmetic",
     "register_datetimes",
+    "register_float_variants",
     "register_json",
+    "register_math",
     "register_padding",
     "register_regex",
     "register_string_predicates",
     "register_text_conversions",
     "register_translation",
+    "register_trigonometry",
 ]
-
-
-def register_float_variants[E](
-    rules: RuleSet[E], name: str, rule: BinaryRule[E], to_float: Callable[[E], E]
-) -> None:
-    rules(name, Kind.FLOAT, Kind.FLOAT)(rule)
-    rules(name, Kind.INT, Kind.FLOAT)(lambda left, right: rule(to_float(left), right))
-    rules(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, to_float(right)))
 
 
 def register_missing[E](
@@ -79,52 +80,6 @@ def register_missing[E](
     for kind in (Kind.STR, Kind.INT, Kind.BOOL):
         rules("pandas.isna", kind)(is_null)
         rules("pandas.notna", kind)(lambda value: ~is_null(value))
-
-
-def register_math[E](
-    rules: RuleSet[E],
-    rounding: RoundPrimitives,
-    *,
-    root: Callable[[E], E],
-    floor: Callable[[E], E],
-    ceil: Callable[[E], E],
-    is_nan: Callable[[E], E],
-    round_digits: BinaryRule[E],
-) -> None:
-    def square_root(value: E) -> E:
-        return numpy_root(rounding, root, value)
-
-    rules("numpy.sqrt", Kind.FLOAT)(square_root)
-    rules("numpy.sqrt", Kind.INT)(lambda value: square_root(rounding.to_float(value)))
-    for module, names in (
-        ("numpy", ("log", "log1p", "log2", "log10", "exp", "expm1")),
-        ("math", ("log", "log2", "exp")),
-    ):
-        for name in names:
-
-            def rule(value: E, name: str = name) -> Lowered[E]:
-                return Lowered(*transcendental(rounding, is_nan, name, value))
-
-            rules(f"{module}.{name}", Kind.FLOAT)(rule)
-            rules(f"{module}.{name}", Kind.INT)(
-                lambda value, rule=rule: rule(rounding.to_float(value))
-            )
-
-    def logarithm(value: E, base: E) -> Lowered[E]:
-        return Lowered(value, rounding.literal(False))
-
-    register_float_variants(rules, "math.log", logarithm, rounding.to_float)
-    rules("math.log", Kind.INT, Kind.INT)(
-        lambda value, base: logarithm(rounding.to_float(value), base)
-    )
-    rules("numpy.isnan", Kind.FLOAT)(is_nan)
-    for kind in (Kind.INT, Kind.BOOL):
-        rules("numpy.isnan", kind)(lambda value: rounding.literal(False))
-    rules("numpy.abs", Kind.FLOAT)(rounding.abs)
-    rules("numpy.floor", Kind.FLOAT)(floor)
-    rules("numpy.ceil", Kind.FLOAT)(ceil)
-    rules("numpy.round", Kind.FLOAT)(lambda value: signed_round(rounding, value))
-    rules("numpy.round", Kind.FLOAT, Kind.INT)(round_digits)
 
 
 def register_widened_variants[E](

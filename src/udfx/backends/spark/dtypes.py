@@ -4,6 +4,7 @@ from pyspark.sql.types import (
     ArrayType,
     BooleanType,
     DataType,
+    DateType,
     DoubleType,
     LongType,
     NullType,
@@ -14,6 +15,7 @@ from pyspark.sql.types import (
 from udfx.types import Kind, Type
 
 _SCALARS: dict[Kind, DataType] = {
+    Kind.DATE: DateType(),
     Kind.DATETIME: TimestampNTZType(),
     Kind.JSON: StringType(),
     Kind.STR: StringType(),

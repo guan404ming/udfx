@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from udfx.backends.rules import Lowered, Scope
 from udfx.ir import Call, Node
@@ -20,7 +20,7 @@ def lower_integer_region[E](
     if not region:
         return None
     expressions: dict[Node, E] = {}
-    exacts: list[E | None] = []
+    exacts: list[E | Literal[False] | None] = []
 
     def lower(part: Node) -> E:
         if part not in expressions:

@@ -23,7 +23,7 @@ def packed(text: str) -> str:
 
 
 def guarded(text: str, value: float) -> str:
-    return json.dumps(text.split()) + str(value)
+    return json.dumps(text.split()) + str(round(value, 2))
 
 
 def length(text: str) -> int:

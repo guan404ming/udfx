@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from udfx.types import FLOAT, INT, STR
@@ -35,10 +36,12 @@ def year_month(date: str | None) -> str | None:
     return date[:7]
 
 
-def load(root: Path) -> list[Workload]:
+def load(
+    root: Path, cases: set[str] | None = None, *, load_functions: bool = True
+) -> list[Workload]:
     table = root / "flights" / "flights.parquet"
     join = Join(root / "flights" / "airports.parquet", "origin", "airport", "city")
-    return [
+    workloads = [
         Workload(
             "flights",
             "delay_band",
@@ -80,4 +83,10 @@ def load(root: Path) -> list[Workload]:
             "carrier",
             native=YEAR_MONTH,
         ),
+    ]
+
+    return [
+        workload if load_functions else replace(workload, function=None)
+        for workload in workloads
+        if cases is None or workload.identifier in cases
     ]

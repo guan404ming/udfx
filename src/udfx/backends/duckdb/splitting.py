@@ -53,8 +53,13 @@ def last_split(text: Expression, separator: Expression) -> Expression:
     return function("split_part", text, separator, constant(-1))
 
 
-@RULES("split_item", Kind.STR, Kind.STR, Kind.INT)
-def split_item(text: Expression, separator: Expression, index: Expression) -> Expression:
+@RULES("split_item", Kind.STR, Kind.STR, Kind.INT, literals=(2,))
+def split_item(
+    text: Expression, separator: Expression, index: Expression | int | None
+) -> Expression:
+    if not isinstance(index, Expression):
+        known = None if index in (None, INT64_MIN, INT64_MAX) else index if index < 0 else index + 1
+        return function("split_part", text, separator, constant(known))
     position = when(
         index < constant(0),
         function("nullif", index, constant(INT64_MIN)),

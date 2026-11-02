@@ -189,6 +189,8 @@ def sequence_call(name: str, item: Item) -> tuple[Node, list[Fault]]:
         return set_call(name, item.node)
     source = iterable_node(item)
     faults = nullable_faults(source)
+    if source.type.kind is Kind.STR and name != "list":
+        source, faults = invoke("list", [source], TypeError)
     if name == "list" and source.type.kind is Kind.LIST:
         return source, faults
     if name in {"any", "all"} and source.type.item is not None and source.type.item != BOOL:

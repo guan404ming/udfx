@@ -3,7 +3,7 @@ from __future__ import annotations
 import builtins
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from weakref import WeakKeyDictionary
 
@@ -46,6 +46,8 @@ def restore(value: Any, type: Type) -> object:
         return None
     if type.kind is Kind.FLOAT:
         return float(value)
+    if type.kind is Kind.DATE:
+        return date.fromisoformat(value)
     if type.kind is Kind.DATETIME:
         return datetime.fromisoformat(value)
     if type.kind is Kind.LIST and type.item is not None:

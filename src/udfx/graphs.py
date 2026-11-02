@@ -4,7 +4,7 @@ import pickle
 from collections.abc import Callable, Sequence
 from dataclasses import fields, replace
 
-from udfx.ir import Call, Node, children
+from udfx.ir import Call, Comprehension, Element, Node, children
 
 
 def deterministic(node: Node) -> bool:
@@ -29,7 +29,12 @@ def map_children(node: Node, transform: Callable[[Node], Node]) -> Node:
 
 
 def canonicalize(roots: Sequence[Node]) -> tuple[Node, ...]:
-    seen: dict[int, Node] = {}
+    visit = canonicalizer()
+    return tuple(visit(node) for node in roots)
+
+
+def canonicalizer() -> Callable[[Node], Node]:
+    seen: dict[int, tuple[Node, Node]] = {}
     canonical: dict[tuple[object, ...], Node] = {}
 
     def key(value: object) -> object:
@@ -49,10 +54,10 @@ def canonicalize(roots: Sequence[Node]) -> tuple[Node, ...]:
         if id(node) not in seen:
             mapped = map_children(node, visit)
             identity = (type(node), *(key(getattr(mapped, field.name)) for field in fields(node)))
-            seen[id(node)] = canonical.setdefault(identity, mapped)
-        return seen[id(node)]
+            seen[id(node)] = node, canonical.setdefault(identity, mapped)
+        return seen[id(node)][1]
 
-    return tuple(visit(node) for node in roots)
+    return visit
 
 
 def substitute(node: Node, replacements: dict[int, Node]) -> Node:
@@ -77,3 +82,21 @@ def unique_size(roots: Sequence[Node]) -> int:
             seen.add(id(node))
             pending.extend(children(node))
     return len(seen)
+
+
+def free(node: Node) -> frozenset[Element]:
+    seen: dict[int, frozenset[Element]] = {}
+
+    def visit(part: Node) -> frozenset[Element]:
+        if id(part) not in seen:
+            if isinstance(part, Element):
+                result = frozenset({part})
+            elif isinstance(part, Comprehension):
+                inner = visit(part.value) | visit(part.condition) | visit(part.fault)
+                result = visit(part.source) | (inner - {part.element})
+            else:
+                result = frozenset().union(*(visit(child) for child in children(part)))
+            seen[id(part)] = result
+        return seen[id(part)]
+
+    return visit(node)

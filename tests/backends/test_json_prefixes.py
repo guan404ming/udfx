@@ -5,6 +5,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from udfx.backends.program_lowering import choosing_graph
 from udfx.ir import Call, Col, If, Node, lit
 from udfx.ops import OpKey, apply
 from udfx.semantics.assumptions import assuming
@@ -52,7 +53,9 @@ def test_json_array_prefix_removes_string_branch(
         backend.rules, "get", lambda key: forbidden if key == conversion else original(key)
     )
     values = [None, "", "[]", '["a"]', '[null,{"x":[1,2]}]', '["', '["a",]', '"text"']
-    assert check_function(counted, {"text": STR.or_none()}, backend, [(x,) for x in values]) == []
+    rows = [(value,) for value in values]
+    with choosing_graph(False):
+        assert check_function(counted, {"text": STR.or_none()}, backend, rows) == []
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -91,4 +94,5 @@ def test_json_array_truth_skips_length(
         '["unterminated',
     ]
     rows = [(value,) for value in values]
-    assert check_function(nonempty, {"text": STR.or_none()}, backend, rows) == []
+    with choosing_graph(False):
+        assert check_function(nonempty, {"text": STR.or_none()}, backend, rows) == []

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from typing import ClassVar, cast
 
 import pyarrow as pa
@@ -12,7 +12,6 @@ from udfx.backends import arrow
 from udfx.backends.arithmetic import lower_integer_region
 from udfx.backends.base import Backend, Row, output_names, transpose_rows
 from udfx.backends.faults import NativeFaults, faults_for
-from udfx.backends.hoisting import free
 from udfx.backends.indexing import literal_range
 from udfx.backends.lowering_context import lowering_context
 from udfx.backends.program_lowering import lower_program
@@ -26,6 +25,7 @@ from udfx.backends.spark.numbers import WIDE_INTEGERS
 from udfx.backends.spark.rules import RULES
 from udfx.backends.spark.runtime import scope as runtime_scope
 from udfx.errors import Unsupported
+from udfx.graphs import free
 from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
@@ -54,7 +54,12 @@ class SparkBackend(Backend[Column]):
     def lower_program(self, program: Program) -> Lowered[Column]:
         with binding_scope() as scope, lowering_context(binds=True) as context:
             lowered = lower_program(self, program, ResultLowering(self, program))
-        if lowered.exact is not None and context.has_bindings and scope.requires_unbound:
+        if (
+            lowered.exact is not None
+            and lowered.exact is not False
+            and context.has_bindings
+            and scope.requires_unbound
+        ):
             return lower_program(self, program, ResultLowering(self, program))
         return lowered
 
@@ -103,6 +108,8 @@ class SparkBackend(Backend[Column]):
             value = list(cast("Iterable[object]", value))
         if node.type.kind is Kind.DATETIME and isinstance(value, datetime):
             value = value.isoformat(" ")
+        if node.type.kind is Kind.DATE and isinstance(value, date):
+            value = value.isoformat()
         return functions.lit(value).cast(dtype(node.type))
 
     def select(self, condition: Column, then: Column, orelse: Column) -> Column:
@@ -180,7 +187,7 @@ class SparkBackend(Backend[Column]):
         return functions.raise_error(message).cast(dtype(program.result))
 
     def compose(self, value: Lowered[Column], program: Program) -> Column:
-        if value.exact is not None and value.prepare is not None:
+        if value.exact is not None and value.exact is not False and value.prepare is not None:
             packed = value.consume(lambda value: packet(self, value, program))
             return finish(packed, program, fallback_patch(program))
         return super().compose(value, program)

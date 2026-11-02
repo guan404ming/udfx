@@ -1,7 +1,9 @@
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pyarrow
+
+from udfx.types import Type
 
 
 def with_arity[Function: Callable[..., object]](function: Function, count: int) -> Function:
@@ -11,6 +13,21 @@ def with_arity[Function: Callable[..., object]](function: Function, count: int) 
     ]
     function.__signature__ = inspect.Signature(parameters)
     return function
+
+
+def null_boundary(
+    function: Callable[..., object], parameters: Sequence[Type]
+) -> Callable[..., object]:
+    required = tuple(index for index, type in enumerate(parameters) if not type.nullable)
+    if not required:
+        return function
+
+    def apply(*values: object) -> object:
+        if any(values[index] is None for index in required):
+            return None
+        return function(*values)
+
+    return with_arity(apply, len(parameters))
 
 
 def batched(

@@ -3,12 +3,13 @@ from __future__ import annotations
 import math
 import sys
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from udfx.types import Kind
 
 PYTHON_TYPES = {
+    Kind.DATE: date,
     Kind.DATETIME: datetime,
     Kind.STR: str,
     Kind.INT: int,

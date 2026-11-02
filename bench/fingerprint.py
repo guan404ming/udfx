@@ -71,7 +71,7 @@ def fingerprint(backend: Backend[Any], program: Program) -> str:
     guard = ""
 
     def column(self: Backend[Any], node: Col) -> Any:
-        return backend.column(Col(names[node.name], node.type))
+        return backend.column(Col(names.get(node.name, node.name), node.type))
 
     def fallback(self: Backend[Any], native: Any, exact: Any, program: Program) -> Any:
         nonlocal guard

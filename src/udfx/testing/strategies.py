@@ -3,10 +3,15 @@ from __future__ import annotations
 import json
 import struct
 from collections.abc import Mapping, Sequence
-from datetime import datetime
 
 from hypothesis import strategies as st
 
+from udfx.testing.datetime_traps import (
+    DATE_TRAPS,
+    DATETIME_FORMATS,
+    DATETIME_TEXT_TRAPS,
+    DATETIME_TRAPS,
+)
 from udfx.testing.json_traps import JSON_TEXT_TRAPS, JSON_TRAPS
 from udfx.testing.text_traps import REGEX_PATTERNS, STRING_TRAPS
 from udfx.types import INT64_MAX, INT64_MIN, Kind, Type
@@ -51,71 +56,24 @@ CLUSTER_TRAPS = (
     "\uac01\u11a8",
 )
 
-INT_TRAPS = (0, 1, -1, 2, -2, 3, 5, INT64_MIN, INT64_MAX, 10, 1000, 2**53, 2**53 + 1, -(2**53) - 1)
+INT_TRAPS = (
+    0,
+    1,
+    -1,
+    2,
+    -2,
+    3,
+    5,
+    INT64_MIN,
+    INT64_MAX,
+    -(2**31),
+    10,
+    1000,
+    2**53,
+    2**53 + 1,
+    -(2**53) - 1,
+)
 SLICE_TRAPS = (-65, -64, -10, -4, -1, 1, 4, 64, 65, 2**31 - 1, 2**31, 2**32 - 1, 2**32)
-
-DATETIME_FORMATS = (
-    "%Y",
-    "%Y-%m",
-    "%Y-%m-%d",
-    "%Y-%m-%d %H:%M:%S.%f",
-    "%Y%m%d",
-    "%d/%m/%y",
-    "%Y %j",
-    "%H:%M:%S",
-    "%f",
-    "%y",
-    "%%",
-    "",
-    "literal",
-    "day %% %d.%m.%Y",
-    "\x00%Y\n%m\t%d",
-    "date 年 %Y",
-    "%Y %Y",
-    "%Y %y",
-)
-
-DATETIME_TEXT_TRAPS = (
-    "0000-01-01",
-    "24",
-    "24-01",
-    "24-01-01",
-    "10000-01-01",
-    "9999-12-31 24:00:00.000000",
-    "0001-01-01",
-    "9999-12-31",
-    "1969-12-31",
-    "2024-02-29",
-    "2023-02-29",
-    "2024-2-9",
-    "２０２４-01-01",
-    "2024-0٢-01",
-    "2024-02-2０",
-    "2024-02-０1",
-    "2024-02- 9",
-    "2024-01-01junk",
-    "2024-01-01\n",
-    "2024-02-29 12:34:56.123456",
-    "2024-01-01 00:00:00.1",
-    "2024-01-01 24:00:00.000000",
-    "2024-01-01 00:00:60.000000",
-    "01/02/68",
-    "01/02/69",
-    "2023 366",
-    "2024 367",
-)
-
-DATETIME_TRAPS = (
-    datetime.min,
-    datetime.max,
-    datetime(1970, 1, 1),
-    datetime(1969, 12, 31, 23, 59, 59, 999999),
-    datetime(2000, 2, 29, 12, 34, 56),
-    datetime(1900, 3, 1),
-    datetime(1600, 2, 29, 0, 0, 0, 999999),
-    datetime(2024, 3, 10, 2, 30),
-    datetime(2024, 11, 3, 1, 30),
-)
 
 FLOAT_TRAPS = (
     0.0,
@@ -147,11 +105,26 @@ FLOAT_TRAPS = (
     1e-5,
     1e-3,
     1e7,
+    1.5e-4,
+    1e15,
+    1e-323,
+    123456789.125,
     -float("nan"),
     900719925474100.5,
     -900719925474100.5,
     16.055,
     56294995342131.5,
+    -0.6030047356199073,
+    -0.5632819055357485,
+    -0.5363952858520995,
+    -0.2702105552426477,
+    91.02256930852431,
+    1.0000000000000002,
+    2.675,
+    -2.675,
+    0.005,
+    -0.005,
+    9.999,
 )
 
 
@@ -181,6 +154,8 @@ def extra_traps(type: Type) -> Sequence[object]:
             *DATETIME_TEXT_TRAPS,
             *JSON_TEXT_TRAPS,
         )
+    if type.kind is Kind.DATE:
+        return DATE_TRAPS
     if type.kind is Kind.DATETIME:
         return DATETIME_TRAPS
     if type.kind is Kind.FLOAT:
@@ -212,6 +187,8 @@ def _base(type: Type) -> st.SearchStrategy[object]:
                 max_leaves=8,
             )
             return documents.map(json.dumps)
+        case Kind.DATE:
+            return st.one_of(st.sampled_from(DATE_TRAPS), st.dates())
         case Kind.DATETIME:
             return st.one_of(st.sampled_from(DATETIME_TRAPS), st.datetimes())
         case Kind.STR:

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from udfx.semantics.numbers import FLOAT_INT_MAX
+from udfx.semantics.sequences import repeat_count
 
 SET_ORDER_MAX_SIZE = 1
 NATIVE_LIST_LIMIT = 10_000
@@ -44,6 +45,29 @@ def optional_item(values: list[Any], index: int) -> Any:
     return values[index] if -len(values) <= index < len(values) else None
 
 
+def list_index(values: Sequence[str | None], item: str | None) -> int:
+    return values.index(item)
+
+
+def first_positions(values: Sequence[str]) -> dict[str, int]:
+    positions: dict[str, int] = {}
+    for index, item in enumerate(values):
+        positions.setdefault(item, index)
+    return positions
+
+
+def literal_index(
+    literal: Callable[[object], Any],
+    when: Callable[[Any, Any, Any], Any],
+    values: Sequence[str],
+    item: Any,
+) -> Any:
+    result = literal(0)
+    for key, position in reversed(first_positions(values).items()):
+        result = when(item == literal(key), literal(position), result)
+    return result
+
+
 @dataclass(frozen=True)
 class SumPrimitives:
     literal: Callable[[object], Any]
@@ -74,12 +98,9 @@ class ListPrimitives:
 
 
 def repeat_list(primitives: ListPrimitives, value: Any, count: Any) -> tuple[Any, Any]:
-    literal = primitives.literal
-    length = primitives.length(value)
-    empty = length == literal(0)
-    capacity = literal(NATIVE_LIST_LIMIT) / primitives.when(empty, literal(1), length)
-    exact = empty | (count <= capacity)
-    safe = primitives.when(exact & ~empty & (count > literal(0)), count, literal(0))
+    safe, exact = repeat_count(
+        primitives.literal, primitives.when, primitives.length(value), count, NATIVE_LIST_LIMIT
+    )
     return primitives.repeat(value, safe), exact
 
 

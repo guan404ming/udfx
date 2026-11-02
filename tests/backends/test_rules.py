@@ -111,7 +111,7 @@ def test_rule_expressions_preserve_all_guards(
         assert lowered.exact is not None
         schema = {"bound": STR, "original": BOOL, "source": BOOL}
         rows = [("a", True, True), ("b", False, True), ("c", True, False)]
-        assert backend.evaluate([lowered.expr, lowered.exact], schema, rows) == [
+        assert backend.evaluate([lowered.expr, backend.predicate(lowered.exact)], schema, rows) == [
             ["a", "b", "c"],
             [True, False, not include_source],
         ]

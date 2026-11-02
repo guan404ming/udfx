@@ -130,11 +130,12 @@ def rfind(text: Column, pattern: Column) -> Column:
     return reverse_find(SEARCH, text, pattern)
 
 
-@RULES(".count", Kind.STR, Kind.STR)
-def count(text: Column, pattern: Column) -> Column:
-    removed = length(text) - length(functions.replace(text, pattern, functions.lit("")))
+@RULES(".count", Kind.STR, Kind.STR, literals=(1,))
+def count(text: Column, pattern: Column | str | None) -> Column:
+    native = pattern if isinstance(pattern, Column) else functions.lit(pattern)
+    removed = length(text) - length(functions.replace(text, native, functions.lit("")))
     occurrences = functions.call_function(
-        "div", removed, functions.greatest(length(pattern), functions.lit(1))
+        "div", removed, functions.greatest(length(native), functions.lit(1))
     )
     return count_occurrences(SEARCH, text, pattern, occurrences)
 

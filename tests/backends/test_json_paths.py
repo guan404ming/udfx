@@ -158,6 +158,8 @@ def test_json_variant_keys_stay_native(backend: Backend[Any], indexed: bool) -> 
         for document in ({name: "found" for name in keys}, {}, {name: None for name in keys})
         for default in (None, "missing")
     ]
-    actual, native = backend.evaluate([lowered.expr, lowered.exact], schema, rows)
+    actual, native = backend.evaluate(
+        [lowered.expr, backend.predicate(lowered.exact)], schema, rows
+    )
     assert actual == program.run(rows)
     assert native == [True] * len(rows)

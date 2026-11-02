@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from udfx.backends.guarantees import required
 from udfx.backends.hoisting import reads_input
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 UNROLL_LIMIT = 64
 
-type Parts[E] = tuple[Lowered[E], Lowered[E], E | None, E]
+type Parts[E] = tuple[Lowered[E], Lowered[E], E | Literal[False] | None, E]
 
 
 def range_stop(node: Comprehension) -> Node | None:
@@ -161,7 +161,7 @@ def comprehension_parts[E](backend: Backend[E], node: Comprehension, scope: Scop
         fault = backend.lower(node.fault, scope)
     value_exact = backend.exact(value)
     if node.condition != TRUE and value_exact is not None:
-        value_exact = backend.select(condition.expr, value_exact, backend.literal(TRUE))
+        value_exact = backend.select_exact(condition.expr, value_exact, None)
     exact = backend.conjunction(backend.exact(condition), value_exact, backend.exact(fault))
     return condition, value, exact, fault.expr
 
@@ -177,7 +177,9 @@ def comprehension_result[E](
 ) -> Lowered[E]:
     exact = backend.exact(source)
     if guarded:
-        exact = backend.conjunction(exact, every(backend, flags(lambda found: cast("E", found[2]))))
+        exact = backend.conjunction(
+            exact, every(backend, flags(lambda found: backend.predicate(found[2])))
+        )
     if node.fault == FALSE:
         return Lowered(value, exact, guarantees=required((source,)))
     safe = every(backend, flags(lambda found: backend.negate(found[3])))

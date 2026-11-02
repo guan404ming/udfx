@@ -173,9 +173,10 @@ def test_op_batches_skip_padding(backend: Backend[Any], monkeypatch: pytest.Monk
     assert captured[1] == [3, None, None]
 
 
-def test_op_batches_bound_expansion(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(("name", "count"), [(".ljust", 1_000_000), ("__mul__", 500_000)])
+def test_op_batches_bound_expansion(monkeypatch: pytest.MonkeyPatch, name: str, count: int) -> None:
     backend = PolarsBackend()
-    op = resolve(".ljust", (STR, INT))
+    op = resolve(name, (STR, INT))
     assert op is not None
     evaluate = backend.evaluate
     calls = 0
@@ -191,6 +192,6 @@ def test_op_batches_bound_expansion(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(backend, "evaluate", capture)
     rows = [(str(index), 0) for index in range(40)]
-    assert check_op_batches(op, backend, [(rows, {1: 1_000_000}), ([("short", 2)], {})]) == []
+    assert check_op_batches(op, backend, [(rows, {1: count}), ([("short", 2)], {})]) == []
     assert calls > 1
     assert seen == {str(index) for index in range(40)}

@@ -5,7 +5,7 @@ import operator
 from collections.abc import Callable
 from functools import partial
 
-from udfx.ir import Node, lit
+from udfx.ir import Lit, Node, lit
 from udfx.ops.numbers import not_finite, not_positive, zero
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.semantics.math import EXPONENTIAL_LIMIT
@@ -41,6 +41,8 @@ def power_faults(base: Node, exponent: Node) -> tuple[Fault, ...]:
 
 
 def round_faults(value: Node, digits: Node) -> tuple[Fault, ...]:
+    if isinstance(digits, Lit) and isinstance(digits.value, int) and digits.value >= 0:
+        return ()
     return (Fault(OverflowError, apply("round_overflows", value, digits)),)
 
 
@@ -63,6 +65,19 @@ def exponential_faults(value: Node) -> tuple[Fault, ...]:
     return (Fault(OverflowError, apply("and", overflow, finite)),)
 
 
+def infinite_angle(value: Node) -> tuple[Fault, ...]:
+    return (Fault(ValueError, apply("math.isinf", real(value))),)
+
+
+def outside_unit_interval(value: Node) -> tuple[Fault, ...]:
+    return (
+        Fault(
+            ValueError,
+            apply("or", apply("__lt__", value, lit(-1)), apply("__gt__", value, lit(1))),
+        ),
+    )
+
+
 register(Op("pow_overflows", (FLOAT, FLOAT), BOOL, overflows(operator.pow)))
 register(Op("round_overflows", (FLOAT, INT), BOOL, overflows(round)))
 
@@ -75,6 +90,11 @@ for scalar in (INT, FLOAT, STR):
 
 for scalar in (INT, FLOAT):
     register(Op("math.sqrt", (scalar,), FLOAT, math.sqrt, below_zero))
+    for name in ("sin", "cos"):
+        register(Op(f"math.{name}", (scalar,), FLOAT, getattr(math, name), infinite_angle))
+    register(Op("math.acos", (scalar,), FLOAT, math.acos, outside_unit_interval))
+    for other in (INT, FLOAT):
+        register(Op("math.atan2", (scalar, other), FLOAT, math.atan2))
 
 register(Op("round", (FLOAT,), INT, round, not_finite))
 register(Op("round", (FLOAT, INT), FLOAT, round, round_faults))

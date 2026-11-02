@@ -9,7 +9,19 @@ from udfx.backends.lowering_context import graph_enabled
 from udfx.backends.rules import Lowered, Scope, fold_predicate
 from udfx.errors import Unsupported
 from udfx.frontend.core.comprehensions import compose
-from udfx.ir import TRUE, Call, Col, Comprehension, Element, Guarded, If, ListValue, Lit, Node
+from udfx.ir import (
+    FALSE,
+    TRUE,
+    Call,
+    Col,
+    Comprehension,
+    Element,
+    Guarded,
+    If,
+    ListValue,
+    Lit,
+    Node,
+)
 from udfx.types import Kind, fits
 
 if TYPE_CHECKING:
@@ -32,7 +44,11 @@ def lower_node[E](backend: Backend[E], node: Node, elements: Scope[E]) -> Lowere
             return value.map(
                 lambda value: Lowered(
                     value.expr,
-                    backend.conjunction(value.exact, backend.exact(exact), exact.expr),
+                    backend.conjunction(
+                        value.exact,
+                        backend.exact(exact),
+                        False if predicate == FALSE else exact.expr,
+                    ),
                     value.overflow,
                     value.recover_overflow,
                     guarantees=value.guarantees + checked(exact),

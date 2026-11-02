@@ -5,9 +5,11 @@ from functools import partial
 from pyspark.sql import Column, functions
 
 from udfx.backends.registration import Lowered, register_json, register_text_conversions
+from udfx.backends.spark.bindings import bind
 from udfx.backends.spark.numbers import cast_float64, float_isinf
 from udfx.backends.spark.regex_categories import category
 from udfx.backends.spark.rules import RULES, when
+from udfx.semantics.float_text import FloatSpelling, FloatTextPrimitives, float_repr
 from udfx.semantics.literals import (
     ASCII_SPACE,
     SpellingPrimitives,
@@ -40,6 +42,23 @@ TEXT = TextPrimitives(
 
 SPELLING = SpellingPrimitives(functions.lit, when, Column.isNull, functions.coalesce)
 
+FLOAT_TEXT = FloatTextPrimitives(
+    literal=functions.lit,
+    when=when,
+    concat=functions.concat,
+    abs=functions.abs,
+    is_null=Column.isNull,
+    contains=Column.contains,
+    floor=functions.floor,
+    format=functions.format_string,
+    one_digit=lambda value: functions.format_string("%.0e", value),
+    trim_right=lambda text, characters: functions.rtrim(text, functions.lit(characters)),
+    before=lambda text, marker: functions.substring_index(text, marker, 1),
+    after=lambda text, marker: functions.substring_index(text, marker, -1),
+    to_int=lambda text: text.try_cast("int"),
+    to_float=lambda text: text.try_cast("double"),
+)
+
 
 @RULES("int", Kind.FLOAT)
 def float_int(value: Column) -> Lowered[Column]:
@@ -63,12 +82,17 @@ def int_str(value: Column) -> Column:
 
 
 @RULES("str", Kind.FLOAT)
-def float_str(value: Column) -> Lowered[Column]:
+def float_str(value: Column) -> Column:
     size = functions.abs(value)
-    fixed = (size >= JAVA_FIXED_MIN) & (size < JAVA_FIXED_MAX)
-    return Lowered(
-        show_none(SPELLING, value.cast("string")), value.isNull() | (value == 0.0) | fixed
-    )
+    plain = value.isNull() | (value == 0.0) | ((size >= JAVA_FIXED_MIN) & (size < JAVA_FIXED_MAX))
+    rare = bind(value, float_text, tracked=True)
+    return show_none(SPELLING, when(plain, value.cast("string"), rare))
+
+
+def float_text(value: Column) -> Column:
+    plain = value.cast("decimal(38,22)").cast("string")
+    spelling = FloatSpelling(value.cast("string"), plain, "E", "NaN", "Infinity")
+    return float_repr(FLOAT_TEXT, value, spelling)
 
 
 @RULES("str", Kind.BOOL)

@@ -196,7 +196,7 @@ def is_zero(x: float) -> bool:
 
 def test_float_compares_equal_to_int() -> None:
     x = Col("x", FLOAT)
-    assert trace(is_zero, {"x": FLOAT}).value == apply("__eq__", x, Lit(0, INT))
+    assert trace(is_zero, {"x": FLOAT}).value == apply("__eq__", x, Lit(0.0, FLOAT))
 
 
 def test_str_of_none_does_not_raise() -> None:

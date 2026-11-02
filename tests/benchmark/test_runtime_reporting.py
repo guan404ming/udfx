@@ -43,7 +43,7 @@ def test_runtime_reports_keep_execution_and_speedup_groups(status: str, tmp_path
     report = markdown(artifact)
     assert "| 3.30x | 2.00x | 2.00x | 0/2 |" in report
     assert "| 1 | 1 | 0 | 1 |" in report if status == "runtime" else "| 1 | 0 | 1 | 1 |" in report
-    assert f"| runtime | spark | query | {status} | spark.json_words |" in report
+    assert f"| runtime |  | spark | query | {status} | spark.json_words |" in report
     assert "Non-Python rows" in report
     path = tmp_path / "results.csv"
     export_csv(artifact, path)

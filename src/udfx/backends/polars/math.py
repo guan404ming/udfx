@@ -10,6 +10,7 @@ from udfx.backends.registration import (
     register_extremum,
     register_float_variants,
     register_math,
+    register_trigonometry,
 )
 from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
 from udfx.types import Kind
@@ -54,15 +55,15 @@ def pow_overflows(base: pl.Expr, exponent: pl.Expr) -> Lowered[pl.Expr]:
     return Lowered(result.expr.is_infinite() & finite, result.exact)
 
 
-@RULES("round", Kind.FLOAT, Kind.INT)
-def round_digits(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
+@RULES("round", Kind.FLOAT, Kind.INT, literals=(1,))
+def round_digits(value: pl.Expr, digits: pl.Expr | int) -> Lowered[pl.Expr]:
     rounding = scaled_round(ROUND, value, digits)
     rounded = broadcast(half_even(rounding.scaled)) / broadcast(rounding.scale)
     return Lowered(rounded, rounding.exact)
 
 
-@RULES("round_overflows", Kind.FLOAT, Kind.INT)
-def round_overflows(value: pl.Expr, digits: pl.Expr) -> Lowered[pl.Expr]:
+@RULES("round_overflows", Kind.FLOAT, Kind.INT, literals=(1,))
+def round_overflows(value: pl.Expr, digits: pl.Expr | int) -> Lowered[pl.Expr]:
     return Lowered(pl.lit(False), round_overflow_safe(ROUND, value, digits))
 
 
@@ -74,4 +75,13 @@ register_math(
     ceil=pl.Expr.ceil,
     is_nan=pl.Expr.is_nan,
     round_digits=round_digits,
+)
+
+
+register_trigonometry(
+    RULES,
+    ROUND,
+    unary={"sin": pl.Expr.sin, "cos": pl.Expr.cos, "acos": pl.Expr.arccos},
+    atan2=pl.arctan2,
+    is_nan=pl.Expr.is_nan,
 )

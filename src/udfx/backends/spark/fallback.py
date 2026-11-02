@@ -31,9 +31,9 @@ def packet(backend: Backend[Column], value: Lowered[Column], program: Program) -
         functions.lit(None).cast(result).alias(NATIVE),
         *(backend.column(Col(name, type)).alias(name) for name, type in program.schema.items()),
     )
-    return functions.when(functions.coalesce(exact, functions.lit(False)), completed).otherwise(
-        pending
-    )
+    return functions.when(
+        functions.coalesce(backend.predicate(exact), functions.lit(False)), completed
+    ).otherwise(pending)
 
 
 def finish(packet: Column, program: Program, patch: Callable[[pa.Array], pa.Array]) -> Column:

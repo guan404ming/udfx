@@ -6,12 +6,12 @@ from typing import ClassVar
 import polars as pl
 
 from udfx.backends.base import RAISED, RESERVED, Backend, Row, output_names, transpose_rows
-from udfx.backends.hoisting import free
 from udfx.backends.polars.dtypes import dtype
 from udfx.backends.polars.rules import RULES, broadcast, evaluate_list
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
+from udfx.graphs import free
 from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
@@ -102,10 +102,15 @@ class PolarsBackend(Backend[pl.Expr]):
             body = body.filter(broadcast(condition(element, index)))
         return evaluate_list(source, body)
 
-    def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
+    def compose(self, value: Lowered[pl.Expr], program: Program) -> pl.Expr:
+        if value.prepare is None or value.exact is None or value.exact is False:
+            return super().compose(value, program)
+        packed = value.consume(lambda part: self.record([self.exact_expression(part), part.expr]))
+        return self.fallback_record(packed, program)
+
+    def fallback_record(self, packed: pl.Expr, program: Program) -> pl.Expr:
         result = dtype(program.result)
-        flag_name, value_name = output_names(2)
-        expressions = [exact.alias(flag_name), native.alias(value_name)]
+        name = output_names(1)[0]
 
         def patch(series: Sequence[pl.Series]) -> pl.Series:
             length = len(series[0])
@@ -113,12 +118,13 @@ class PolarsBackend(Backend[pl.Expr]):
                 pl.DataFrame(series)
                 .rechunk()
                 .lazy()
-                .select(expressions)
+                .select(packed.alias(name))
                 .collect(engine="in-memory")
-                .get_columns()
+                .get_column(name)
             )
             flags, values = (
-                item if len(item) == length else item.new_from_index(0, length) for item in outputs
+                item if len(item) == length else item.new_from_index(0, length)
+                for item in (outputs.struct.field("0"), outputs.struct.field("1"))
             )
             pending = (~flags.fill_null(False)).arg_true().to_list()
 
@@ -139,6 +145,9 @@ class PolarsBackend(Backend[pl.Expr]):
         return pl.map_batches(
             inputs, patch, return_dtype=result, is_elementwise=program.deterministic
         )
+
+    def fallback(self, native: pl.Expr, exact: pl.Expr, program: Program) -> pl.Expr:
+        return self.fallback_record(self.record([exact, native]), program)
 
     def evaluate(
         self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]

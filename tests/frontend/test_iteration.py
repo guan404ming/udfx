@@ -54,15 +54,15 @@ def test_loop_limit() -> None:
         trace(oversized, {"text": STR})
 
 
-def test_dynamic_loop_stays_unsupported() -> None:
+def test_dynamic_loop_reduces_strings() -> None:
     def dynamic(text: str) -> str:
         result = ""
         for word in text.split():
             result += word
         return result
 
-    with pytest.raises(Unsupported, match="loops and comprehensions"):
-        trace(dynamic, {"text": STR})
+    rows = [("",), ("a b",), ("😀  x",)]
+    assert check_function(dynamic, {"text": STR}, PolarsBackend(), rows) == []
 
 
 @pytest.mark.parametrize(

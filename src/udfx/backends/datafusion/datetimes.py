@@ -4,8 +4,14 @@ import pyarrow as pa
 from datafusion import Expr, functions, lit
 
 from udfx.backends.datafusion.rules import RULES, null_safe_equal, when
-from udfx.backends.registration import register_datetime_arithmetic, register_datetimes
+from udfx.backends.registration import (
+    register_date_arithmetic,
+    register_datetime_arithmetic,
+    register_datetimes,
+)
+from udfx.semantics.dates import DateArithmeticPrimitives
 from udfx.semantics.datetimes import (
+    EPOCH_ORDINAL,
     TIMESTAMP_LITERAL,
     DatetimeArithmeticPrimitives,
     DatetimePrimitives,
@@ -43,6 +49,7 @@ register_datetimes(
         is_null=Expr.is_null,
     ),
     null_safe_equal,
+    lambda value: value.cast(pa.date32()),
 )
 
 
@@ -53,6 +60,17 @@ register_datetime_arithmetic(
         difference=lambda left, right: left.cast(pa.int64()) - right.cast(pa.int64()),
         to_microseconds=lambda value: value.cast(pa.int64()),
         from_microseconds=lambda value: value.cast(pa.timestamp("us")),
+        select=when,
+    ),
+)
+
+
+register_date_arithmetic(
+    RULES,
+    DateArithmeticPrimitives(
+        literal=lit,
+        to_ordinal=lambda value: value.cast(pa.int64()) + lit(EPOCH_ORDINAL),
+        from_ordinal=lambda value: (value - lit(EPOCH_ORDINAL)).cast(pa.int32()).cast(pa.date32()),
         select=when,
     ),
 )

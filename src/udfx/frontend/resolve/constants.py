@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
 from typing import cast
@@ -84,6 +84,7 @@ def is_scalar(value: object) -> bool:
     return (
         value is None
         or type(value) in SCALARS
+        or type(value) is date
         or (type(value) is datetime and value.tzinfo is None)
     )
 

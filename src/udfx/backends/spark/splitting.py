@@ -7,7 +7,7 @@ from pyspark.sql import Column, functions
 
 from udfx.backends.spark.regex_categories import category
 from udfx.backends.spark.rules import INT32_MAX, RULES, split_literal
-from udfx.backends.spark.slicing import SEQUENCE
+from udfx.backends.spark.slicing import SEQUENCE, bounded_native_index
 from udfx.backends.spark.strings import array_join, join, length, lstrip
 from udfx.frontend.core import splitting
 from udfx.frontend.core.json import nonempty_array
@@ -61,10 +61,7 @@ def last_split(text: Column, separator: Column, *, non_overlapping: bool = False
 
 @RULES("split_item", Kind.STR, Kind.STR, Kind.INT)
 def split_item(text: Column, separator: Column, index: Column) -> Column:
-    position = functions.when(index < 0, index).otherwise(
-        functions.try_add(index, functions.lit(1))
-    )
-    return functions.split_part(text, separator, position.try_cast("int"))
+    return functions.split_part(text, separator, bounded_native_index(index))
 
 
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(splitting.split_item)

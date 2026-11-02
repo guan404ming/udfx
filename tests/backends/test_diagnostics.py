@@ -14,8 +14,8 @@ def text_length(text: str) -> int:
     return len(text)
 
 
-def float_text(value: float) -> str:
-    return str(value)
+def rounded(value: float) -> float:
+    return round(value, 2)
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -27,7 +27,7 @@ def test_explain_native_and_guarded_plans(backend: Backend[Any]) -> None:
     assert "Fault handling: none" in native
     assert "Native guard:" not in native
     assert re.search(r"Compile time: \d+\.\d{6} s", native)
-    guarded = explain(float_text, {"value": FLOAT}, backend)
+    guarded = explain(rounded, {"value": FLOAT}, backend)
     assert "Status: guarded" in guarded
     assert "Python fallback: possible" in guarded
     assert "Fallback rows: not measured" in guarded
@@ -64,5 +64,5 @@ def test_explain_builds_once_without_running_rows(
 
     monkeypatch.setattr(backend, "build", build)
     monkeypatch.setattr(Program, "run", run)
-    explain(float_text, {"value": FLOAT}, backend)
+    explain(rounded, {"value": FLOAT}, backend)
     assert len(builds) == 1

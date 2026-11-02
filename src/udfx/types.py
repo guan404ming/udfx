@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import cast
 
-__all__ = ["BOOL", "DATETIME", "FLOAT", "INT", "STR", "Type", "list_of"]
+__all__ = ["BOOL", "DATE", "DATETIME", "FLOAT", "INT", "STR", "Type", "list_of"]
 
 INT64_MIN = -(2**63)
 INT64_MAX = 2**63 - 1
 
 
 class Kind(StrEnum):
+    DATE = "date"
     DATETIME = "datetime"
     STR = "str"
     INT = "int"
@@ -39,6 +40,7 @@ class Type:
         return Type(self.kind, False, self.item)
 
 
+DATE = Type(Kind.DATE)
 DATETIME = Type(Kind.DATETIME)
 STR = Type(Kind.STR)
 INT = Type(Kind.INT)
@@ -66,6 +68,8 @@ def type_of(value: object) -> Type | None:
             return STR
         case datetime(tzinfo=None):
             return DATETIME
+        case date() if not isinstance(value, datetime):
+            return DATE
         case _:
             return None
 
@@ -110,6 +114,8 @@ def fits(value: object, type: Type) -> bool:
             return isinstance(value, bool)
         case Kind.DATETIME:
             return isinstance(value, datetime) and value.tzinfo is None
+        case Kind.DATE:
+            return isinstance(value, date) and not isinstance(value, datetime)
         case Kind.INT:
             return isinstance(value, int) and INT64_MIN <= value <= INT64_MAX
         case Kind.FLOAT:

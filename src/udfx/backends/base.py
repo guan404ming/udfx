@@ -5,12 +5,17 @@ import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import reduce
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 from udfx.backends.faults import NativeFaults, decode_fallback_error, encode_fallback_error
-from udfx.backends.lowering_context import lower_shared
+from udfx.backends.lowering_context import (
+    distinct_guards,
+    factored_guards,
+    lower_shared,
+    remember_guards,
+)
 from udfx.backends.nodes import lower_node
-from udfx.backends.program_lowering import lower_program
+from udfx.backends.program_lowering import build_smallest, lower_program
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
@@ -48,6 +53,7 @@ class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
     graphs: ClassVar[bool] = False
+    choose_graphs: ClassVar[bool] = False
     binds: ClassVar[bool] = False
     indexes: ClassVar[bool] = False
 
@@ -181,34 +187,64 @@ class Backend[E](ABC):
                 )
 
     def build(self, program: Program) -> E:
-        self.check_names(program.schema)
-        value = self.lower_program(program)
-        return self.compose(value, program)
+        return build_smallest(self, program)
+
+    def build_candidate(self, program: Program) -> E:
+        return self.compose(self.lower_program(program), program)
+
+    def expression_cost(self, expr: E) -> int:
+        return len(str(expr))
 
     def compose(self, value: Lowered[E], program: Program) -> E:
-        return (
-            value.expr if value.exact is None else self.fallback(value.expr, value.exact, program)
+        if value.exact is False:
+            return self.fallback(
+                self.literal(Lit(None, program.result.or_none())), self.literal(FALSE), program
+            )
+        return value.consume(
+            lambda part: (
+                part.expr
+                if part.exact is None
+                else self.fallback(part.expr, self.predicate(part.exact), program)
+            )
         )
 
     def lower_program(self, program: Program) -> Lowered[E]:
         return lower_program(self, program)
 
-    def exact(self, lowered: Lowered[E]) -> E | None:
+    def exact(self, lowered: Lowered[E]) -> E | Literal[False] | None:
         return self.conjunction(
             lowered.exact,
             self.negate(lowered.overflow) if lowered.overflow is not None else None,
         )
 
     def exact_expression(self, lowered: Lowered[E]) -> E:
-        exact = self.exact(lowered)
-        return exact if exact is not None else self.literal(TRUE)
+        return self.predicate(self.exact(lowered))
+
+    def predicate(self, value: E | bool | None) -> E:
+        if value is None or value is True:
+            return self.literal(TRUE)
+        return self.literal(FALSE) if value is False else value
+
+    def select_exact(
+        self, condition: E, then: E | Literal[False] | None, orelse: E | Literal[False] | None
+    ) -> E | Literal[False] | None:
+        if then is orelse:
+            return then
+        shared, first, second = factored_guards(then, orelse)
+        if not shared:
+            return self.select(condition, self.predicate(then), self.predicate(orelse))
+        branch = self.select_exact(condition, self.conjunction(*first), self.conjunction(*second))
+        return self.conjunction(*shared, branch)
 
     def disjunction(self, *parts: E | None) -> E | None:
         present = [part for part in parts if part is not None]
         return reduce(operator.or_, present) if present else None
 
-    def conjunction(self, *parts: E | bool | None) -> E | None:
+    def conjunction(self, *parts: E | bool | None) -> E | Literal[False] | None:
         if any(part is False for part in parts):
-            return self.literal(FALSE)
-        present = [cast("E", part) for part in parts if part is not None and part is not True]
-        return reduce(self.both, present) if present else None
+            return False
+        guards = distinct_guards(parts)
+        return remember_guards(self.combine_guards(guards), guards) if guards else None
+
+    def combine_guards(self, guards: Sequence[E]) -> E:
+        return reduce(self.both, guards)

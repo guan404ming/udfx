@@ -8,6 +8,73 @@ from typing import Any
 from udfx.semantics.numbers import RoundPrimitives
 
 EXPONENTIAL_LIMIT = math.log(sys.float_info.max)
+SMALL_ANGLE = 2.0**-27
+
+
+def power_hazards(exponent: object) -> tuple[bool, bool]:
+    if not isinstance(exponent, float):
+        return True, True
+    return exponent < 0.0, not (math.isinf(exponent) or exponent.is_integer())
+
+
+def trigonometric_argument(
+    primitives: RoundPrimitives, is_nan: Callable[[Any], Any], name: str, value: Any
+) -> Any:
+    magnitude = primitives.abs(value)
+    invalid = (
+        (magnitude > primitives.literal(1.0)) & ~is_nan(value)
+        if name == "acos"
+        else magnitude == primitives.literal(math.inf)
+    )
+    return primitives.when(invalid, primitives.literal(0.0), value)
+
+
+def guarded_trigonometric(
+    primitives: RoundPrimitives,
+    is_nan: Callable[[Any], Any],
+    name: str,
+    value: Any,
+    native: Any,
+) -> tuple[Any, Any]:
+    magnitude = primitives.abs(value)
+    if name == "acos":
+        return native, (
+            (magnitude >= primitives.literal(1.0))
+            | (value == primitives.literal(0.0))
+            | is_nan(value)
+        )
+    small = magnitude <= primitives.literal(SMALL_ANGLE)
+    return primitives.when(small, value if name == "sin" else primitives.literal(1.0), native), (
+        small | (magnitude == primitives.literal(math.inf)) | is_nan(value)
+    )
+
+
+def guarded_atan2(
+    primitives: RoundPrimitives,
+    is_nan: Callable[[Any], Any],
+    native: Callable[[Any, Any], Any],
+    vertical: Any,
+    horizontal: Any,
+) -> tuple[Any, Any]:
+    zero = primitives.literal(0.0)
+    infinity = primitives.literal(math.inf)
+    vertical_size, horizontal_size = primitives.abs(vertical), primitives.abs(horizontal)
+    positive_axis = (vertical == zero) & (horizontal > zero) & ~is_nan(horizontal)
+    exact = (
+        is_nan(vertical)
+        | is_nan(horizontal)
+        | positive_axis
+        | (
+            (vertical != zero)
+            & (
+                (horizontal == zero)
+                | (vertical_size == infinity)
+                | (horizontal_size == infinity)
+                | (vertical_size == horizontal_size)
+            )
+        )
+    )
+    return primitives.when(positive_axis, vertical, native(vertical, horizontal)), exact
 
 
 def transcendental(

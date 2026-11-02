@@ -17,6 +17,7 @@ from udfx.frontend.core.values import Function, Generator, Item, Null, Opaque, V
 from udfx.frontend.decode import ops
 from udfx.frontend.flow.comprehensions import comprehension, validate_fault_handlers
 from udfx.frontend.flow.frame import Flow, Frame, Produced, Result
+from udfx.frontend.flow.generators import validate_creation
 from udfx.frontend.flow.machine import evaluates, explore, optional
 from udfx.frontend.operations.builtins import call
 from udfx.frontend.operations.iterables import indexed, iterator_of, source_of
@@ -202,6 +203,7 @@ def callee_of(
 @evaluates(ops.Call)
 def call_function(frame: Frame, flow: Flow, op: ops.Call) -> list[Result]:
     callee, receiver = callee_of(flow.values, op)
+    validate_creation(frame, flow, callee, op)
     arguments = [flow.values[identifier] for identifier in op.arguments]
     if receiver is not None:
         arguments.insert(0, receiver)

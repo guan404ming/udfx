@@ -51,6 +51,9 @@ The [UDFBench results](index.md#performance) use this scope:
 Versioned JSON records code and data hashes, Python and engine versions, CPU, threads,
 Apache Spark settings, and raw samples. Data preparation can cache downloads. Timing never caches.
 
+For user-supplied sources, see [Public Datasets > Local sources](datasets.md#local-sources).
+Add `--public` to `bench.report` before sharing a report. It omits private diagnostics and inputs.
+
 Use an otherwise idle machine without coverage instrumentation. The manual GitHub workflow
 requires an existing self-hosted Linux runner labelled `udfx-benchmark`.
 The local lock prevents concurrent benchmark commands in one checkout.

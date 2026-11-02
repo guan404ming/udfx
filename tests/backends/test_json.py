@@ -34,7 +34,7 @@ def test_json_list_serialization(backend: Backend[Any], ensure_ascii: bool) -> N
     if backend.name == "spark":
         assert lowered.exact is None
     elif lowered.exact is not None:
-        flags = backend.evaluate([lowered.exact], schema, rows)[0]
+        flags = backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0]
         assert flags[:4] == [True] * 4
         assert flags[4] is (not ensure_ascii)
 

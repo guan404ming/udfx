@@ -3,8 +3,9 @@ from dataclasses import replace
 
 from udfx.frontend.core.reductions import substitute
 from udfx.graphs import deterministic
-from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, Lit, Node, children
+from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, Lit, Node, children, lit
 from udfx.ops.registry import apply
+from udfx.types import STR, Kind, list_of
 
 
 def uses(node: Node, element: Element, linear: Callable[[Call], bool]) -> int:
@@ -118,3 +119,32 @@ def permutation_source(value: Node) -> Node:
     ):
         return permutation_source(value.source)
     return value
+
+
+def character_count(node: Call) -> Node | None:
+    values = node.arguments[0]
+    if not isinstance(values, Comprehension) or values.fault != FALSE or values.value != lit(1):
+        return None
+    source, condition = values.source, values.condition
+    if (
+        not isinstance(source, Call)
+        or source.op.name != "list"
+        or source.arguments[0].type.kind is not Kind.STR
+        or not isinstance(condition, Call)
+        or condition.op.name != "__contains__"
+    ):
+        return None
+    members, element = condition.arguments
+    if (
+        element != values.element
+        or not isinstance(members, Lit)
+        or not isinstance(members.value, tuple | list)
+        or any(not isinstance(value, str) or len(value) != 1 for value in members.value)
+    ):
+        return None
+    text = source.arguments[0]
+    if not deterministic(text):
+        return None
+    characters = "".join(dict.fromkeys(members.value))
+    removed = apply(".translate", text, lit(characters), Lit(("",) * len(characters), list_of(STR)))
+    return apply("__sub__", apply("len", text), apply("len", removed))

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from types import ModuleType
 
 from udfx.errors import Unsupported
@@ -25,10 +25,20 @@ from udfx.frontend.core.values import (
 from udfx.frontend.operations.datetimes import duration_attribute
 from udfx.frontend.resolve.constants import constant
 from udfx.frontend.resolve.frozen import Snapshot
+from udfx.semantics.dates import ATTRIBUTES as DATE_ATTRIBUTES
 from udfx.semantics.datetimes import ATTRIBUTES
 from udfx.types import Kind
 
-CLASS_METHODS = {(datetime, "strptime"): datetime.strptime, (str, "maketrans"): str.maketrans}
+CLASS_ATTRIBUTES = {
+    (datetime, "strptime"): datetime.strptime,
+    (datetime, "date"): datetime.date,
+    (date, "fromisoformat"): date.fromisoformat,
+    (date, "fromordinal"): date.fromordinal,
+    (date, "min"): date.min,
+    (date, "max"): date.max,
+    (date, "resolution"): date.resolution,
+    (str, "maketrans"): str.maketrans,
+}
 
 
 def load_attribute(
@@ -41,15 +51,17 @@ def load_attribute(
             attribute = owner.column(name)
         case Opaque(value=ModuleType() as module) if name in snapshot.members(module):
             attribute = constant(snapshot.attribute(module, name))
-        case Opaque(value=type() as python_type) if (python_type, name) in CLASS_METHODS:
-            attribute = Opaque(CLASS_METHODS[python_type, name])
+        case Opaque(value=type() as python_type) if (python_type, name) in CLASS_ATTRIBUTES:
+            attribute = constant(CLASS_ATTRIBUTES[python_type, name])
         case Opaque(value=dict()) if name in {"get", "keys", "values", "items"} and method:
             return Evaluation((Method(name), owner))
         case Opaque(value=re.Pattern() as pattern):
             attribute = Opaque(getattr(pattern, name, None))
-        case Value(node=node) if node.type.kind is Kind.DATETIME and name in ATTRIBUTES:
+        case Value(node=node) if (node.type.kind is Kind.DATETIME and name in ATTRIBUTES) or (
+            node.type.kind is Kind.DATE and name in DATE_ATTRIBUTES
+        ):
             if method:
-                raise Unsupported(f"datetime attribute {name} is not callable", where)
+                raise Unsupported(f"{node.type.kind} attribute {name} is not callable", where)
             result, faults = invoke(f".{name}", [node], AttributeError)
             return single(Value(result), faults)
         case Duration(node=node) if name in {"days", "seconds"} and not method:

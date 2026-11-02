@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from udfx.backends.guarantees import redundant_guard, required
 from udfx.backends.guarantees import selected as selected_guarantees
@@ -20,7 +20,9 @@ from udfx.backends.lowering_context import assuming_exact, bindings_enabled
 from udfx.backends.reductions import lower_reduction
 from udfx.backends.registration import Lowered, RuleResult
 from udfx.backends.rules import Scope, fold_predicate, fold_value
-from udfx.backends.selection import lower_cases
+from udfx.backends.selection import boolean_select, lower_cases
+from udfx.backends.sharing import call_rule
+from udfx.backends.sharing import lowered as as_lowered
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
 from udfx.ops import OpKey
@@ -56,14 +58,10 @@ def lower_if[E](
         backend, predicate, then, node.orelse, elements
     ):
         condition = replace(condition, exact=None, guarantees=())
-    expr = backend.select(condition.expr, then.expr, orelse.expr)
+    expr = boolean_select(backend, node, condition.expr, then, orelse)
     exact = backend.exact(condition)
     if then.exact is not None or orelse.exact is not None:
-        branch = backend.select(
-            condition.expr,
-            then.exact if then.exact is not None else backend.literal(TRUE),
-            orelse.exact if orelse.exact is not None else backend.literal(TRUE),
-        )
+        branch = backend.select_exact(condition.expr, then.exact, orelse.exact)
         exact = backend.conjunction(exact, branch)
     overflow = None
     if then.overflow is not None or orelse.overflow is not None:
@@ -84,7 +82,7 @@ def lower_if[E](
         if guard is None:
             return selected
         pending = finish(Lowered(expr, backend.literal(FALSE)))
-        return backend.select(guard, selected, pending)
+        return backend.select(backend.predicate(guard), selected, pending)
 
     return Lowered(
         expr,
@@ -127,12 +125,17 @@ def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowere
         name: None if (source := expression(node)) is None else backend.lower(source, elements)
         for name, expression in options.expressions.items()
     }
-    result: RuleResult[E] = rule(
-        *(argument.expr for argument in lowered_arguments),
-        **{name: fact(node) for name, fact in options.facts.items()},
-        **{name: None if value is None else value.expr for name, value in expressions.items()},
+    result: RuleResult[E] = call_rule(
+        backend,
+        node,
+        rule,
+        [argument.expr for argument in lowered_arguments],
+        {
+            **{name: fact(node) for name, fact in options.facts.items()},
+            **{name: None if value is None else value.expr for name, value in expressions.items()},
+        },
     )
-    lowered = cast("Lowered[E]", result) if isinstance(result, Lowered) else Lowered(result)
+    lowered = as_lowered(result)
     guards = [
         guard(argument.value if isinstance(argument, Lit) else lowered_arguments[index].expr)
         for index, guard in options.guards.items()
@@ -180,7 +183,7 @@ def lower_comprehension[E](
     try:
         if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
             chunks: list[E] = []
-            exacts: list[E | None] = []
+            exacts: list[E | Literal[False] | None] = []
             faults: list[E | None] = []
             for item in node.source.value:
                 element = backend.lower(Lit(item, node.element.type), elements)
@@ -227,7 +230,7 @@ def lower_comprehension[E](
     rewritten = rewrite_range(backend, node, elements)
     if rewritten is not None:
         return rewritten
-    return Lowered(backend.literal(Lit((), node.type)), backend.literal(FALSE))
+    return Lowered(backend.literal(Lit((), node.type)), False)
 
 
 def rewrite_range[E](

@@ -13,6 +13,8 @@ UDFBench `stem` function. They do not change udfx's installed dependencies autom
 `core.patch` fixes nested lambda argument resolution, type propagation during coercion,
 projection schemas, and constant folding with captured variables. It also repairs Unnest
 functional dependencies that incorrectly preserve row uniqueness after list expansion.
+Field resolution names only the outermost expression, so planning no longer formats every
+nested subexpression.
 `python.patch` removes the late binding-only analyzer and adds regression tests.
 
 ## Build

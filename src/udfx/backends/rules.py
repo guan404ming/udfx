@@ -3,7 +3,7 @@ from __future__ import annotations
 import operator
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Literal
 
 from udfx.backends.guarantees import Guarantee
 from udfx.frontend.core.comprehensions import cardinality
@@ -21,7 +21,7 @@ from udfx.types import Kind
 @dataclass(frozen=True)
 class Lowered[E]:
     expr: E
-    exact: E | None = None
+    exact: E | Literal[False] | None = None
     overflow: E | None = None
     recover_overflow: Callable[[E], E] | None = None
     prepare: Callable[[Callable[[Lowered[E]], E]], E] | None = None

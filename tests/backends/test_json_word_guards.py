@@ -38,7 +38,7 @@ def test_json_word_guard_uses_source(backend: Backend[Any], reverse: bool, copie
     assert lowered.exact is not None
     assert "list_transform" not in str(lowered.exact).lower()
     assert "array_transform" not in str(lowered.exact).lower()
-    flags = backend.evaluate([lowered.exact], schema, rows)[0]
+    flags = backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0]
     assert flags[1:6] == [True] * 5
     assert flags[6:8] == [False, False]
     assert all(flags[8:])
@@ -56,4 +56,8 @@ def test_json_word_mapping_checks_mapped_values(backend: Backend[Any]) -> None:
     assert check_function(packed, schema, backend, rows) == []
     lowered = backend.lower_program(trace(packed, schema))
     assert lowered.exact is not None
-    assert backend.evaluate([lowered.exact], schema, rows)[0] == [False, True, False]
+    assert backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0] == [
+        False,
+        True,
+        False,
+    ]

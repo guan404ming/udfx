@@ -4,9 +4,10 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.evaluation import single
 from udfx.frontend.core.exceptions import exception_classes, exception_kind
 from udfx.frontend.core.expressions import truth
-from udfx.frontend.core.values import NULL, Cell, Opaque, Value
+from udfx.frontend.core.values import NULL, Cell, Generator, Opaque, Value
 from udfx.frontend.decode import ops
 from udfx.frontend.flow.frame import Flow, Frame, Produced, Result
+from udfx.frontend.flow.generators import store_generator
 from udfx.frontend.flow.machine import evaluates, optional
 from udfx.frontend.operations import containers, operators, subscripts
 from udfx.frontend.operations.attributes import load_attribute
@@ -43,7 +44,13 @@ def cell(frame: Frame, flow: Flow, op: ops.Cell) -> list[Result]:
 def store(frame: Frame, flow: Flow, op: ops.Store) -> list[Result]:
     if op.cell and op.name in frame.code.co_freevars:
         raise Unsupported(f"nonlocal write to {op.name}", frame.where(op.offset))
-    return [Produced(flow.bindings.store(op.name, flow.values[op.source]), ())]
+    item = flow.values[op.source]
+    bindings = (
+        store_generator(frame, flow, op, item)
+        if isinstance(item, Generator)
+        else flow.bindings.store(op.name, item)
+    )
+    return [Produced(bindings, ())]
 
 
 @evaluates(ops.Delete)

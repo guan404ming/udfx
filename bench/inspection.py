@@ -25,7 +25,7 @@ def pending_share(
     exact = lower_program(backend, program).exact
     if exact is None:
         return 0.0
-    flags = evaluate(exact)
+    flags = evaluate(backend.predicate(exact))
     return sum(flag is not True for flag in flags) / len(flags) if flags else 0.0
 
 

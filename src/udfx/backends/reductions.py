@@ -8,6 +8,7 @@ from udfx.backends.lowering_context import bindings_enabled
 from udfx.backends.rules import Lowered, Scope
 from udfx.frontend.core.logic import fold
 from udfx.frontend.core.reductions import substitute
+from udfx.graphs import canonicalize
 from udfx.ir import FALSE, Call, Comprehension, If, Lit, lit
 from udfx.ops import apply
 from udfx.types import INT
@@ -37,4 +38,4 @@ def lower_reduction[E](backend: Backend[E], node: Call, elements: Scope[E]) -> L
         condition = substitute(unrolled.condition, unrolled.element, element)
         value = substitute(unrolled.value, unrolled.element, element)
         result = apply("__add__", result, If(condition, value, lit(0), INT))
-    return backend.lower(fold(result), elements)
+    return backend.lower(canonicalize((node, fold(result)))[1], elements)

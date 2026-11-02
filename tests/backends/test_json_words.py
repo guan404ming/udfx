@@ -74,7 +74,7 @@ def test_json_words_skip_element_encoding(
         return
     assert ".list.eval(" not in str(lowered.expr)
     assert lowered.exact is not None
-    flags = backend.evaluate([lowered.exact], schema, rows)[0]
+    flags = backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0]
     assert flags[1:6] == [True] * 5
     assert flags[6] is (not ensure_ascii)
     assert all(flags[7:])

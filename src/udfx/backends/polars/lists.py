@@ -6,13 +6,30 @@ from udfx.backends.polars.rules import RULES, when
 from udfx.backends.polars.slicing import SEQUENCE
 from udfx.backends.polars.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
-from udfx.frontend.core.comprehensions import lowercase_words
-from udfx.semantics.lists import ListPrimitives, SetPrimitives
+from udfx.frontend.core.comprehensions import character_count, lowercase_words
+from udfx.semantics.lists import ListPrimitives, SetPrimitives, first_positions
 from udfx.semantics.sequences import take_prefix
 from udfx.types import Kind
 
 for kind in (Kind.INT, Kind.BOOL):
     RULES("__contains__", Kind.LIST, kind)(list_contains)
+
+
+@RULES(".index", Kind.LIST, Kind.STR, literals=(0,))
+def index(value: pl.Expr | list[str] | tuple[str, ...] | None, item: pl.Expr) -> pl.Expr:
+    if value is None:
+        return pl.lit(0, dtype=pl.Int64)
+    if not isinstance(value, pl.Expr):
+        positions = first_positions(value)
+        return item.replace_strict(
+            pl.Series(list(positions), dtype=pl.String),
+            pl.Series(list(positions.values()), dtype=pl.Int64),
+            default=0,
+            return_dtype=pl.Int64,
+        )
+    element = pl.element()
+    matches = (element == element.last()).arg_true().first()
+    return value.list.concat(item).list.eval(matches).list.first().cast(pl.Int64)
 
 
 @RULES("list", Kind.LIST)
@@ -101,3 +118,6 @@ register_lists(
         difference=lambda left, right: left.list.set_difference(right),
     ),
 )
+
+
+RULES.rewrite("sum", Kind.LIST)(character_count)

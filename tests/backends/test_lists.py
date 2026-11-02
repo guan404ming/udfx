@@ -9,7 +9,7 @@ from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
 from udfx.backends.spark.dtypes import dtype
 from udfx.frontend import trace
-from udfx.ir import TRUE, Col, Comprehension
+from udfx.ir import Col, Comprehension
 from udfx.testing import check_function
 from udfx.types import FLOAT, INT, STR, list_of
 
@@ -23,7 +23,7 @@ def test_comprehension_native_rows(backend: Backend[Any]) -> None:
     program = trace(mapped, schema)
     assert isinstance(program.value, Comprehension)
     lowered = backend.lower(program.value)
-    exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
+    exact = backend.predicate(lowered.exact)
     results, flags = backend.evaluate([lowered.expr, exact], schema, [(["abc", "b"],), ([],)])
     assert results == [["ABC"], []]
     assert flags == [True, True]
@@ -132,7 +132,7 @@ def test_constant_generator_unrolls_natively(backend: Backend[Any]) -> None:
     schema = {"text": STR}
     program = trace(matched, schema)
     lowered = backend.lower(program.value)
-    exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
+    exact = backend.predicate(lowered.exact)
     values, flags = backend.evaluate([lowered.expr, exact], schema, [("",), ("abc",), ("z",)])
     assert values == [False, True, False]
     assert flags == [True, True, True]
@@ -158,7 +158,7 @@ def test_numeric_sets_match_python(backend: Backend[Any]) -> None:
     assert check_function(ordered, schema, backend, rows) == []
     lowered = backend.lower(trace(count, schema).value)
     assert lowered.exact is not None
-    flags = backend.evaluate([lowered.exact], schema, rows)[0]
+    flags = backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0]
     assert flags == [True, True, False, False, False]
 
 
@@ -192,7 +192,7 @@ def test_dynamic_range_native_rows(backend: Backend[Any], enumerated: bool) -> N
     assert check_function(increments, schema, backend, rows) == []
     lowered = backend.lower(trace(increments, schema).value)
     assert lowered.exact is not None
-    flags = backend.evaluate([lowered.exact], schema, rows)[0]
+    flags = backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0]
     assert flags == [True] * 3
 
 
@@ -205,8 +205,8 @@ def test_constant_paired_comprehension(backend: Backend[Any]) -> None:
     assert check_function(selected, schema, backend, [("",), ("a",)]) == []
     if backend.name in {"duckdb", "spark"}:
         lowered = backend.lower(trace(selected, schema).value)
-        exact = lowered.exact
-        assert exact is None or backend.evaluate([exact], schema, [("a",)])[0] == [True]
+        exact = backend.predicate(lowered.exact)
+        assert backend.evaluate([exact], schema, [("a",)]) == [[True]]
 
 
 def indexed_words(text: str) -> list[str]:
@@ -234,7 +234,7 @@ def test_indexed_comprehension_native_rows(backend: Backend[Any], function: Any)
     rows = [("",), ("7",), ("12 3",), ("1 2 a",)]
     assert check_function(function, schema, backend, [*rows, ("x",)]) == []
     lowered = backend.lower(trace(function, schema).value)
-    exact = lowered.exact if lowered.exact is not None else backend.literal(TRUE)
+    exact = backend.predicate(lowered.exact)
     assert backend.evaluate([lowered.expr, exact], schema, rows)[1] == [True] * len(rows)
 
 

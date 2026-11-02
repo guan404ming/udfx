@@ -3,12 +3,16 @@ from collections.abc import Iterator, Sequence
 from udfx.backends.base import Row
 from udfx.ops import Op
 from udfx.semantics.text import NATIVE_PADDING_LIMIT, PADDING_METHODS
+from udfx.types import Kind
 
 OUTPUT_BYTES = 16 * 1024 * 1024
 
 
 def allocation_batches(op: Op, rows: Sequence[Row]) -> Iterator[tuple[int, Sequence[Row]]]:
-    if op.name.removeprefix(".") not in PADDING_METHODS:
+    repeating = op.name == "__mul__" and any(
+        parameter.kind is Kind.STR for parameter in op.parameters
+    )
+    if op.name.removeprefix(".") not in PADDING_METHODS and not repeating:
         yield 0, rows
         return
     width = len(op.parameters) + 1
@@ -17,12 +21,19 @@ def allocation_batches(op: Op, rows: Sequence[Row]) -> Iterator[tuple[int, Seque
         required = 0
         for offset in range(0, len(row), width):
             text, length = row[offset : offset + 2]
+            if repeating and op.parameters[0].kind is Kind.INT:
+                text, length = length, text
             if not row[offset + width - 1] or not isinstance(text, str):
                 continue
-            padding = (
+            expansion = (
                 length if isinstance(length, int) and 0 < length <= NATIVE_PADDING_LIMIT else 0
             )
-            required += 4 * (len(text) + max(len(text), padding))
+            if repeating:
+                size_needed = len(text) * expansion
+                expansion = size_needed if size_needed <= NATIVE_PADDING_LIMIT else 0
+            else:
+                expansion = max(len(text), expansion)
+            required += 4 * (len(text) + expansion)
         if size + required > OUTPUT_BYTES and start < index:
             yield start, rows[start:index]
             start, size = index, 0

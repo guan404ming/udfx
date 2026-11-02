@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import replace
 
 from duckdb import Expression
@@ -12,12 +13,14 @@ from udfx.backends.registration import (
     register_extremum,
     register_float_variants,
     register_math,
+    register_trigonometry,
 )
+from udfx.semantics.math import power_hazards
 from udfx.semantics.numbers import (
     RoundPrimitives,
     round_half_even,
     round_overflow_safe,
-    scaled_round,
+    round_scaled,
 )
 from udfx.types import Kind
 
@@ -41,9 +44,13 @@ ROUND = RoundPrimitives(
 )
 
 
-def power(base: Expression, exponent: Expression) -> Lowered[Expression]:
-    complex_result = (base < constant(0.0)) & (function("floor", exponent) != exponent)
-    return Lowered(function("pow", base, exponent), ~complex_result)
+def power(base: Expression, exponent: Expression | float) -> Lowered[Expression]:
+    fractional = power_hazards(exponent)[1]
+    exponent = exponent if isinstance(exponent, Expression) else constant(exponent)
+    value = function("pow", base, exponent)
+    if not fractional:
+        return Lowered(value)
+    return Lowered(value, ~((base < constant(0.0)) & (function("floor", exponent) != exponent)))
 
 
 def root(value: Expression) -> Expression:
@@ -53,7 +60,7 @@ def root(value: Expression) -> Expression:
 register_extremum(RULES, "max", lambda left, right: function("greatest", left, right), ORDER, when)
 register_extremum(RULES, "min", lambda left, right: function("least", left, right), ORDER, when)
 
-register_float_variants(RULES, "__pow__", power, cast_float64)
+register_float_variants(RULES, "__pow__", power, cast_float64, literals=(1,))
 RULES("math.sqrt", Kind.FLOAT)(root)
 RULES("math.sqrt", Kind.INT)(lambda value: root(cast_float64(value)))
 RULES("math.ceil", Kind.FLOAT)(lambda value: float_int(function("ceil", value)))
@@ -63,21 +70,23 @@ RULES("math.floor", Kind.INT)(identity)
 RULES("round", Kind.FLOAT)(lambda value: float_int(half_even(value)))
 
 
-@RULES("pow_overflows", Kind.FLOAT, Kind.FLOAT)
-def pow_overflows(base: Expression, exponent: Expression) -> Lowered[Expression]:
+@RULES("pow_overflows", Kind.FLOAT, Kind.FLOAT, literals=(1,))
+def pow_overflows(base: Expression, exponent: Expression | float) -> Lowered[Expression]:
     result = power(base, exponent)
-    finite = function("isfinite", base) & function("isfinite", exponent) & (base != constant(0.0))
-    return Lowered(function("isinf", result.expr) & finite, result.exact)
+    overflow = function("isinf", result.expr) & function("isfinite", base) & (base != constant(0.0))
+    if isinstance(exponent, Expression):
+        return Lowered(overflow & function("isfinite", exponent), result.exact)
+    return Lowered(overflow if math.isfinite(exponent) else constant(False), result.exact)
 
 
-@RULES("round", Kind.FLOAT, Kind.INT)
-def round_digits(value: Expression, digits: Expression) -> Lowered[Expression]:
-    rounding = scaled_round(ROUND, value, digits)
-    return Lowered(half_even(rounding.scaled) / rounding.scale, rounding.exact)
+@RULES("round", Kind.FLOAT, Kind.INT, literals=(1,))
+def round_digits(value: Expression, digits: Expression | int) -> Lowered[Expression]:
+    rounding = round_scaled(ROUND, value, digits, half_even)
+    return Lowered(rounding.scaled / rounding.scale, rounding.exact)
 
 
-@RULES("round_overflows", Kind.FLOAT, Kind.INT)
-def round_overflows(value: Expression, digits: Expression) -> Lowered[Expression]:
+@RULES("round_overflows", Kind.FLOAT, Kind.INT, literals=(1,))
+def round_overflows(value: Expression, digits: Expression | int) -> Lowered[Expression]:
     return Lowered(constant(False), round_overflow_safe(ROUND, value, digits))
 
 
@@ -89,4 +98,15 @@ register_math(
     ceil=lambda value: function("ceil", value),
     is_nan=lambda value: function("isnan", value),
     round_digits=round_digits,
+)
+
+
+register_trigonometry(
+    RULES,
+    ROUND,
+    unary={
+        name: (lambda value, name=name: function(name, value)) for name in ("sin", "cos", "acos")
+    },
+    atan2=lambda vertical, horizontal: function("atan2", vertical, horizontal),
+    is_nan=lambda value: function("isnan", value),
 )

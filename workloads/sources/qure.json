@@ -1,0 +1,819 @@
+{
+  "name": "QURE scalar Python functions",
+  "source": "User-supplied QURE Benchmark archive",
+  "revision": "Local snapshot pinned by individual source hashes",
+  "license": "Microsoft Research License Terms. Non-commercial research use. Upstream source, data, and license files remain outside the distribution.",
+  "inventory": {
+    "in_scope": {
+      "python": 27,
+      "froid": 9
+    },
+    "outside_scalar_scope": {
+      "agg": 23,
+      "map": 15,
+      "scalar": 19,
+      "pyfroid": 10,
+      "tpch": 23
+    }
+  },
+  "scope": "Evaluate the supplied udf_0 scalar function bodies. Do not execute query wrappers. Explicit import additions appear per source file and use adapted origin. Other families and full SQL query workloads are outside this adapter.",
+  "selection": "Keep source row order. Joined scalar inputs use the supplied query join predicates in lineitem row order, then successive right-table row order. Keep every matching row. Do not rewrite function bodies or filter rows after evaluating a function.",
+  "input_types": "Read local TPC-H .tbl files with explicit int64, float64, string, and date32 columns. Date32 inputs remain datetime.date values and use the compiler DATE type.",
+  "joins": {
+    "lineitem_orders": [
+      "l_orderkey",
+      "o_orderkey"
+    ],
+    "lineitem_part": [
+      "l_partkey",
+      "p_partkey"
+    ],
+    "lineitem_partsupp": [
+      "l_suppkey",
+      "ps_suppkey"
+    ],
+    "froid_q4": [
+      [
+        "l_orderkey",
+        "o_orderkey"
+      ],
+      [
+        "o_custkey",
+        "c_custkey"
+      ],
+      [
+        "l_suppkey",
+        "s_suppkey"
+      ],
+      [
+        "c_nationkey",
+        "s_nationkey"
+      ],
+      [
+        "s_nationkey",
+        "n_nationkey"
+      ],
+      [
+        "n_regionkey",
+        "r_regionkey"
+      ]
+    ],
+    "froid_q8": [
+      [
+        "l_orderkey",
+        "o_orderkey"
+      ],
+      [
+        "o_custkey",
+        "c_custkey"
+      ],
+      [
+        "l_suppkey",
+        "s_suppkey"
+      ],
+      [
+        "s_nationkey",
+        "n1.n_nationkey"
+      ],
+      [
+        "c_nationkey",
+        "n2.n_nationkey"
+      ]
+    ]
+  },
+  "join_note": "froid/q6 joins lineitem and partsupp only on supplier key in the supplied query. Preserve its many-to-many expansion. froid/q4 also requires equal customer and supplier nation keys. froid/q8 joins the supplier and customer nation tables separately. Large inputs can require substantial preparation memory.",
+  "files": [
+    {
+      "path": "python/q1.py",
+      "input": "qure.code",
+      "sha256": "8aa49f3dc4c061279bc7bad3caea30a479ce0e047efb1dd1093ec3d8050fc451",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_extendedprice": "l_extendedprice",
+          "l_discount": "l_discount",
+          "l_quantity": "l_quantity",
+          "l_returnflag": "l_returnflag",
+          "l_tax": "l_tax"
+        },
+        "schema": {
+          "l_extendedprice": "float64",
+          "l_discount": "float64",
+          "l_quantity": "float64",
+          "l_returnflag": "string",
+          "l_tax": "float64"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q2.py",
+      "input": "qure.code",
+      "sha256": "7b315f36dd83af4dc8ec88886fcf9a6c701cef0074fd281501e92914aaf12bfc",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem_orders",
+        "columns": {
+          "o_totalprice": "o_totalprice",
+          "l_extendedprice": "l_extendedprice"
+        },
+        "schema": {
+          "o_totalprice": "float64",
+          "l_extendedprice": "float64"
+        },
+        "result": "float64"
+      },
+      "adaptations": {
+        "imports": {
+          "math": [
+            "exp",
+            "sqrt"
+          ]
+        },
+        "reason": "The supplied function references these names without importing them. Add only these bindings. Preserve the source file and function body."
+      }
+    },
+    {
+      "path": "python/q3.py",
+      "input": "qure.code",
+      "sha256": "931674af14704a8e2dadfd418e178d76af237fc451cdf799e62fbbb4b2f676e7",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipinstruct": "l_shipinstruct"
+        },
+        "schema": {
+          "l_shipinstruct": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q4.py",
+      "input": "qure.code",
+      "sha256": "450644002eebfcdcc60ec29441fa8d1427017e577f40072188b6ef856c87fe75",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "key": "l_shipmode"
+        },
+        "schema": {
+          "key": "string"
+        },
+        "result": "int64"
+      }
+    },
+    {
+      "path": "python/q5.py",
+      "input": "qure.code",
+      "sha256": "f5dd36b4d226a0a3420232b733fa2059fa37f758f4a25df92caa29d6c9b14277",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipinstruct": "l_shipinstruct"
+        },
+        "schema": {
+          "l_shipinstruct": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q6.py",
+      "input": "qure.code",
+      "sha256": "2a16394e00c35a0cbe8e3d625e8bf1d0179d73f094ff9e87bfce5589324c49d0",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_comment": "l_comment"
+        },
+        "schema": {
+          "l_comment": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q7.py",
+      "input": "qure.code",
+      "sha256": "f7abc9e1fbb9ed9370794c1061d1db3a314b5301642c06aaecb9179a8c8b82e8",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_extendedprice": "l_extendedprice",
+          "l_discount": "l_discount",
+          "l_quantity": "l_quantity"
+        },
+        "schema": {
+          "l_extendedprice": "float64",
+          "l_discount": "float64",
+          "l_quantity": "float64"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q8.py",
+      "input": "qure.code",
+      "sha256": "d81dec5dd838b863503b3e70bbddf3daf4092da8bc64c17c60015b78051fcdbe",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipdate": "l_shipdate",
+          "l_receiptdate": "l_receiptdate"
+        },
+        "schema": {
+          "l_shipdate": "date32",
+          "l_receiptdate": "date32"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q9.py",
+      "input": "qure.code",
+      "sha256": "81f044b997fc13dd50c2beeb8a168af213e310641514b09e2d1a03d8eb398aa4",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_comment": "l_comment"
+        },
+        "schema": {
+          "l_comment": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q10.py",
+      "input": "qure.code",
+      "sha256": "d2044d7ba337826aed57e82f5a18a85fc6e7c336a265d08c66563d46cf8c2614",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "key": "l_comment"
+        },
+        "schema": {
+          "key": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q11.py",
+      "input": "qure.code",
+      "sha256": "6a250d7e12c69ff723b1ce8d5b441a5c493fdf6aa254db59ac8519c304d95530",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipinstruct": "l_shipinstruct"
+        },
+        "schema": {
+          "l_shipinstruct": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q12.py",
+      "input": "qure.code",
+      "sha256": "53849854eaa91a0e8c4be1891d495a067aa6c78d01a6827ab8cc9b02321f9e66",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "key": "l_shipmode"
+        },
+        "schema": {
+          "key": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q13.py",
+      "input": "qure.code",
+      "sha256": "7ba04d87e87f789e17e2ee070119f2f95d6401da94c810b3841b70e75fa18857",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_comment": "l_comment"
+        },
+        "schema": {
+          "l_comment": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q14.py",
+      "input": "qure.code",
+      "sha256": "6f8978424e1c9a5355c54262f6d0bd712b02f57f4c8363c26b9208d8ef343899",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_quantity": "l_quantity",
+          "l_extendedprice": "l_extendedprice"
+        },
+        "schema": {
+          "l_quantity": "float64",
+          "l_extendedprice": "float64"
+        },
+        "result": "float64"
+      },
+      "adaptations": {
+        "imports": {
+          "math": [
+            "acos",
+            "atan2",
+            "cos",
+            "sin",
+            "sqrt"
+          ]
+        },
+        "reason": "The supplied function references these names without importing them. Add only these bindings. Preserve the source file and function body."
+      }
+    },
+    {
+      "path": "python/q15.py",
+      "input": "qure.code",
+      "sha256": "b06decbca8ebf04dc4a8fed8000327b9a7ad07f86df608eb1aa46e89cc1fccf6",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_comment": "l_comment"
+        },
+        "schema": {
+          "l_comment": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q16.py",
+      "input": "qure.code",
+      "sha256": "db4d98a08cc53fb44dd0e42013b5ed2c31b6e71398a723c6c3f2600e50c6398b",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipmode": "l_shipmode",
+          "l_returnflag": "l_returnflag"
+        },
+        "schema": {
+          "l_shipmode": "string",
+          "l_returnflag": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q17.py",
+      "input": "qure.code",
+      "sha256": "244806e0e06419e8fd85dd99522fbe8f3a90ed9bbb27ba83c0d98e9de87cf95b",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipmode": "l_shipmode",
+          "l_shipdate": "l_shipdate",
+          "l_receiptdate": "l_receiptdate",
+          "l_commitdate": "l_commitdate",
+          "l_returnflag": "l_returnflag"
+        },
+        "schema": {
+          "l_shipmode": "string",
+          "l_shipdate": "date32",
+          "l_receiptdate": "date32",
+          "l_commitdate": "date32",
+          "l_returnflag": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q18.py",
+      "input": "qure.code",
+      "sha256": "5e2deac2eb2aa904906667521c7d22d0f825d1a570caac3e09b188845d85751c",
+      "binding": {
+        "function": "udf_0",
+        "table": "orders",
+        "columns": {
+          "o_totalprice": "o_totalprice"
+        },
+        "schema": {
+          "o_totalprice": "float64"
+        },
+        "result": "float64"
+      }
+    },
+    {
+      "path": "python/q19.py",
+      "input": "qure.code",
+      "sha256": "d34bc179d3c45e672818c60ee41e824f0b8fd45dc794cc09b66f0060d9b3e24b",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_orderkey": "l_orderkey",
+          "l_partkey": "l_partkey",
+          "l_shipmode": "l_shipmode"
+        },
+        "schema": {
+          "l_orderkey": "int64",
+          "l_partkey": "int64",
+          "l_shipmode": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q20.py",
+      "input": "qure.code",
+      "sha256": "ec3128c22f5d6a4a75fba4eb392b77f72c6d311921856c4780d708e1ab21c400",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_extendedprice": "l_extendedprice",
+          "l_discount": "l_discount",
+          "l_quantity": "l_quantity"
+        },
+        "schema": {
+          "l_extendedprice": "float64",
+          "l_discount": "float64",
+          "l_quantity": "float64"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q21.py",
+      "input": "qure.code",
+      "sha256": "64ca3a4bb1fb3253db86a660670cd83efa3f17f3c1f9925c9e711a9ed15ef448",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem_orders",
+        "columns": {
+          "o_totalprice": "o_totalprice",
+          "l_quantity": "l_quantity"
+        },
+        "schema": {
+          "o_totalprice": "float64",
+          "l_quantity": "float64"
+        },
+        "result": "float64"
+      }
+    },
+    {
+      "path": "python/q22.py",
+      "input": "qure.code",
+      "sha256": "acb7a3c62479d43abe7251f013cfcedc318970da1e8cd97f23b414b8e5863a95",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipmode": "l_shipmode",
+          "l_returnflag": "l_returnflag"
+        },
+        "schema": {
+          "l_shipmode": "string",
+          "l_returnflag": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q23.py",
+      "input": "qure.code",
+      "sha256": "41fc71a21d3b26104fbb6be1185cb63bf82c72e27b4c92acb1c21d95a65e8e9d",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_comment": "l_comment"
+        },
+        "schema": {
+          "l_comment": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q24.py",
+      "input": "qure.code",
+      "sha256": "48fa4ad43c27b124a4d1b70e404b60443b5fd9b01eda26392e907c8c84e2938c",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipmode": "l_shipmode",
+          "l_returnflag": "l_returnflag"
+        },
+        "schema": {
+          "l_shipmode": "string",
+          "l_returnflag": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q25.py",
+      "input": "qure.code",
+      "sha256": "8b74e3c7dd781064ff5566b1960818913a78a44ecd7265b2faf5382583cad999",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipmode": "l_shipmode"
+        },
+        "schema": {
+          "l_shipmode": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q26.py",
+      "input": "qure.code",
+      "sha256": "7e2cf911595f9b36b5f5e48b7dcf7e0cb167c6e698d6e9be2bf8a0d6b46328d0",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipinstruct": "l_shipinstruct",
+          "l_comment": "l_comment"
+        },
+        "schema": {
+          "l_shipinstruct": "string",
+          "l_comment": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "python/q27.py",
+      "input": "qure.code",
+      "sha256": "006ff14e46094202af9bcf63a6c66a0824c2fbdd977d940c2b40e8491ee7b7fd",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "l_shipmode": "l_shipmode"
+        },
+        "schema": {
+          "l_shipmode": "string"
+        },
+        "result": "string"
+      }
+    },
+    {
+      "path": "froid/q1.py",
+      "input": "qure.code",
+      "sha256": "61837f6be0d120c687e586a6ce21bf6e537e03ad74cdebbff217595cb6c3797f",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "shipmode": "l_shipmode",
+          "commitdate": "l_commitdate",
+          "receiptdate": "l_receiptdate",
+          "shipdate": "l_shipdate"
+        },
+        "schema": {
+          "shipmode": "string",
+          "commitdate": "date32",
+          "receiptdate": "date32",
+          "shipdate": "date32"
+        },
+        "result": "bool"
+      }
+    },
+    {
+      "path": "froid/q2.py",
+      "input": "qure.code",
+      "sha256": "1f738950e84ea9f6b2b3401d04852451b844675113d6c5352b2ba0418740c000",
+      "binding": {
+        "function": "udf_0",
+        "table": "part",
+        "columns": {
+          "p_container": "p_container",
+          "p_size": "p_size",
+          "p_brand": "p_brand"
+        },
+        "schema": {
+          "p_container": "string",
+          "p_size": "int64",
+          "p_brand": "string"
+        },
+        "result": "bool"
+      }
+    },
+    {
+      "path": "froid/q3.py",
+      "input": "qure.code",
+      "sha256": "b767a7342167190105afc3d29bf315a6ceae1f28f140574bfc720024d833c5cc",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem_part",
+        "columns": {
+          "pcontainer": "p_container",
+          "quantity": "l_quantity",
+          "psize": "p_size",
+          "shipmode": "l_shipmode",
+          "shipinst": "l_shipinstruct",
+          "pbrand": "p_brand"
+        },
+        "schema": {
+          "pcontainer": "string",
+          "quantity": "float64",
+          "psize": "int64",
+          "shipmode": "string",
+          "shipinst": "string",
+          "pbrand": "string"
+        },
+        "result": "bool"
+      }
+    },
+    {
+      "path": "froid/q4.py",
+      "input": "qure.code",
+      "sha256": "1d6214a9e68c8bd8587da8cfe6ae431d5e3855435a1c893f2a1264c779ba4ae6",
+      "binding": {
+        "function": "udf_0",
+        "table": "froid_q4",
+        "columns": {
+          "r_name": "r_name",
+          "orderdate": "o_orderdate"
+        },
+        "schema": {
+          "r_name": "string",
+          "orderdate": "date32"
+        },
+        "result": "bool"
+      }
+    },
+    {
+      "path": "froid/q5.py",
+      "input": "qure.code",
+      "sha256": "13fce443bbefb532815a731feb01f4c99eb7174f8e9e2583fbcfb39663321733",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "shipdate": "l_shipdate",
+          "discount": "l_discount",
+          "quantity": "l_quantity"
+        },
+        "schema": {
+          "shipdate": "date32",
+          "discount": "float64",
+          "quantity": "float64"
+        },
+        "result": "bool"
+      },
+      "adaptations": {
+        "imports": {
+          "datetime": [
+            "timedelta"
+          ]
+        },
+        "reason": "The supplied function references these names without importing them. Add only these bindings. Preserve the source file and function body."
+      }
+    },
+    {
+      "path": "froid/q6.py",
+      "input": "qure.code",
+      "sha256": "1f95b69e62c87bc8372e4678c8821beb75025cc4ad7728f85639d7497c73f8a5",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem_partsupp",
+        "columns": {
+          "extprice": "l_extendedprice",
+          "discount": "l_discount",
+          "suppcost": "ps_supplycost",
+          "quantity": "l_quantity"
+        },
+        "schema": {
+          "extprice": "float64",
+          "discount": "float64",
+          "suppcost": "float64",
+          "quantity": "float64"
+        },
+        "result": "float64"
+      }
+    },
+    {
+      "path": "froid/q7.py",
+      "input": "qure.code",
+      "sha256": "432076f74dde04fa1d32d2c9403352864a132274a033aaa7abe4a144247a5ffa",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem_orders",
+        "columns": {
+          "odate": "o_orderdate",
+          "retflag": "l_returnflag"
+        },
+        "schema": {
+          "odate": "date32",
+          "retflag": "string"
+        },
+        "result": "bool"
+      }
+    },
+    {
+      "path": "froid/q8.py",
+      "input": "qure.code",
+      "sha256": "006b179acef15d85611677e864c6b2237ced37adadfd8e754c83fb24b4a67c33",
+      "binding": {
+        "function": "udf_0",
+        "table": "froid_q8",
+        "columns": {
+          "n1name": "n1.n_name",
+          "n2name": "n2.n_name",
+          "shipdate": "l_shipdate"
+        },
+        "schema": {
+          "n1name": "string",
+          "n2name": "string",
+          "shipdate": "date32"
+        },
+        "result": "bool"
+      }
+    },
+    {
+      "path": "froid/q9.py",
+      "input": "qure.code",
+      "sha256": "8c1810c040ccd8ab2ac7502df69e3194d2bb9bc4ead21171643648cbbcbeaf48",
+      "binding": {
+        "function": "udf_0",
+        "table": "lineitem",
+        "columns": {
+          "shipdate": "l_shipdate"
+        },
+        "schema": {
+          "shipdate": "date32"
+        },
+        "result": "bool"
+      },
+      "adaptations": {
+        "imports": {
+          "datetime": [
+            "timedelta"
+          ]
+        },
+        "reason": "The supplied function references these names without importing them. Add only these bindings. Preserve the source file and function body."
+      }
+    },
+    {
+      "path": "License.pdf",
+      "input": "qure.code",
+      "sha256": "471af2f814fc039e902dff1ace61ccec1eedd285a104dea335e7c3be7a23982f"
+    },
+    {
+      "path": "lineitem.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "orders.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "part.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "partsupp.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "supplier.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "customer.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "nation.tbl",
+      "input": "qure.tpch"
+    },
+    {
+      "path": "region.tbl",
+      "input": "qure.tpch"
+    }
+  ]
+}

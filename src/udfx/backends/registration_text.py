@@ -23,7 +23,7 @@ from udfx.semantics.literals import (
     parse_int,
     parse_saturated_int,
 )
-from udfx.semantics.padding import PaddingPrimitives, pad_text
+from udfx.semantics.padding import PaddingPrimitives, pad_text, repeat_text
 from udfx.semantics.regex import RegexPrimitives, lower_regex
 from udfx.semantics.text import PADDING_METHODS, PREDICATES, string_predicate
 from udfx.semantics.text_bounds import argument_without_newline
@@ -132,8 +132,14 @@ def register_translation[E](rules: RuleSet[E], primitives: TextPrimitives) -> No
 
 
 def register_padding[E](rules: RuleSet[E], primitives: PaddingPrimitives) -> None:
+    rules("__mul__", Kind.STR, Kind.INT)(
+        lambda value, count: Lowered(*repeat_text(primitives, value, count))
+    )
+    rules("__mul__", Kind.INT, Kind.STR)(
+        lambda count, value: Lowered(*repeat_text(primitives, value, count))
+    )
     for method in PADDING_METHODS:
-        rules(f".{method}", Kind.STR, Kind.INT, facts={"maximum": argument_maximum})(
+        rules(f".{method}", Kind.STR, Kind.INT, literals=(1,), facts={"maximum": argument_maximum})(
             lambda value, width, method=method, maximum=None: Lowered(
                 *pad_text(
                     primitives, value, width, primitives.literal(" "), method, maximum=maximum
@@ -141,7 +147,14 @@ def register_padding[E](rules: RuleSet[E], primitives: PaddingPrimitives) -> Non
             )
         )
         if method != "zfill":
-            rules(f".{method}", Kind.STR, Kind.INT, Kind.STR, facts={"maximum": argument_maximum})(
+            rules(
+                f".{method}",
+                Kind.STR,
+                Kind.INT,
+                Kind.STR,
+                literals=(1,),
+                facts={"maximum": argument_maximum},
+            )(
                 lambda value, width, fill, method=method, maximum=None: Lowered(
                     *pad_text(primitives, value, width, fill, method, maximum=maximum)
                 )

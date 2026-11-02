@@ -183,7 +183,7 @@ def test_row_fallback_patches_inexact_rows(
     assert translation.program is not None, translation.unsupported
     exact = backend.lower(translation.program.value).exact
     assert exact is not None
-    assert backend.evaluate([exact], schema, rows)[0][2] is False
+    assert backend.evaluate([backend.predicate(exact)], schema, rows)[0][2] is False
     assert backend.evaluate([translation.expr], schema, rows) == [[2025, 1236, 2**63 - 2]]
     assert check_translation(translation, backend, rows) == []
 

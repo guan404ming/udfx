@@ -13,7 +13,7 @@ def test_polars_case_chain_checks_unicode_once() -> None:
     assert lowered.exact is not None
     assert str(lowered.exact).count("str.contains") == 1
     rows = [(value,) for value in ("abc", "École", "\u0131stanbul", "中文ABC", "Σ", "ß")]
-    assert backend.evaluate([lowered.exact], case.schema, rows) == [
+    assert backend.evaluate([backend.predicate(lowered.exact)], case.schema, rows) == [
         [True, True, True, True, False, False]
     ]
 

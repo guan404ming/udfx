@@ -207,3 +207,12 @@ def test_datafusion_sum_binds_input_per_expression() -> None:
     lowered = DataFusionBackend().lower(apply("sum", Col("items", list_of(INT))))
     assert str(lowered.expr).count("items") == 1
     assert str(lowered.exact).count("items") == 1
+
+
+@pytest.mark.parametrize("pattern", ["word", "[.]", ""])
+def test_datafusion_literal_count_uses_source_once(pattern: str) -> None:
+    text = apply(".strip", Col("text", STR))
+    lowered = DataFusionBackend().lower(apply(".count", text, lit(pattern)))
+    expression = str(lowered.expr)
+    assert expression.count("text") == 1
+    assert ("string_to_array(" in expression) == bool(pattern)

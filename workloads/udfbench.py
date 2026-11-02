@@ -52,7 +52,9 @@ CONSTANTS = {"frequentterms": {"N": 5}, "jsonparse": {"key1": "value"}}
 CATEGORIES = {"artifacts": "12", "projects": "3", "artifact_charges": "2"}
 
 
-def load(root: Path) -> list[Workload]:
+def load(
+    root: Path, cases: set[str] | None = None, *, load_functions: bool = True
+) -> list[Workload]:
     entries = [
         entry for entry in read_manifest("udfbench")["files"] if entry["path"].endswith(".py")
     ]
@@ -64,20 +66,23 @@ def load(root: Path) -> list[Workload]:
     workloads = []
     for entry in entries:
         name = Path(entry["path"]).stem
+        if cases is not None and f"udfbench/{name}" not in cases:
+            continue
         table, columns, schema, result = BINDINGS[name]
         function = None
         error = None
         path = root / "udfbench" / "source" / entry["path"]
-        try:
-            if digest(path) != entry["sha256"]:
-                raise ValueError(f"Checksum mismatch: {path}")
-            namespace: dict[str, Any] = {"__name__": f"udfbench_{name}"}
-            exec(builtins.compile(path.read_bytes(), str(path), "exec"), namespace)
-            function = namespace[name]
-            if tuple(inspect.signature(function).parameters) != tuple(schema):
-                raise ValueError(f"Schema does not match the original signature: {name}")
-        except Exception as failure:
-            error = f"{type(failure).__name__}: {failure}"
+        if load_functions:
+            try:
+                if digest(path) != entry["sha256"]:
+                    raise ValueError(f"Checksum mismatch: {path}")
+                namespace: dict[str, Any] = {"__name__": f"udfbench_{name}"}
+                exec(builtins.compile(path.read_bytes(), str(path), "exec"), namespace)
+                function = namespace[name]
+                if tuple(inspect.signature(function).parameters) != tuple(schema):
+                    raise ValueError(f"Schema does not match the original signature: {name}")
+            except Exception as failure:
+                error = f"{type(failure).__name__}: {failure}"
         workloads.append(
             Workload(
                 "udfbench",

@@ -7,6 +7,7 @@ from udfx.backends.registration import (
     register_extremum,
     register_float_variants,
     register_math,
+    register_trigonometry,
 )
 from udfx.backends.spark.conversions import float_int
 from udfx.backends.spark.numbers import ORDER, cast_float64, floor
@@ -31,7 +32,7 @@ ROUND = RoundPrimitives(
 
 
 def power(base: Column, exponent: Column) -> Lowered[Column]:
-    return Lowered(functions.pow(base, exponent), functions.lit(False))
+    return Lowered(functions.pow(base, exponent), False)
 
 
 register_extremum(RULES, "max", functions.greatest, ORDER, when)
@@ -49,18 +50,18 @@ RULES("round", Kind.FLOAT)(lambda value: float_int(functions.rint(value)))
 
 @RULES("pow_overflows", Kind.FLOAT, Kind.FLOAT)
 def pow_overflows(base: Column, exponent: Column) -> Lowered[Column]:
-    return Lowered(functions.lit(False), functions.lit(False))
+    return Lowered(functions.lit(False), False)
 
 
-@RULES("round", Kind.FLOAT, Kind.INT)
-def round_digits(value: Column, digits: Column) -> Lowered[Column]:
+@RULES("round", Kind.FLOAT, Kind.INT, literals=(1,))
+def round_digits(value: Column, digits: Column | int) -> Lowered[Column]:
     rounding = scaled_round(ROUND, value, digits)
     rounded = functions.try_divide(functions.rint(rounding.scaled), rounding.scale)
     return Lowered(rounded, rounding.exact)
 
 
-@RULES("round_overflows", Kind.FLOAT, Kind.INT)
-def round_overflows(value: Column, digits: Column) -> Lowered[Column]:
+@RULES("round_overflows", Kind.FLOAT, Kind.INT, literals=(1,))
+def round_overflows(value: Column, digits: Column | int) -> Lowered[Column]:
     return Lowered(functions.lit(False), round_overflow_safe(ROUND, value, digits))
 
 
@@ -72,4 +73,14 @@ register_math(
     ceil=lambda value: -floor(-value),
     is_nan=functions.isnan,
     round_digits=round_digits,
+)
+
+
+register_trigonometry(
+    RULES,
+    ROUND,
+    unary={"sin": functions.sin, "cos": functions.cos, "acos": functions.acos},
+    atan2=functions.atan2,
+    is_nan=functions.isnan,
+    guarded=True,
 )

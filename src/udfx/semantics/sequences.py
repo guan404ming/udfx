@@ -7,6 +7,19 @@ from udfx.semantics.text_slicing import mixed_slice_pattern
 from udfx.types import INT64_MAX, Type
 
 
+def repeat_count(
+    literal: Callable[[int], Any],
+    when: Callable[[Any, Any, Any], Any],
+    length: Any,
+    count: Any,
+    limit: int,
+) -> tuple[Any, Any]:
+    empty = length == literal(0)
+    capacity = literal(limit) / when(empty, literal(1), length)
+    exact = empty | (count <= capacity)
+    return when(exact & ~empty & (count > literal(0)), count, literal(0)), exact
+
+
 @dataclass(frozen=True)
 class SlicePrimitives:
     literal: Callable[[int], Any]
@@ -169,8 +182,10 @@ def reverse_find(primitives: SearchPrimitives, text: Any, pattern: Any) -> Any:
 def count_occurrences(
     primitives: SearchPrimitives, text: Any, pattern: Any, occurrences: Any
 ) -> Any:
-    empty = pattern == primitives.literal("")
-    return primitives.when(empty, primitives.length(text) + primitives.literal(1), occurrences)
+    whole = primitives.length(text) + primitives.literal(1)
+    if isinstance(pattern, str):
+        return occurrences if pattern else whole
+    return primitives.when(pattern == primitives.literal(""), whole, occurrences)
 
 
 def reverse_exact(step: int | None, exact: Callable[[], Any]) -> Any:

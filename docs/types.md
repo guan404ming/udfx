@@ -10,6 +10,7 @@ Define the schema for [udfx.compile](compile.md) with type values from `udfx.typ
 | `INT` | Signed 64-bit integers |
 | `FLOAT` | Floating-point numbers |
 | `STR` | Strings |
+| `DATE` | Calendar dates as `datetime.date` |
 | `DATETIME` | Naive datetimes with microsecond precision |
 
 ## Nullable columns

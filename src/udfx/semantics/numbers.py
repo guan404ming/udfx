@@ -131,20 +131,44 @@ class ScaledRound(NamedTuple):
 
 def scaled_round(primitives: RoundPrimitives, value: Any, digits: Any) -> ScaledRound:
     literal = primitives.literal
-    scale = primitives.power(literal(10.0), primitives.to_float(digits))
+    constant = isinstance(digits, int) and 0 <= digits <= EXACT_POWERS_OF_TEN
+    scale = (
+        literal(float(10**digits))
+        if constant
+        else primitives.power(
+            literal(10.0),
+            primitives.to_float(literal(digits) if isinstance(digits, int) else digits),
+        )
+    )
     scaled = value * scale
     tie = primitives.abs(scaled) % literal(1.0) == literal(0.5)
+    bounded = primitives.abs(scaled) < literal(HALF_INTEGER_LIMIT)
+    if constant:
+        return ScaledRound(scale, scaled, bounded if digits == 0 else bounded & ~tie)
+    if isinstance(digits, int):
+        return ScaledRound(scale, scaled, literal(False))
     exact = (
         primitives.between(digits, literal(0), literal(EXACT_POWERS_OF_TEN))
-        & (primitives.abs(scaled) < literal(HALF_INTEGER_LIMIT))
+        & bounded
         & ((digits == literal(0)) | ~tie)
     )
     return ScaledRound(scale, scaled, exact)
 
 
+def round_scaled(
+    primitives: RoundPrimitives, value: Any, digits: Any, half_even: Callable[[Any], Any]
+) -> ScaledRound:
+    rounding = scaled_round(primitives, value, digits)
+    round = primitives.round if isinstance(digits, int) and digits > 0 else half_even
+    return ScaledRound(rounding.scale, round(rounding.scaled), rounding.exact)
+
+
 def round_overflow_safe(primitives: RoundPrimitives, value: Any, digits: Any) -> Any:
     literal = primitives.literal
-    return (digits >= literal(0)) | (primitives.abs(value) < literal(ROUND_OVERFLOW_LIMIT))
+    small = primitives.abs(value) < literal(ROUND_OVERFLOW_LIMIT)
+    if isinstance(digits, int):
+        return None if digits >= 0 else small
+    return (digits >= literal(0)) | small
 
 
 @dataclass(frozen=True)

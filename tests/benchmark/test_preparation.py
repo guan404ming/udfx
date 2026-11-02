@@ -59,6 +59,7 @@ def test_explicit_prepare_checks_source_and_records_row_limit(
     path = flight_archive(tmp_path / "flights.zip")
     source = {"files": [{"url": path.as_uri(), "sha256": digest(path), "path": "flights.zip"}]}
     monkeypatch.setattr("workloads.prepare.read_manifest", lambda _: source)
+    monkeypatch.setattr("workloads.storage.read_manifest", lambda _: source)
     root = tmp_path / "cache"
     prepare("flights", root, rows=1)
     metadata = verify_tables("flights", root)
@@ -76,15 +77,15 @@ def test_prepare_command_does_not_run_without_valid_arguments(
         main(["--rows", "0"])
     assert calls == []
     main(["--suites", "flights", "--root", str(tmp_path), "--rows", "3"])
-    assert calls == [("flights", tmp_path, 3)]
+    assert calls == [("flights", tmp_path, 3, {})]
 
 
 def test_sampling_keeps_the_complete_dimension(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        "workloads.prepare.read_manifest", lambda _: {"files": [], "dimension_tables": ["airports"]}
-    )
+    source = {"files": [], "dimension_tables": ["airports"]}
+    monkeypatch.setattr("workloads.prepare.read_manifest", lambda _: source)
+    monkeypatch.setattr("workloads.storage.read_manifest", lambda _: source)
     tables = {
         "flights": pyarrow.table({"value": [1, 2, 3]}),
         "airports": pyarrow.table({"value": [4, 5, 6]}),

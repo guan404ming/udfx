@@ -8,12 +8,13 @@ from udfx.frontend.core.logic import (
     choose,
     conjunction,
     conjuncts,
+    disjunction,
     negate,
     retype,
     simplify_branch,
     unified,
 )
-from udfx.ir import TRUE, Call, If, Node
+from udfx.ir import FALSE, TRUE, Call, If, Node
 from udfx.types import Type
 
 Case = tuple[tuple[Node, ...], Node | None]
@@ -24,6 +25,31 @@ def merge(returns: Sequence[Return], faults: Sequence[Node]) -> Node:
     cases: list[Case] = [(_path_predicates(outcome.path), outcome.value) for outcome in returns]
     cases += [(_path_predicates(path), None) for path in faults]
     return _build(cases, result)
+
+
+def fault_union(paths: Sequence[Node]) -> Node:
+    reduced: list[list[Node]] = []
+    for path in paths:
+        parts = list(conjuncts(path))
+        for part in list(parts):
+            rest = [other for other in parts if other is not part]
+            for earlier in reduced:
+                added = [other for other in earlier if other not in rest]
+                if added and negate(reduce(conjunction, added)) == part:
+                    parts = rest
+                    break
+        reduced.append(parts)
+    kept = [
+        parts
+        for index, parts in enumerate(reduced)
+        if not any(
+            other is not parts
+            and all(part in parts for part in other)
+            and (len(other) < len(parts) or position < index)
+            for position, other in enumerate(reduced)
+        )
+    ]
+    return reduce(disjunction, (reduce(conjunction, parts, TRUE) for parts in kept), FALSE)
 
 
 def _path_predicates(path: Node) -> tuple[Node, ...]:

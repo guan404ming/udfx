@@ -14,7 +14,7 @@ from udfx.backends.spark import SparkBackend
 from udfx.ir import FALSE, Col, Lit
 from udfx.program import Program
 from udfx.testing import check_function
-from udfx.testing.strategies import DATETIME_TRAPS
+from udfx.testing.datetime_traps import DATETIME_TRAPS
 from udfx.types import DATETIME, STR
 
 BOUND = datetime(1970, 1, 1)
@@ -105,7 +105,7 @@ def test_strptime_guard(backend: Backend[Any]) -> None:
     lowered = backend.lower(translation.program.value)
     assert lowered.exact is not None
     rows = [("29/02/2024",), ("9/2/2024",), ("29/02/2023",), ("01/01/2024junk",)]
-    flags = backend.evaluate([lowered.exact], {"text": STR}, rows)[0]
+    flags = backend.evaluate([backend.predicate(lowered.exact)], {"text": STR}, rows)[0]
     assert flags[0] is True
     assert all(flag is not True for flag in flags[1:])
 
@@ -140,6 +140,7 @@ def test_spark_datetime_timezone(timezone: str, ansi: bool) -> None:
     schema = {"value": DATETIME}
     rows = [(value,) for value in values]
     functions = [
+        lambda value: value.date(),
         lambda value: value.hour,
         lambda value: value.strftime("%Y-%m-%d %H:%M:%S.%f"),
         lambda value: value == BOUND,

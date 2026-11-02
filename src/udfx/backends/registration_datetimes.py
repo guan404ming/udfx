@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from udfx.backends.rules import Lowered, RuleSet
+from udfx.semantics.dates import ATTRIBUTES as DATE_ATTRIBUTES
+from udfx.semantics.dates import (
+    DateArithmeticPrimitives,
+    date_shift_exceeds,
+    difference_dates,
+    shift_date,
+)
 from udfx.semantics.datetimes import (
     ATTRIBUTES,
     DatetimeArithmeticPrimitives,
@@ -17,16 +25,20 @@ from udfx.semantics.numbers import COMPARISONS, Binary
 from udfx.types import Kind
 
 
-def register_datetimes[E](rules: RuleSet[E], primitives: DatetimePrimitives, equal: Binary) -> None:
-    for name in (*ATTRIBUTES, "weekday", "isoweekday", "toordinal"):
-        rules(f".{name}", Kind.DATETIME)(
-            lambda value, name=name: datetime_field(primitives, value, name)
-        )
-    for name, compare in COMPARISONS.items():
-        rules(name, Kind.DATETIME, Kind.DATETIME)(compare)
-    rules("__eq__", Kind.DATETIME, Kind.DATETIME)(equal)
-    rules("__ne__", Kind.DATETIME, Kind.DATETIME)(lambda left, right: ~equal(left, right))
-    rules("bool", Kind.DATETIME)(lambda value: ~primitives.is_null(value))
+def register_datetimes[E](
+    rules: RuleSet[E], primitives: DatetimePrimitives, equal: Binary, to_date: Callable[[E], E]
+) -> None:
+    for kind, attributes in ((Kind.DATE, DATE_ATTRIBUTES), (Kind.DATETIME, ATTRIBUTES)):
+        for name in (*attributes, "weekday", "isoweekday", "toordinal"):
+            rules(f".{name}", kind)(
+                lambda value, name=name: datetime_field(primitives, value, name)
+            )
+        for name, compare in COMPARISONS.items():
+            rules(name, kind, kind)(compare)
+        rules("__eq__", kind, kind)(equal)
+        rules("__ne__", kind, kind)(lambda left, right: ~equal(left, right))
+        rules("bool", kind)(lambda value: ~primitives.is_null(value))
+    rules(".date", Kind.DATETIME)(to_date)
     rules(".strftime", Kind.DATETIME, Kind.STR, literals=(1,))(
         lambda value, format: Lowered(*format_datetime(primitives, value, format))
     )
@@ -50,4 +62,16 @@ def register_datetime_arithmetic[E](
     )
     rules("datetime_shift_overflows", Kind.DATETIME, Kind.INT)(
         lambda value, offset: shift_overflows(primitives, primitives.to_microseconds(value), offset)
+    )
+
+
+def register_date_arithmetic[E](rules: RuleSet[E], primitives: DateArithmeticPrimitives) -> None:
+    rules("date_difference", Kind.DATE, Kind.DATE)(
+        lambda left, right: difference_dates(primitives, left, right)
+    )
+    rules("date_shift", Kind.DATE, Kind.INT)(
+        lambda value, days: shift_date(primitives, value, days)
+    )
+    rules("date_shift_overflows", Kind.DATE, Kind.INT)(
+        lambda value, days: date_shift_exceeds(primitives, primitives.to_ordinal(value), days)
     )

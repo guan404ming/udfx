@@ -152,13 +152,12 @@ def list_slice(
     return slice_sequence(sequence, container, start, stop, step, result=result)
 
 
-register_padding(
-    RULES,
-    PaddingPrimitives(
-        sequence=TEXT,
-        literal=functions.lit,
-        concat=functions.concat,
-        repeat=lambda value, count: functions.repeat(value, count.cast("int")),
-        half=lambda value: functions.call_function("div", value, functions.lit(2)),
-    ),
+PADDING = PaddingPrimitives(
+    sequence=TEXT,
+    literal=functions.lit,
+    concat=functions.concat,
+    repeat=lambda value, count: functions.repeat(value, count.cast("int")),
+    half=lambda value: functions.call_function("div", value, functions.lit(2)),
 )
+
+register_padding(RULES, PADDING)

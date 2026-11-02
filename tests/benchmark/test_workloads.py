@@ -61,7 +61,9 @@ def test_prepared_data_and_manifest_tampering_fail(tmp_path: Path) -> None:
 
 def test_catalog_rejects_duplicate_identifiers(monkeypatch: pytest.MonkeyPatch) -> None:
     workload = catalog.load(["flights"], FIXTURES)[0]
-    monkeypatch.setitem(catalog.SUITES, "duplicate", lambda root: [workload, replace(workload)])
+    monkeypatch.setitem(
+        catalog.SUITES, "duplicate", lambda *args, **kwargs: [workload, replace(workload)]
+    )
     with pytest.raises(ValueError, match="unique"):
         catalog.load(["duplicate"], FIXTURES)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from udfx.ir import TRUE, Call, Col, Comprehension, If, ListValue, Lit, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics import json_paths
+from udfx.semantics.arithmetic import integer_dependencies
 from udfx.semantics.assumptions import CONDITIONS
 from udfx.semantics.bindings import source as bound_source
 from udfx.semantics.numbers import FLOAT_INT_MAX
@@ -163,9 +164,13 @@ def split_separator(node: Call) -> str | None:
     return None
 
 
-def integer_fits(node: Call, *, size_limit: int) -> bool:
+def integer_fits(node: Node, *, size_limit: int) -> bool:
     bounds = integer_bounds(node, size_limit)
     return bounds is not None and INT64_MIN <= bounds[0] <= bounds[1] <= INT64_MAX
+
+
+def integer_operation_fits(node: Call, *, size_limit: int) -> bool:
+    return all(integer_fits(part, size_limit=size_limit) for part in integer_dependencies(node))
 
 
 def argument_maximum(node: Call) -> int | None:

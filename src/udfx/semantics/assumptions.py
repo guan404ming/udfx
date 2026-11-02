@@ -2,8 +2,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from udfx.ir import Call, Lit, Node
+from udfx.ir import Call, If, Lit, Node
 from udfx.semantics.numbers import COMPARISONS
+from udfx.types import BOOL
 
 type Conditions = tuple[tuple[Node, bool], ...]
 type Bounds = tuple[int, int]
@@ -21,14 +22,25 @@ CONDITIONS: ContextVar[Conditions] = ContextVar("udfx_conditions", default=())
 
 
 def predicates(node: Node, truth: bool) -> Conditions:
-    if isinstance(node, Call):
-        if node.op.name == "not":
-            return predicates(node.arguments[0], not truth)
-        if node.op.name == ("and" if truth else "or"):
-            return tuple(
-                part for argument in node.arguments for part in predicates(argument, truth)
-            )
-    return ((node, truth),)
+    found: list[tuple[Node, bool]] = []
+    pending = [(node, truth)]
+    seen: set[tuple[int, bool]] = set()
+    while pending:
+        current, positive = pending.pop()
+        key = id(current), positive
+        if key in seen:
+            continue
+        seen.add(key)
+        if isinstance(current, If) and current.type == current.condition.type == BOOL:
+            found.append((current, positive))
+            pending.extend(reversed(branch_predicates(current, positive, {})))
+        elif isinstance(current, Call) and current.op.name == "not":
+            pending.append((current.arguments[0], not positive))
+        elif isinstance(current, Call) and current.op.name == ("and" if positive else "or"):
+            pending.extend((argument, positive) for argument in reversed(current.arguments))
+        else:
+            found.append((current, positive))
+    return tuple(found)
 
 
 @contextmanager
@@ -41,14 +53,44 @@ def assuming(node: Node, truth: bool) -> Generator[None]:
 
 
 def known(node: Node, conditions: dict[Node, bool]) -> bool | None:
-    if node in conditions:
-        return conditions[node]
-    if isinstance(node, Lit) and isinstance(node.value, bool):
-        return node.value
-    if isinstance(node, Call) and node.op.name == "not":
-        truth = known(node.arguments[0], conditions)
-        return None if truth is None else not truth
-    return None
+    seen: dict[int, bool | None] = {}
+
+    def visit(value: Node) -> bool | None:
+        if value in conditions:
+            return conditions[value]
+        if id(value) in seen:
+            return seen[id(value)]
+        result = None
+        if isinstance(value, Lit) and isinstance(value.value, bool):
+            result = value.value
+        elif isinstance(value, Call) and value.op.name == "not":
+            truth = visit(value.arguments[0])
+            result = None if truth is None else not truth
+        elif isinstance(value, If) and value.type == value.condition.type == BOOL:
+            truth = visit(value.condition)
+            if truth is not None:
+                result = visit(value.then if truth else value.orelse)
+            else:
+                left, right = visit(value.then), visit(value.orelse)
+                result = left if left == right else None
+        seen[id(value)] = result
+        return result
+
+    return visit(node)
+
+
+def branch_predicates(node: If, truth: bool, conditions: dict[Node, bool]) -> Conditions:
+    selected = known(node.condition, conditions)
+    if selected is None:
+        for branch, positive in ((node.then, True), (node.orelse, False)):
+            branch_truth = known(branch, conditions)
+            if branch_truth is not None and branch_truth != truth:
+                selected = not positive
+                break
+    if selected is None:
+        return ()
+    branch = node.then if selected else node.orelse
+    return (node.condition, selected), (branch, truth)
 
 
 def implied(conditions: Conditions) -> Conditions:
@@ -56,6 +98,13 @@ def implied(conditions: Conditions) -> Conditions:
     while True:
         previous = len(found)
         for node, truth in tuple(found.items()):
+            if isinstance(node, If) and node.type == node.condition.type == BOOL:
+                found.update(
+                    fact
+                    for branch, positive in branch_predicates(node, truth, found)
+                    for fact in predicates(branch, positive)
+                )
+                continue
             if not isinstance(node, Call) or node.op.name != ("or" if truth else "and"):
                 continue
             left, right = node.arguments

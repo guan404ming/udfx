@@ -1,4 +1,5 @@
 from . import Case
+from .cases_dates import CASES as DATES
 from .cases_datetimes import CASES as DATETIMES
 from .cases_formatting import CASES as FORMATTING
 from .cases_lists import CASES as LISTS
@@ -21,6 +22,7 @@ CASES = [
     *LISTS,
     *SMALL_GAPS,
     *DATETIMES,
+    *DATES,
     *PATHS,
     *TRANSLATION,
 ]

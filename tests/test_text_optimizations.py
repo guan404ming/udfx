@@ -39,7 +39,13 @@ def test_ascii_case_chain(backend: Backend[Any], function: Callable[[str], str])
     lowered = backend.lower(program.value)
     assert lowered.exact is not None
     rows = [("AbC" * 10,), ("",), ("ß",), ("İ",), ("ΟΣ",)]
-    assert backend.evaluate([lowered.exact], schema, rows)[0] == [True, True, False, False, False]
+    assert backend.evaluate([backend.predicate(lowered.exact)], schema, rows)[0] == [
+        True,
+        True,
+        False,
+        False,
+        False,
+    ]
     assert check_function(function, schema, backend, rows) == []
 
 
@@ -74,7 +80,7 @@ def test_polars_reverse_cluster_guard(cluster: str, exact: bool) -> None:
     schema = {"text": STR}
     lowered = backend.lower(trace(function, schema).value)
     assert lowered.exact is not None
-    assert backend.evaluate([lowered.exact], schema, [(text,)]) == [[exact]]
+    assert backend.evaluate([backend.predicate(lowered.exact)], schema, [(text,)]) == [[exact]]
     assert check_function(function, schema, backend, [(text,)]) == []
 
 
@@ -162,7 +168,9 @@ def test_duckdb_case_guard_skips_regex_for_ascii() -> None:
     assert lowered.exact is not None
     assert "strlen" in str(lowered.exact)
     rows = [("AbC",), ("",), ("\x00a\n",)]
-    assert backend.evaluate([lowered.exact], schema, rows) == [[True, True, True]]
+    assert backend.evaluate([backend.predicate(lowered.exact)], schema, rows) == [
+        [True, True, True]
+    ]
     assert check_function(lower, schema, backend, rows + [(value,) for value in STRING_TRAPS]) == []
 
 

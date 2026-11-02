@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from functools import reduce
 from string import Formatter
@@ -28,6 +29,12 @@ def format_value(value: Node, conversion: str | None, specifier: Node) -> tuple[
         text = value
     formatted = text if conversion else value
     specification = specifier.value
+    if formatted.type.kind is Kind.FLOAT and (match := re.fullmatch(r"\.([0-9]+)f", specification)):
+        try:
+            digits = int(match[1])
+        except ValueError as error:
+            raise Unsupported("format precision is too large") from error
+        return apply("format_fixed", formatted, lit(digits)), nullable_faults(formatted)
     if specification and not (
         (specification == "d" and formatted.type.kind is Kind.INT)
         or (specification == "s" and formatted.type.kind is Kind.STR)

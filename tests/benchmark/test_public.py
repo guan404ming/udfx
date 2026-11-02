@@ -62,7 +62,7 @@ def test_original_udfbench_sources(backend: Backend[Any], tmp_path: Path) -> Non
         assert translation.program is not None
         lowered = backend.lower_program(translation.program)
         if lowered.exact is not None:
-            flags = backend.evaluate([lowered.exact], workload.schema, rows)[0]
+            flags = backend.evaluate([backend.predicate(lowered.exact)], workload.schema, rows)[0]
             assert any(flag is True for flag in flags), workload.name
         supported.add(workload.name)
     assert supported >= SUPPORTED
