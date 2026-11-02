@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 from importlib.metadata import version
 from pathlib import Path
@@ -14,6 +15,10 @@ def prefix(text: str) -> str:
 
 def float_text(value: float) -> str:
     return str(value)
+
+
+def logarithm(value: float) -> float:
+    return math.log(value, 2.0)
 
 
 def word_lengths(text: str) -> list[int]:
@@ -34,6 +39,7 @@ def main() -> None:
         (prefix, {"text": STR}, [("hello",), ("İß你好",), ("",)]),
         (float_text, {"value": FLOAT}, [(1.0000000000000002,), (-0.0,), (1e-30,)]),
         (word_lengths, {"text": STR}, [("one two",), ("你好\t世界",), ("",)]),
+        (logarithm, {"value": FLOAT}, [(8.0,), (0.5,), (3.0,)]),
     ):
         translation = udfx.compile(function, schema, backend)
         assert translation.ok, translation.unsupported
@@ -41,7 +47,7 @@ def main() -> None:
         assert actual == [function(*row) for row in rows], actual
         report = udfx.explain(function, schema, backend)
         assert f"Backend: {name}" in report, report
-        if function is float_text:
+        if function is logarithm:
             assert "Python fallback: possible" in report, report
     translation = udfx.compile(inverse, {"value": INT}, backend)
     assert translation.ok, translation.unsupported
