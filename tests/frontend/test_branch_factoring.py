@@ -1,4 +1,3 @@
-import math
 import random
 import re
 from collections.abc import Callable
@@ -225,31 +224,6 @@ def test_literal_options_stay_native(
         [function(*row) for row in rows],
         [True] * len(rows),
     ]
-
-
-def test_canonical_branches_preserve_signed_zero() -> None:
-    def selected(condition: bool) -> float:
-        return 0.0 if condition else -0.0
-
-    schema = {"condition": BOOL}
-    program = trace(selected, schema)
-    assert isinstance(program.value, If)
-    values = POLARS.evaluate([POLARS.build(program)], schema, [(True,), (False,)])[0]
-    assert all(isinstance(value, float) for value in values)
-    assert [math.copysign(1.0, value) for value in values if isinstance(value, float)] == [
-        1.0,
-        -1.0,
-    ]
-
-
-@pytest.mark.parametrize("positive", [False, True])
-def test_boolean_branches_reduce_to_the_condition(positive: bool) -> None:
-    def selected(condition: bool) -> bool:
-        return positive if condition else not positive
-
-    program = trace(selected, {"condition": BOOL})
-    assert isinstance(program.value, Col if positive else Call)
-    assert check_function(selected, {"condition": BOOL}, POLARS, [(True,), (False,)]) == []
 
 
 def test_effectful_program_does_not_factor_branches() -> None:

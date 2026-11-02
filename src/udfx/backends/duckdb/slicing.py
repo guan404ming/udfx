@@ -20,7 +20,7 @@ from udfx.semantics.sequences import (
     SlicePrimitives,
     slice_sequence,
 )
-from udfx.types import Kind, Type
+from udfx.types import INT64_MAX, Kind, Type
 
 SLICE = SlicePrimitives(
     maximum=2**32 - 1,
@@ -127,3 +127,11 @@ PADDING = PaddingPrimitives(
 )
 
 register_padding(RULES, PADDING)
+
+
+@RULES("__getitem__", Kind.LIST, Kind.INT)
+@RULES("optional_item", Kind.LIST, Kind.INT)
+def list_getitem(container: Expression, index: Expression) -> Expression:
+    following = function("nullif", index, constant(INT64_MAX)) + constant(1)
+    position = when(index < constant(0), index, following)
+    return function("list_extract", container, position)

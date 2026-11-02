@@ -44,7 +44,7 @@ from udfx.semantics.text import (
     whitespace,
 )
 from udfx.semantics.text_predicates import unicode_match
-from udfx.types import INT64_MAX, Kind
+from udfx.types import Kind
 
 POINT = "udfx point"
 INDEX = "udfx index"
@@ -199,14 +199,6 @@ def bounded_native_index(container: Expression, index: Expression) -> Expression
 @RULES("__getitem__", Kind.STR, Kind.INT)
 def str_getitem(text: Expression, index: Expression) -> Expression:
     return function("array_extract", text, bounded_native_index(text, index))
-
-
-@RULES("__getitem__", Kind.LIST, Kind.INT)
-@RULES("optional_item", Kind.LIST, Kind.INT)
-def list_getitem(container: Expression, index: Expression) -> Expression:
-    following = function("nullif", index, constant(INT64_MAX)) + constant(1)
-    position = when(index < constant(0), index, following)
-    return function("list_extract", container, position)
 
 
 register_string_predicates(

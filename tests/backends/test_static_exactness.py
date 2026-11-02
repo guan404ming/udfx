@@ -15,7 +15,7 @@ from udfx.ops.registry import scoped
 from udfx.program import Program
 from udfx.testing import check_function
 from udfx.testing.equivalence import check_op_batches
-from udfx.types import BOOL, FLOAT, list_of
+from udfx.types import BOOL, FLOAT, STR, list_of
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -212,3 +212,11 @@ def test_graph_keeps_mixed_exactness_and_overflow_fields(
         assert backend.evaluate([expression], program.schema, rows) == [[22.0, 4.0, -4.0]]
         with pytest.raises(ValueError):
             backend.evaluate([expression], program.schema, [(False, 11.0)])
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_wide_literal_padding_is_static_false(backend: Backend[Any]) -> None:
+    def padded(text: str) -> str:
+        return text.ljust(2**21)
+
+    assert backend.lower_program(trace(padded, {"text": STR})).exact is False

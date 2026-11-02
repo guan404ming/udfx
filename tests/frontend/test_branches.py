@@ -1,3 +1,5 @@
+import math
+
 import pytest
 from hypothesis import given
 
@@ -5,10 +7,10 @@ from udfx.backends.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.flow.machine import MAX_STEPS
-from udfx.ir import FALSE, Col, If, Lit
+from udfx.ir import FALSE, Call, Col, If, Lit
 from udfx.ops import apply
 from udfx.testing import batches, check_function
-from udfx.types import INT, STR
+from udfx.types import BOOL, INT, STR
 
 POLARS = PolarsBackend()
 
@@ -137,3 +139,28 @@ def test_too_many_paths_names_the_cause() -> None:
     with pytest.raises(Unsupported) as error:
         trace(many_branches, {"a": INT})
     assert str(error.value) == message
+
+
+def test_canonical_branches_preserve_signed_zero() -> None:
+    def selected(condition: bool) -> float:
+        return 0.0 if condition else -0.0
+
+    schema = {"condition": BOOL}
+    program = trace(selected, schema)
+    assert isinstance(program.value, If)
+    values = POLARS.evaluate([POLARS.build(program)], schema, [(True,), (False,)])[0]
+    assert all(isinstance(value, float) for value in values)
+    assert [math.copysign(1.0, value) for value in values if isinstance(value, float)] == [
+        1.0,
+        -1.0,
+    ]
+
+
+@pytest.mark.parametrize("positive", [False, True])
+def test_boolean_branches_reduce_to_the_condition(positive: bool) -> None:
+    def selected(condition: bool) -> bool:
+        return positive if condition else not positive
+
+    program = trace(selected, {"condition": BOOL})
+    assert isinstance(program.value, Col if positive else Call)
+    assert check_function(selected, {"condition": BOOL}, POLARS, [(True,), (False,)]) == []

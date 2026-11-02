@@ -3,7 +3,8 @@ from dataclasses import replace
 import duckdb
 import pytest
 
-from udfx.backends.duckdb.backend import fallback_name
+from udfx.backends.duckdb.backend import DuckDBBackend, fallback_name
+from udfx.backends.duckdb.rules import column, constant
 from udfx.ir import Call, Col, lit
 from udfx.ops import apply
 from udfx.program import Program
@@ -50,3 +51,11 @@ def test_fallback_identity_uses_values_instead_of_graph_sharing() -> None:
         assert first == fallback_name(same, connection)
         assert first != fallback_name(other, connection)
         assert first != fallback_name(failing, connection)
+
+
+def test_fallback_evaluates_exactness_once() -> None:
+    program = Program(identity, {"text": STR}, Col("text", STR))
+    exact = column("text") == constant("kept")
+    with duckdb.connect() as connection:
+        expression = DuckDBBackend(connection).fallback(column("text"), exact, program)
+    assert str(expression).count(str(exact)) == 1
