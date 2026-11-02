@@ -179,3 +179,13 @@ def test_prepared_tables_verify_resolved_sources(
     (tmp_path / "suite/manifest.json").write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match=r"Checksum mismatch|Resolved source"):
         verify_tables("suite", tmp_path)
+
+
+def test_sources_reject_invalid_manifests_and_roots(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="needs a files list"):
+        resolve_sources({}, tmp_path, {})
+    root = tmp_path / "root"
+    root.write_text("")
+    manifest = {"files": [{"path": "data.txt", "input": "data"}]}
+    with pytest.raises(ValueError, match="not a directory"):
+        resolve_sources(manifest, tmp_path / "cached", {"data": root})

@@ -232,3 +232,8 @@ def test_qure_marks_explicit_import_adaptation_and_preserves_source(
     assert workload.function(1.25) == 2
     assert digest(tmp_path / "qure/source/python/q1.py") == entry["sha256"]
     assert qure.load(tmp_path, load_functions=False)[0].origin == "adapted"
+
+
+def test_qure_prepare_skips_joins_without_their_tables(tmp_path: Path) -> None:
+    tables = qure.prepare([table_file(tmp_path, "lineitem", [{}])])
+    assert set(tables) == {"lineitem"}
