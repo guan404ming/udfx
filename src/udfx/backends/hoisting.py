@@ -69,7 +69,9 @@ def exact_free[E](backend: Backend[E], node: Node, elements: Scope[E]) -> bool:
     return lowered.exact is None and lowered.overflow is None
 
 
-def repeated_condition(node: If, elements: Mapping[Node, object]) -> Node | None:
+def repeated_condition(
+    node: If, elements: Mapping[Node, object], kinds: frozenset[Kind]
+) -> Node | None:
     try:
         hash(node)
     except TypeError:
@@ -81,7 +83,7 @@ def repeated_condition(node: If, elements: Mapping[Node, object]) -> Node | None
             return
         if (
             isinstance(part, Call | If)
-            and part.type.kind in {Kind.STR, Kind.INT, Kind.LIST}
+            and part.type.kind in kinds
             and free(part) <= free(node)
             and reads_input(part)
         ):

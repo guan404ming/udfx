@@ -234,6 +234,12 @@ def test_qure_marks_explicit_import_adaptation_and_preserves_source(
     assert qure.load(tmp_path, load_functions=False)[0].origin == "adapted"
 
 
-def test_qure_prepare_skips_joins_without_their_tables(tmp_path: Path) -> None:
-    tables = qure.prepare([table_file(tmp_path, "lineitem", [{}])])
-    assert set(tables) == {"lineitem"}
+def test_qure_prepare_builds_only_selected_case_tables(tmp_path: Path) -> None:
+    paths = [table_file(tmp_path, name, [{}]) for name in ("lineitem", "orders", "partsupp")]
+    base = {"lineitem", "orders", "partsupp", "lineitem_orders"}
+    assert set(qure.prepare(paths)) == base | {"lineitem_partsupp"}
+    selected = qure.case_tables({"qure/froid/q8"})
+    assert selected == {"froid_q8", "lineitem_orders"}
+    assert set(qure.prepare(paths, selected)) == base
+    with pytest.raises(ValueError, match="Unknown QURE cases"):
+        qure.case_tables({"qure/missing"})

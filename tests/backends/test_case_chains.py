@@ -5,6 +5,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from udfx.backends.program_lowering import choosing_graph
 from udfx.frontend import trace
 from udfx.testing import check_function
 from udfx.types import STR
@@ -22,7 +23,10 @@ def test_predicate_selection_uses_one_case_chain(backend: Backend[Any]) -> None:
         return "other"
 
     schema = {"text": STR.or_none()}
-    with patch.object(backend, "select_many", wraps=backend.select_many) as select:
+    with (
+        patch.object(backend, "select_many", wraps=backend.select_many) as select,
+        choosing_graph(False),
+    ):
         backend.build(trace(classify, schema))
     select.assert_called_once()
     rows = [(None,), ("FIRST SECOND",), ("SECOND",), ("fİrst",), ("other",)]

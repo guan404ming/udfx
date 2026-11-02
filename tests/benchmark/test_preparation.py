@@ -77,7 +77,7 @@ def test_prepare_command_does_not_run_without_valid_arguments(
         main(["--rows", "0"])
     assert calls == []
     main(["--suites", "flights", "--root", str(tmp_path), "--rows", "3"])
-    assert calls == [("flights", tmp_path, 3, {})]
+    assert calls == [("flights", tmp_path, 3, {}, None)]
 
 
 def test_sampling_keeps_the_complete_dimension(

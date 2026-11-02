@@ -18,6 +18,7 @@ from udfx.frontend.core.values import (
     Method,
     Opaque,
     Row,
+    Series,
     Set,
     Value,
     describe,
@@ -67,7 +68,7 @@ def load_attribute(
         case Duration(node=node) if name in {"days", "seconds"} and not method:
             result, faults = duration_attribute(node, name)
             return single(Value(result), faults)
-        case Value() | Match() | Duration() | Set() | Json() if method:
+        case Value() | Match() | Duration() | Set() | Json() | Series() if method:
             return Evaluation((Method(name), owner))
         case Value():
             raise Unsupported(f"attribute access on a column value (attribute load {name})", where)

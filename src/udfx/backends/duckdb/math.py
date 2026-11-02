@@ -5,6 +5,7 @@ from dataclasses import replace
 
 from duckdb import Expression
 
+from udfx.backends.duckdb.connections import numpy_function
 from udfx.backends.duckdb.conversions import float_int
 from udfx.backends.duckdb.numbers import ORDER, cast_float64
 from udfx.backends.duckdb.rules import RULES, constant, function, when
@@ -98,6 +99,7 @@ register_math(
     ceil=lambda value: function("ceil", value),
     is_nan=lambda value: function("isnan", value),
     round_digits=round_digits,
+    numpy_values=numpy_function,
 )
 
 

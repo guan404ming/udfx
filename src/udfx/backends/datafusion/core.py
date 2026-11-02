@@ -35,3 +35,15 @@ def bool_truth(value: Expr) -> Expr:
 @RULES("bool", Kind.LIST)
 def list_truth(value: Expr) -> Expr:
     return value.is_not_null() & (functions.cardinality(value) > lit(0))
+
+
+for _method in ("max", "min"):
+    for _kind in (Kind.INT, Kind.FLOAT):
+        RULES(f"aggregate {_method}", _kind, Kind.BOOL)(
+            lambda value, present, method=_method: getattr(functions, method)(
+                functions.when(present, value).end()
+            )
+        )
+RULES("aggregate len", Kind.BOOL)(
+    lambda present: functions.count(functions.when(present, lit(1)).end())
+)

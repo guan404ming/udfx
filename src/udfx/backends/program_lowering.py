@@ -12,7 +12,7 @@ from udfx.backends.graph import lower_block
 from udfx.backends.graph_cost import graph_cost
 from udfx.backends.hoisting import size
 from udfx.backends.lowering_context import bindings_enabled, lowering_context, runtime_udfs
-from udfx.backends.rules import Lowered, fold_predicate
+from udfx.backends.rules import Lowered, fold_predicate, knowing_parents
 from udfx.errors import Unsupported
 from udfx.graphs import canonicalize, unique_size
 from udfx.ir import FALSE, Lit
@@ -88,13 +88,14 @@ def lower_program[E](
             f"the expression has {expanded} nodes once shared values are expanded; "
             f"the limit is {EXPANDED_LIMIT}"
         )
+    roots = (program.value, program.fault)
     try:
-        with lowering_context(binds=False if graph else None, graph=graph):
+        with lowering_context(binds=False if graph else None, graph=graph), knowing_parents(roots):
             return lower_result(backend, selected, results, graph)
     except Unsupported:
         if not graph or expanded > EXPANDED_LIMIT:
             raise
-    with lowering_context():
+    with lowering_context(), knowing_parents(roots):
         return lower_result(backend, program, results, False)
 
 

@@ -26,7 +26,7 @@ def test_branch_reuses_list_cardinality(backend: Backend[Any]) -> None:
     schema = {"words": list_of(STR)}
     program = trace(selected, schema)
     assert isinstance(program.value, If)
-    assert repeated_condition(program.value, {}) is not None
+    assert repeated_condition(program.value, {}, backend.hoisted) is not None
     rows = [([],), (["a"],), (["a", "b"],), (["é", "中", ""],)]
     assert check_function(selected, schema, backend, rows) == []
 

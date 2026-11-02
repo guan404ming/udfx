@@ -19,6 +19,7 @@ from udfx.frontend.flow.comprehensions import comprehension, validate_fault_hand
 from udfx.frontend.flow.frame import Flow, Frame, Produced, Result
 from udfx.frontend.flow.generators import validate_creation
 from udfx.frontend.flow.machine import evaluates, explore, optional
+from udfx.frontend.flow.series import construct_series
 from udfx.frontend.operations.builtins import call
 from udfx.frontend.operations.iterables import indexed, iterator_of, source_of
 from udfx.frontend.operations.library import (
@@ -27,6 +28,7 @@ from udfx.frontend.operations.library import (
     require_empty_keywords,
     unpacked_arguments,
 )
+from udfx.frontend.resolve.callables import known_op
 from udfx.frontend.resolve.constants import constant, scalar_map
 from udfx.frontend.resolve.frozen import closure
 from udfx.frontend.resolve.functions import bind_helper, helper_signature
@@ -47,6 +49,8 @@ def dispatch(
     if isinstance(callee, Function):
         return inline(frame, bindings, callee, arguments, keywords)
     reject_rows(arguments, keywords, frame.where(op.offset))
+    if isinstance(callee, Opaque) and known_op(callee.value) == "pandas.Series":
+        return construct_series(frame, bindings, arguments, keywords)
     mapping = isinstance(callee, Opaque) and (callee.value is map or callee.value is filter)
     if mapping and not keywords:
         return transformed(frame, op, bindings, cast("Opaque", callee).value is filter, arguments)

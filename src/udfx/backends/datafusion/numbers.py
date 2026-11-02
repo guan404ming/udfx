@@ -21,6 +21,7 @@ from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
     FLOAT_INT_MAX,
+    WRAPPING,
     Binary,
     FloatPrimitives,
     IntegerPrimitives,
@@ -160,3 +161,21 @@ def int_log10(value: Expr) -> Expr:
 
 for kind in (Kind.INT, Kind.FLOAT):
     RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)
+
+
+for _name, _operation in WRAPPING.items():
+    RULES(_name, Kind.INT, Kind.INT, linear=True)(_operation)
+
+
+@RULES("numpy.negative", Kind.INT, linear=True)
+def wrapping_neg(value: Expr) -> Expr:
+    return lit(0) - value
+
+
+@RULES("numpy.absolute", Kind.INT)
+def wrapping_abs(value: Expr) -> Expr:
+    return when(
+        value == lit(INT64_MIN),
+        lit(INT64_MIN),
+        functions.abs(functions.greatest(value, lit(-INT64_MAX))),
+    )

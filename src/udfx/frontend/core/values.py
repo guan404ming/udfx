@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from types import CodeType, ModuleType
 
 from udfx.errors import Unsupported
-from udfx.ir import Col, Element, Lit, Node
+from udfx.ir import TRUE, Col, Element, Lit, Node
 from udfx.types import Kind
 
 MAX_UNROLL = 64
@@ -102,6 +102,12 @@ class Iterator:
 
 
 @dataclass(frozen=True)
+class Series:
+    node: Node
+    present: Node = TRUE
+
+
+@dataclass(frozen=True)
 class Generator:
     node: Node
 
@@ -161,6 +167,7 @@ Item = (
     | Tuple
     | Iterator
     | Generator
+    | Series
     | Set
     | Counter
     | CounterKey
@@ -205,6 +212,7 @@ def describe(item: Item) -> str:
         case (
             Tuple()
             | Generator()
+            | Series()
             | Set()
             | Slice()
             | Duration()

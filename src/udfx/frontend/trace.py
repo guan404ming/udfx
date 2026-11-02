@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
+from typing import Literal
 
 from udfx.errors import Unsupported
 from udfx.frontend.core.bindings import Bindings
@@ -9,8 +12,9 @@ from udfx.frontend.core.branches import factor_branches
 from udfx.frontend.core.evaluation import Raise, Return
 from udfx.frontend.core.logic import fold
 from udfx.frontend.core.merge import fault_union, merge
-from udfx.frontend.core.tracing import collect_effects, joining_helpers
-from udfx.frontend.core.values import Row, Value, named
+from udfx.frontend.core.series import require_reduced
+from udfx.frontend.core.tracing import collect_effects, joining_helpers, tracing_series
+from udfx.frontend.core.values import Item, Row, Series, Value, named
 from udfx.frontend.flow.frame import Flow, Frame
 from udfx.frontend.flow.machine import PathLimit, explore
 from udfx.frontend.resolve.frozen import Snapshot, closure
@@ -21,19 +25,29 @@ from udfx.program import Program
 from udfx.semantics.json_values import RESULTS, result_name
 from udfx.types import Kind, Type, unify
 
+SERIES_KINDS = (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL)
+type Pandas = Literal["scalar", "aggregate"]
+
 
 def trace(
-    function: Callable[..., object], schema: Mapping[str, Type], *, result: Type | None = None
+    function: Callable[..., object],
+    schema: Mapping[str, Type],
+    *,
+    result: Type | None = None,
+    pandas: Pandas | None = None,
 ) -> Program:
     try:
-        return trace_function(function, schema, result)
+        return trace_function(function, schema, result, pandas)
     except PathLimit:
         with joining_helpers():
-            return trace_function(function, schema, result)
+            return trace_function(function, schema, result, pandas)
 
 
 def trace_function(
-    function: Callable[..., object], schema: Mapping[str, Type], result: Type | None = None
+    function: Callable[..., object],
+    schema: Mapping[str, Type],
+    result: Type | None = None,
+    pandas: Pandas | None = None,
 ) -> Program:
     if not inspect.isfunction(function):
         raise Unsupported(f"{named(function)} is not a Python function")
@@ -45,7 +59,7 @@ def trace_function(
     if function.__defaults__ or function.__kwdefaults__:
         raise Unsupported(f"{function.__qualname__} has parameter defaults")
     names = parameters(function.__code__)
-    row_mode = len(names) == 1 and list(schema) != names
+    row_mode = pandas is None and len(names) == 1 and list(schema) != names
     if not row_mode and list(schema) != names:
         raise Unsupported(f"schema {list(schema)} does not match parameters {names}")
     snapshot = Snapshot()
@@ -54,9 +68,14 @@ def trace_function(
         function.__code__, function.__globals__, function.__builtins__, None, snapshot
     )
     columns = {name: Value(Col(name, type)) for name, type in schema.items()}
-    bindings = {names[0]: Row(columns)} if row_mode else columns
+    bindings = (
+        series_columns(schema) if pandas else {names[0]: Row(columns)} if row_mode else columns
+    )
     names = Bindings({**bindings, **closure(function)}, TRUE)
-    with collect_effects() as effects:
+    with (
+        collect_effects() as effects,
+        tracing_series(pandas == "aggregate") if pandas else nullcontext() as reductions,
+    ):
         outcomes = explore(frame, Flow(frame.decoded.entry, 0, names, {}))
     returns = [outcome for outcome in outcomes if isinstance(outcome, Return)]
     if not returns:
@@ -72,6 +91,8 @@ def trace_function(
     if value.type.item is not None and value.type.item.kind is Kind.JSON:
         raise Unsupported("dynamic JSON lists require a scalar result conversion")
     fault = fault_union(faults)
+    if pandas == "aggregate":
+        require_reduced(value, fault)
     if not effects:
         value, fault = factor_branches((value, fault))
     return Program(
@@ -81,7 +102,18 @@ def trace_function(
         fault,
         row_mode,
         not effects,
+        sys.modules["pandas"].Series if pandas else None,
+        tuple(reductions) if pandas == "aggregate" and reductions is not None else None,
     )
+
+
+def series_columns(schema: Mapping[str, Type]) -> dict[str, Item]:
+    if "pandas" not in sys.modules:
+        raise Unsupported("series UDFs require pandas")
+    for name, column_type in schema.items():
+        if column_type.nullable or column_type.kind not in SERIES_KINDS:
+            raise Unsupported(f"series column {name!r} must be a non-null str, int, float, or bool")
+    return {name: Series(Col(name, type)) for name, type in schema.items()}
 
 
 def json_result(value: Node, result: Type) -> Node:

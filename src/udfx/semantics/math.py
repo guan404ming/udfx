@@ -7,8 +7,11 @@ from typing import Any
 
 from udfx.semantics.numbers import RoundPrimitives
 
+EXPONENT_UNDERFLOW = -746.0
+EXPONENT_OVERFLOW = 710.0
 EXPONENTIAL_LIMIT = math.log(sys.float_info.max)
 SMALL_ANGLE = 2.0**-27
+POWER_FINITE_BOUND = 1e308
 
 
 def power_hazards(exponent: object) -> tuple[bool, bool]:
@@ -98,14 +101,16 @@ def transcendental(
             ),
         )
         return result, exact
-    exact = (value == zero) | (primitives.abs(value) == infinity) | missing
+    underflow = (value < primitives.literal(EXPONENT_UNDERFLOW)) & ~missing
+    overflow = (value > primitives.literal(EXPONENT_OVERFLOW)) & ~missing
+    exact = (value == zero) | underflow | overflow | missing
     result = primitives.when(
         value == zero,
         value if name == "expm1" else one,
         primitives.when(
-            value == primitives.literal(-math.inf),
+            underflow,
             primitives.literal(-1.0) if name == "expm1" else zero,
-            value,
+            primitives.when(overflow, infinity, value),
         ),
     )
     return result, exact

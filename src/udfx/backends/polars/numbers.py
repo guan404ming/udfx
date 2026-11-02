@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import math
 import operator
 from functools import partial
 
 import polars as pl
 
-from udfx.backends.polars.rules import RULES, broadcast, when
+from udfx.backends.polars.rules import RULES, broadcast, literal_value, when
 from udfx.backends.registration import (
     BinaryRule,
     Lowered,
@@ -20,6 +21,7 @@ from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
     FLOAT_INT_MAX,
+    WRAPPING,
     Binary,
     FloatPrimitives,
     OrderPrimitives,
@@ -51,8 +53,19 @@ def overflow_checked(operation: Binary) -> BinaryRule[pl.Expr]:
     return rule
 
 
+def materialized(value: pl.Expr) -> pl.Expr:
+    constant = literal_value(value)
+    if isinstance(constant, float) and math.isfinite(constant) and abs(constant) not in (0.0, 1.0):
+        return value
+    return broadcast(value)
+
+
 def broadcast_arguments(operation: Binary) -> Binary:
     return lambda left, right: operation(broadcast(left), broadcast(right))
+
+
+def materialized_arguments(operation: Binary) -> Binary:
+    return lambda left, right: operation(materialized(left), materialized(right))
 
 
 def either_nan(left: pl.Expr, right: pl.Expr) -> pl.Expr:
@@ -92,7 +105,7 @@ for _name, _operation in ARITHMETIC.items():
     RULES(
         _name, Kind.INT, Kind.INT, facts={"bounded": partial(integer_fits, size_limit=2**32 - 1)}
     )(overflow_checked(_operation))
-    register_float_variants(RULES, _name, broadcast_arguments(_operation), cast_float64)
+    register_float_variants(RULES, _name, materialized_arguments(_operation), cast_float64)
 
 for _name, _compare in COMPARISONS.items():
     register_comparison(RULES, _name, _compare, cast_float64, ORDER)
@@ -143,3 +156,8 @@ def int_log10(value: pl.Expr) -> Lowered[pl.Expr]:
 
 for name in ("__eq__", "__ne__"):
     RULES.rewrite(name, Kind.INT, Kind.INT)(empty_union)
+
+for _name, _operation in WRAPPING.items():
+    RULES(_name, Kind.INT, Kind.INT, linear=True)(_operation)
+RULES("numpy.negative", Kind.INT, linear=True)(pl.Expr.__neg__)
+RULES("numpy.absolute", Kind.INT, linear=True)(pl.Expr.abs)

@@ -19,15 +19,9 @@ from udfx.backends.program_lowering import build_smallest, lower_program
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
-from udfx.ir import (
-    FALSE,
-    TRUE,
-    Col,
-    Lit,
-    Node,
-)
+from udfx.ir import FALSE, TRUE, Col, Lit, Node
 from udfx.program import Program
-from udfx.types import Type
+from udfx.types import Kind, Type
 
 RESERVED = "udfx "
 OUTPUT = f"{RESERVED}out"
@@ -55,14 +49,15 @@ class Backend[E](ABC):
     graphs: ClassVar[bool] = False
     choose_graphs: ClassVar[bool] = False
     binds: ClassVar[bool] = False
+    hoisted: ClassVar[frozenset[Kind]] = frozenset({Kind.STR, Kind.INT, Kind.LIST})
     indexes: ClassVar[bool] = False
 
     def supports_graphs(self) -> bool:
         return self.graphs
 
-    def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+    def run_fallback[T](self, run: Callable[[], T]) -> T:
         try:
-            return program.run(rows)
+            return run()
         except Exception as error:
             RAISED.error = error
             raise FallbackError(error) from error
@@ -74,7 +69,7 @@ class Backend[E](ABC):
             return []
         columns = gather(pending)
         rows = zip(*columns, strict=True) if columns else [()] * len(pending)
-        return self.run_fallback_rows(program, rows)
+        return self.run_fallback(lambda: program.run(rows))
 
     def fallback_values(
         self, program: Program, length: int, pending: Sequence[int], gather: Gather
@@ -162,7 +157,11 @@ class Backend[E](ABC):
 
     @abstractmethod
     def evaluate(
-        self, exprs: Sequence[E], schema: Mapping[str, Type], rows: Sequence[Row]
+        self,
+        exprs: Sequence[E],
+        schema: Mapping[str, Type],
+        rows: Sequence[Row],
+        reduced: bool = False,
     ) -> list[list[object]]: ...
 
     def lower(self, node: Node, elements: Scope[E] | None = None) -> Lowered[E]:

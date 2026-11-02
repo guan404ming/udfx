@@ -38,8 +38,31 @@ def concatenate_fragments(text: str) -> str:
     return result.strip()
 
 
+def labeled_words(text: str) -> list[str]:
+    values = []
+    for word in text.split():
+        label = word.upper()
+        if word.isdigit():
+            label = "number"
+        values.append(label)
+    return values
+
+
+def nested_constant_loop(text: str) -> list[int]:
+    values = []
+    for word in text.split():
+        cleaned = word
+        for mark in ("a", "b"):
+            cleaned = cleaned.replace(mark, "")
+        values.append(sum(cleaned.count(letter) for letter in "xy"))
+    return values
+
+
 @pytest.mark.parametrize("backend", frontend_backend_params())
-@pytest.mark.parametrize("function", [collect_words, collect_numbers, concatenate_fragments])
+@pytest.mark.parametrize(
+    "function",
+    [collect_words, collect_numbers, concatenate_fragments, labeled_words, nested_constant_loop],
+)
 def test_local_collection_loops(function: Callable[..., object], backend: Backend) -> None:
     rows = [("",), (" ",), ("a skip b",), ("replace One 😀",), ("1 2 -3",), ("4 bad 5",)]
     assert check_function(function, {"text": STR}, backend, rows) == []
@@ -145,6 +168,15 @@ def carried_temporary(text: str) -> str:
     return result
 
 
+def carried_collection(text: str) -> list[str]:
+    values = []
+    previous = ""
+    for word in text.split():
+        values.append(previous)
+        previous = word
+    return values
+
+
 def partial_collection(text: str) -> int:
     values = []
     try:
@@ -168,6 +200,7 @@ def partial_collection(text: str) -> int:
         escaped_target,
         escaped_temporary,
         carried_temporary,
+        carried_collection,
         partial_collection,
     ],
 )

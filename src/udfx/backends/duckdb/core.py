@@ -36,3 +36,15 @@ def bool_truth(value: Expression) -> Expression:
 @RULES("bool", Kind.LIST)
 def list_truth(value: Expression) -> Expression:
     return value.isnotnull() & (length(value) > constant(0))
+
+
+for _method in ("max", "min"):
+    for _kind in (Kind.INT, Kind.FLOAT):
+        RULES(f"aggregate {_method}", _kind, Kind.BOOL)(
+            lambda value, present, method=_method: function(
+                method, duckdb.CaseExpression(present, value)
+            )
+        )
+RULES("aggregate len", Kind.BOOL)(
+    lambda present: function("count", duckdb.CaseExpression(present, constant(1)))
+)

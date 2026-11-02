@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import operator
+from dataclasses import replace
 from functools import partial
 
 import duckdb
@@ -29,6 +30,8 @@ from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
     FLOAT_INT_MAX,
+    INT64_SPAN,
+    WRAPPING,
     Binary,
     FloatPrimitives,
     IntegerPrimitives,
@@ -36,6 +39,7 @@ from udfx.semantics.numbers import (
     division_overflows,
     float_divmod,
     int_divmod,
+    wrap_int64,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -76,6 +80,10 @@ def is_nan(value: Expression) -> Expression:
 
 
 def either_nan(left: Expression, right: Expression) -> Expression:
+    return is_nan(left) | is_nan(right)
+
+
+def either_known_nan(left: Expression, right: Expression) -> Expression:
     return duckdb.CoalesceOperator(is_nan(left), constant(False)) | duckdb.CoalesceOperator(
         is_nan(right), constant(False)
     )
@@ -139,7 +147,7 @@ for _name, _compare in COMPARISONS.items():
 register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
 register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
 register_float_variants(RULES, "__mod__", float_mod, cast_float64)
-register_equality(RULES, null_safe_equal, cast_float64, ORDER)
+register_equality(RULES, null_safe_equal, cast_float64, replace(ORDER, either_nan=either_known_nan))
 
 RULES("__neg__", Kind.FLOAT)(Expression.__neg__)
 RULES("abs", Kind.FLOAT)(lambda value: function("abs", value))
@@ -192,3 +200,22 @@ for name in ("__eq__", "__ne__"):
 
 for kind in (Kind.INT, Kind.FLOAT):
     RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)
+
+
+def wide_constant(value: int) -> Expression:
+    return constant(value).cast(sqltypes.HUGEINT)
+
+
+def wrapped(wide: Expression) -> Expression:
+    low_bits = partial(function, "&", wide_constant(INT64_SPAN - 1))
+    return wrap_int64(wide_constant, low_bits, wide).cast(sqltypes.BIGINT)
+
+
+def wrapping(operation: Binary) -> Binary:
+    return lambda left, right: wrapped(operation(cast_int128(left), cast_int128(right)))
+
+
+for _name, _operation in WRAPPING.items():
+    RULES(_name, Kind.INT, Kind.INT)(wrapping(_operation))
+RULES("numpy.negative", Kind.INT)(lambda value: wrapped(-cast_int128(value)))
+RULES("numpy.absolute", Kind.INT)(lambda value: wrapped(function("abs", cast_int128(value))))

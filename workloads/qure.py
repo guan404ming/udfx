@@ -37,14 +37,26 @@ def date_inputs(tables: dict[str, pyarrow.Table]) -> None:
         tables["froid_q4"] = tpch.join(regional, tables["region"], "n_regionkey", "r_regionkey")
 
 
-def prepare(paths: list[Path]) -> dict[str, pyarrow.Table]:
+def case_tables(cases: set[str]) -> set[str]:
+    bindings = {
+        f"qure/{Path(entry['path']).with_suffix('')}": entry["binding"]
+        for entry in read_manifest("qure")["files"]
+        if "binding" in entry
+    }
+    if unknown := cases - bindings.keys():
+        raise ValueError(f"Unknown QURE cases: {', '.join(sorted(unknown))}")
+    tables = {bindings[case]["table"] for case in cases}
+    return tables | ({"lineitem_orders"} if tables & {"froid_q4", "froid_q8"} else set())
+
+
+def prepare(paths: list[Path], selected: set[str] | None = None) -> dict[str, pyarrow.Table]:
     tables = tpch.load([path for path in paths if path.suffix == ".tbl"])
     for name, right, key, foreign_key in (
         ("lineitem_orders", "orders", "l_orderkey", "o_orderkey"),
         ("lineitem_part", "part", "l_partkey", "p_partkey"),
         ("lineitem_partsupp", "partsupp", "l_suppkey", "ps_suppkey"),
     ):
-        if "lineitem" in tables and right in tables:
+        if (selected is None or name in selected) and "lineitem" in tables and right in tables:
             tables[name] = tpch.join(tables["lineitem"], tables[right], key, foreign_key)
     date_inputs(tables)
     return tables

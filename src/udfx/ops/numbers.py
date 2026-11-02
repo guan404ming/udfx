@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import math
 import operator
+from functools import partial
 
 from udfx.ir import Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.semantics.numbers import ARITHMETIC, COMPARISONS
+from udfx.semantics.numbers import ARITHMETIC, COMPARISONS, WRAPPING
+from udfx.semantics.scalars import numpy_scalar
 from udfx.types import BOOL, FLOAT, INT, Kind, Type
 
 PAIRS: tuple[tuple[Type, Type], ...] = ((INT, INT), (FLOAT, FLOAT), (INT, FLOAT), (FLOAT, INT))
@@ -49,3 +51,8 @@ for scalar in (INT, FLOAT):
 
 register(Op("math.isnan", (FLOAT,), BOOL, math.isnan))
 register(Op("math.isinf", (FLOAT,), BOOL, math.isinf))
+
+for name in WRAPPING:
+    register(Op(name, (INT, INT), INT, partial(numpy_scalar, name.removeprefix("numpy."))))
+for name in ("numpy.negative", "numpy.absolute"):
+    register(Op(name, (INT,), INT, partial(numpy_scalar, name.removeprefix("numpy."))))

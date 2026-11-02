@@ -105,10 +105,11 @@ def prepare(
     root: Path,
     rows: int | None = None,
     sources: dict[str, Path] | None = None,
+    selected: set[str] | None = None,
 ) -> None:
     manifest = read_manifest(suite)
     paths, records = resolve_sources(manifest, root / suite / "source", sources or {})
-    tables = PREPARERS[suite](paths)
+    tables = PREPARERS[suite](paths) if selected is None else qure.prepare(paths, selected)
     if rows is not None:
         full_tables = manifest.get("dimension_tables", [])
         tables = {
@@ -124,12 +125,16 @@ def main(arguments: list[str] | None = None) -> None:
     parser.add_argument("--root", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("--rows", type=int)
     parser.add_argument("--source", action="append", default=[], metavar="NAME=DIRECTORY")
+    parser.add_argument("--cases", nargs="+")
     options = parser.parse_args(arguments)
     if options.rows is not None and options.rows <= 0:
         parser.error("--rows must be positive")
     if len(options.suites) != len(set(options.suites)):
         parser.error("--suites must contain unique names")
+    if options.cases is not None and options.suites != ["qure"]:
+        parser.error("--cases requires --suites qure")
     try:
+        selected = None if options.cases is None else qure.case_tables(set(options.cases))
         sources = parse_sources(options.source)
         required = {
             entry["input"]
@@ -146,7 +151,7 @@ def main(arguments: list[str] | None = None) -> None:
     except ValueError as error:
         parser.error(str(error))
     for suite in options.suites:
-        prepare(suite, options.root, options.rows, sources)
+        prepare(suite, options.root, options.rows, sources, selected)
         print(f"Prepared {suite}: {options.root / suite}")
 
 

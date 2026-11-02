@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from functools import partial
 
 from pyspark.sql import Column, functions
@@ -11,6 +12,7 @@ from udfx.semantics.text_predicates import AsciiPrimitives
 RULES: RuleSet[Column] = RuleSet()
 INT32_MAX = 2**31 - 1
 INTEGER_FITS = partial(integer_fits, size_limit=INT32_MAX)
+PYTHON_UDFS: ContextVar[dict[str, Column] | None] = ContextVar("udfx spark python", default=None)
 
 
 def when(condition: Column, then: Column, orelse: Column) -> Column:

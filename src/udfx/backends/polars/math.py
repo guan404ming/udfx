@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import partial
+
 import polars as pl
 
 from udfx.backends.polars.conversions import float_int
@@ -13,6 +15,7 @@ from udfx.backends.registration import (
     register_trigonometry,
 )
 from udfx.semantics.numbers import RoundPrimitives, round_overflow_safe, scaled_round
+from udfx.semantics.scalars import numpy_values
 from udfx.types import Kind
 
 
@@ -75,6 +78,9 @@ register_math(
     ceil=pl.Expr.ceil,
     is_nan=pl.Expr.is_nan,
     round_digits=round_digits,
+    numpy_values=lambda name, value: value.map_batches(
+        partial(numpy_values, name), return_dtype=pl.Float64, is_elementwise=True
+    ),
 )
 
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import operator
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
@@ -10,7 +12,8 @@ from udfx.frontend.core.comprehensions import cardinality
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.membership import comparison_membership, initial_lowercase_membership
 from udfx.frontend.core.sequences import literal_string_item
-from udfx.frontend.core.text import combined_search, joined_split, lowercase_contains
+from udfx.frontend.core.text import combined_search, joined_split, lowercase_contains, split_count
+from udfx.graphs import parent_names
 from udfx.ir import FALSE, TRUE, Call, Guarded, If, Node
 from udfx.ops.registry import OpKey
 from udfx.semantics.assumptions import assuming
@@ -47,6 +50,37 @@ type RuleResult[E] = E | Lowered[E]
 type Rule[E] = Callable[..., RuleResult[E]]
 type BinaryRule[E] = Callable[[E, E], RuleResult[E]]
 type Rewrite = Callable[[Call], Node | None]
+
+
+PARENTS: ContextVar[Mapping[Node, frozenset[str]] | None] = ContextVar("udfx_parents", default=None)
+
+
+@contextmanager
+def knowing_parents(roots: tuple[Node, ...]) -> Generator[None]:
+    token = PARENTS.set(parent_names(roots))
+    try:
+        yield
+    finally:
+        PARENTS.reset(token)
+
+
+def parents(node: Node) -> frozenset[str]:
+    try:
+        return (PARENTS.get() or {}).get(node, frozenset())
+    except TypeError:
+        return frozenset()
+
+
+def unshared_lowercase_contains(node: Call) -> Node | None:
+    if parents(node.arguments[0]) - {"__contains__"}:
+        return None
+    return lowercase_contains(node)
+
+
+def unshared_split_count(node: Call) -> Node | None:
+    if parents(node.arguments[0]) != frozenset({"len"}):
+        return None
+    return split_count(node)
 
 
 BOOLEAN_RULES: dict[OpKey, Rule[Any]] = {
@@ -109,9 +143,11 @@ class RuleSet[E]:
             ),
             OpKey("and", (Kind.BOOL, Kind.BOOL)): comparison_membership,
             OpKey("__add__", (Kind.STR, Kind.STR)): joined_split,
-            OpKey("__contains__", (Kind.STR, Kind.STR)): lowercase_contains,
+            OpKey("__contains__", (Kind.STR, Kind.STR)): unshared_lowercase_contains,
             OpKey("__contains__", (Kind.LIST, Kind.STR)): initial_lowercase_membership,
-            OpKey("len", (Kind.LIST,)): cardinality,
+            OpKey("len", (Kind.LIST,)): lambda node: (
+                unshared_split_count(node) or cardinality(node)
+            ),
             OpKey("bool", (Kind.LIST,)): cardinality,
             OpKey("__getitem__", (Kind.STR, Kind.INT)): literal_string_item,
         }

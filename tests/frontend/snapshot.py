@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 from udfx.errors import Unsupported
+from udfx.frontend.trace import Pandas
 from udfx.ir import Element
 from udfx.ops import Op
 from udfx.program import Program
@@ -28,6 +29,7 @@ class Tracer(Protocol):
         schema: Mapping[str, Type],
         *,
         result: Type | None = None,
+        pandas: Pandas | None = None,
     ) -> Program: ...
 
 
@@ -103,13 +105,19 @@ GOLDEN = Golden()
 
 def guarded(tracer: Tracer) -> Tracer:
     def traced(
-        function: Callable[..., object], schema: Mapping[str, Type], *, result: Type | None = None
+        function: Callable[..., object],
+        schema: Mapping[str, Type],
+        *,
+        result: Type | None = None,
+        pandas: Pandas | None = None,
     ) -> Program:
         identifier = key(function, schema)
         if result is not None:
             identifier += f"|result:{result}"
+        if pandas is not None:
+            identifier += f"|pandas:{pandas}"
         try:
-            program = tracer(function, schema, result=result)
+            program = tracer(function, schema, result=result, pandas=pandas)
         except Unsupported as error:
             GOLDEN.observe(identifier, describe(error))
             raise

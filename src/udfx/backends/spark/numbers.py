@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Callable
+from decimal import Decimal
 
 from pyspark.sql import Column, functions
 
@@ -20,11 +21,14 @@ from udfx.semantics.numbers import (
     ARITHMETIC,
     COMPARISONS,
     FLOAT_INT_MAX,
+    INT64_SPAN,
+    WRAPPING,
     FloatPrimitives,
     IntegerPrimitives,
     OrderPrimitives,
     float_divmod,
     int_divmod,
+    wrap_int64,
 )
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
@@ -167,3 +171,41 @@ for name in ("__eq__", "__ne__"):
 
 for kind in (Kind.INT, Kind.FLOAT):
     RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)
+
+
+def decimal(value: int) -> Column:
+    return functions.lit(Decimal(value))
+
+
+def wrapping(
+    operation: Callable[[Column, Column], Column], checked: Callable[[Column, Column], Column]
+) -> Callable[[Column, Column], Column]:
+    def rule(left: Column, right: Column) -> Column:
+        wide = operation(WIDE_INTEGERS.widen(left), WIDE_INTEGERS.widen(right))
+        return functions.coalesce(
+            checked(left, right),
+            wrap_int64(
+                decimal, lambda value: functions.pmod(value, decimal(INT64_SPAN)), wide
+            ).cast("long"),
+        )
+
+    return rule
+
+
+for _name, _checked in zip(WRAPPING, CHECKED.values(), strict=True):
+    RULES(_name, Kind.INT, Kind.INT)(wrapping(WRAPPING[_name], _checked))
+
+
+@RULES("numpy.negative", Kind.INT)
+def wrapping_neg(value: Column) -> Column:
+    negated = functions.try_subtract(functions.lit(0), value)
+    return when(value == INT64_MIN, functions.lit(INT64_MIN), negated)
+
+
+@RULES("numpy.absolute", Kind.INT)
+def wrapping_abs(value: Column) -> Column:
+    return when(
+        value == INT64_MIN,
+        functions.lit(INT64_MIN),
+        functions.abs(functions.greatest(value, functions.lit(-INT64_MAX))),
+    )

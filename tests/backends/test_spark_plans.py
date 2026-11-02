@@ -1,4 +1,5 @@
 import json
+import math
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from dataclasses import replace
@@ -6,6 +7,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
+import numpy
 import pytest
 from conftest import backend_params
 from pyspark.sql import functions
@@ -19,7 +21,8 @@ from udfx.ir import Col, Guarded, lit
 from udfx.ops import apply
 from udfx.program import Program
 from udfx.semantics.json_encoding import encode_strings
-from udfx.types import BOOL, DATETIME, INT, STR, list_of
+from udfx.testing import check_function
+from udfx.types import BOOL, DATETIME, FLOAT, INT, STR, list_of
 
 
 def test_spark_uses_public_apis() -> None:
@@ -37,6 +40,35 @@ def test_character_split_skips_array_scan() -> None:
     assert translation.ok
     assert translation.expr is not None
     assert "array_remove" not in str(translation.expr)
+
+
+def test_numpy_udf_stays_outside_lambdas() -> None:
+    def scaled(value: float) -> float:
+        return numpy.exp(value / 50) + 10
+
+    def mapped(values: list[float]) -> list[float]:
+        return [numpy.exp(value) for value in values]
+
+    backend = SparkBackend()
+    single = compile(scaled, {"value": FLOAT}, backend)
+    assert "numpy_batch" in str(single.expr)
+    schema = {"values": list_of(FLOAT)}
+    translation = compile(mapped, schema, backend)
+    assert translation.expr is not None
+    rows = [([0.5, 1.0],)]
+    assert backend.evaluate([translation.expr], schema, rows) == [[mapped([0.5, 1.0])]]
+
+
+def test_float_power_uses_python_udf() -> None:
+    def cubic(price: float) -> float:
+        return price**3 - 2 * (price**2) + price**0.5
+
+    schema = {"price": FLOAT}
+    backend = SparkBackend()
+    translation = compile(cubic, schema, backend)
+    assert "power_literal" in str(translation.expr)
+    rows = [(1.5,), (-2.25,), (1e103,), (0.0,), (math.nan,), (math.inf,)]
+    assert check_function(cubic, schema, backend, rows) == []
 
 
 def test_datetime_difference_skips_epoch_conversion() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from typing import cast
 
 from udfx.backends.rules import BinaryRule, Lowered, RuleSet
 from udfx.semantics.math import (
@@ -24,7 +25,11 @@ def register_float_variants[E](
     rules(name, Kind.INT, Kind.FLOAT, literals=literals)(
         lambda left, right: rule(to_float(left), right)
     )
-    rules(name, Kind.FLOAT, Kind.INT)(lambda left, right: rule(left, to_float(right)))
+    rules(name, Kind.FLOAT, Kind.INT, literals=literals)(
+        lambda left, right: rule(
+            left, cast("E", float(right)) if isinstance(right, int) else to_float(right)
+        )
+    )
 
 
 def register_trigonometry[E](
@@ -75,6 +80,7 @@ def register_math[E](
     ceil: Callable[[E], E],
     is_nan: Callable[[E], E],
     round_digits: BinaryRule[E],
+    numpy_values: Callable[[str, E], E | None] | None = None,
 ) -> None:
     def square_root(value: E) -> E:
         return numpy_root(rounding, root, value)
@@ -87,7 +93,12 @@ def register_math[E](
     ):
         for name in names:
 
-            def rule(value: E, name: str = name) -> Lowered[E]:
+            def rule(value: E, name: str = name, module: str = module) -> Lowered[E]:
+                found = (
+                    None if module != "numpy" or numpy_values is None else numpy_values(name, value)
+                )
+                if found is not None:
+                    return Lowered(found)
                 return Lowered(*transcendental(rounding, is_nan, name, value))
 
             rules(f"{module}.{name}", Kind.FLOAT)(rule)

@@ -3,6 +3,7 @@ from dataclasses import replace
 from functools import reduce
 
 from udfx.errors import Unsupported
+from udfx.frontend.core.bindings import Bindings
 from udfx.frontend.core.evaluation import Raise
 from udfx.frontend.core.expressions import node_of
 from udfx.frontend.core.json import packed
@@ -20,7 +21,7 @@ from udfx.types import INT
 def target_names(body: Sequence[ops.Op]) -> set[str]:
     names: set[str] = set()
     for op in body:
-        if isinstance(op, ops.Store) and not op.cell:
+        if isinstance(op, ops.Store):
             names.add(op.name)
         elif not (isinstance(op, ops.Unpack) and not op.starred):
             break
@@ -45,7 +46,7 @@ def validate_fault_handlers(frame: Frame) -> None:
 def comprehension(
     frame: Frame, flow: Flow, exit: graph.ForEach, iterator: Iterator, operation: type[ops.Op]
 ) -> tuple[Item, list[Fault]]:
-    validate_comprehension(frame, exit)
+    temporary = validate_comprehension(frame, exit)
     decoded = frame.decoded
     source, element, item = indexed(iterator, f"{frame.code.co_qualname}:{exit.offset}")
     nested = replace(frame, catching=False, caller=(frame, flow.bindings))
@@ -59,7 +60,8 @@ def comprehension(
         )
 
     values = {**flow.values, exit.advanced: iterator, exit.item: item}
-    start = follow(nested, replace(flow, bindings=flow.bindings.under(TRUE)), exit.body, values)
+    bindings = reduce(Bindings.delete, temporary, flow.bindings).under(TRUE)
+    start = follow(nested, replace(flow, bindings=bindings), exit.body, values)
     cases: list[tuple[Node, Node]] = []
     failures: list[Raise] = []
     dynamic: set[bool] = set()
@@ -117,15 +119,18 @@ def element_faults(
     return [Fault(kind, apply("__eq__", first, lit(index + 1))) for index, kind in enumerate(kinds)]
 
 
-def validate_comprehension(frame: Frame, exit: graph.ForEach) -> None:
+def validate_comprehension(frame: Frame, exit: graph.ForEach) -> set[str]:
     body = frame.decoded.operations(exit.offset + 1, exit.end)
-    if any(isinstance(op, graph.ForEach) or (isinstance(op, ops.Store) and op.cell) for op in body):
-        raise Unsupported(exit.reason, frame.where(exit.offset))
     names = target_names(body)
     if not names:
         raise Unsupported(exit.reason, frame.where(exit.offset))
-    if any(isinstance(op, ops.Store) and not op.cell and op.name not in names for op in body):
-        raise Unsupported("comprehension assignment", frame.where(exit.offset))
+    temporary = {op.name for op in body if isinstance(op, ops.Store | ops.Delete)} - names
+    if any(
+        isinstance(op, ops.Local) and op.name in temporary
+        for op in frame.decoded.operations(exit.end)
+    ):
+        raise Unsupported("loop locals used after a dynamic loop", frame.where(exit.offset))
+    return temporary
 
 
 def series(

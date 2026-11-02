@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from datafusion import Expr, functions, lit
+import pyarrow as pa
+from datafusion import Expr, ScalarUDF, functions, lit, udf
 
 from udfx.backends.datafusion.conversions import float_int
 from udfx.backends.datafusion.numbers import (
@@ -28,6 +29,7 @@ from udfx.semantics.numbers import (
     round_overflow_safe,
     round_scaled,
 )
+from udfx.semantics.scalars import numpy_values
 from udfx.types import Kind
 
 
@@ -103,6 +105,13 @@ def round_overflows(value: Expr, digits: Expr | int) -> Lowered[Expr]:
     return Lowered(lit(False), round_overflow_safe(ROUND, value, digits))
 
 
+def numpy_udf(name: str) -> ScalarUDF:
+    def run(values: pa.Array) -> pa.Array:
+        return pa.array(numpy_values(name, values.to_numpy(zero_copy_only=False)), pa.float64())
+
+    return udf(run, [pa.float64()], pa.float64(), "immutable", f"numpy {name}")
+
+
 register_math(
     RULES,
     replace(ROUND, round=half_even),
@@ -111,6 +120,7 @@ register_math(
     ceil=functions.ceil,
     is_nan=functions.isnan,
     round_digits=round_digits,
+    numpy_values=lambda name, value: numpy_udf(name)(value),
 )
 
 

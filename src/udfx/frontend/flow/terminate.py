@@ -7,6 +7,8 @@ from udfx.frontend.core.evaluation import Raise, Return
 from udfx.frontend.core.exceptions import exception_kind
 from udfx.frontend.core.expressions import node_of, returned
 from udfx.frontend.core.logic import conjunction, negate
+from udfx.frontend.core.tracing import AGGREGATES, SERIES
+from udfx.frontend.core.values import Series
 from udfx.frontend.decode import graph
 from udfx.frontend.flow.frame import Flow, Frame
 from udfx.frontend.flow.machine import Step, divert, exits, follow
@@ -32,7 +34,12 @@ def branch(frame: Frame, flow: Flow, exit: graph.Branch) -> list[Step]:
 @exits(graph.Return)
 def return_(frame: Frame, flow: Flow, exit: graph.Return) -> list[Step]:
     item = flow.values[exit.source]
-    return [Return(flow.bindings.path, returned(item, frame.where(exit.offset)))]
+    where = frame.where(exit.offset)
+    if SERIES.get() is not None and AGGREGATES.get() is None and frame.caller is None:
+        if not isinstance(item, Series):
+            raise Unsupported("series UDFs must return a pandas.Series", where)
+        return [Return(flow.bindings.path, item.node)]
+    return [Return(flow.bindings.path, returned(item, where))]
 
 
 @exits(graph.Fail)

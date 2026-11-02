@@ -73,6 +73,25 @@ def substitute(node: Node, replacements: dict[int, Node]) -> Node:
     return visit(node)
 
 
+def parent_names(roots: Sequence[Node]) -> dict[Node, frozenset[str]]:
+    found: dict[Node, frozenset[str]] = {}
+    seen: set[int] = set()
+    pending = list(roots)
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        name = node.op.name if isinstance(node, Call) else type(node).__name__
+        for child in children(node):
+            pending.append(child)
+            try:
+                found[child] = found.get(child, frozenset()) | {name}
+            except TypeError:
+                continue
+    return found
+
+
 def unique_size(roots: Sequence[Node]) -> int:
     seen: set[int] = set()
     pending = list(roots)

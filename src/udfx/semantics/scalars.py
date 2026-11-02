@@ -38,15 +38,28 @@ def missing_expression(
     return is_null(value) | is_nan(value)
 
 
-def numpy_scalar(name: str, *arguments: object) -> object:
+def numpy_values(name: str, *arguments: Any) -> Any:
     numpy = sys.modules["numpy"]
     with numpy.errstate(all="ignore"):
-        value = getattr(numpy, name)(*arguments)
-    return python_scalar(value)
+        return getattr(numpy, name)(*arguments)
+
+
+def python_power(base: Any, exponent: Any) -> float | None:
+    try:
+        found = base**exponent
+    except (OverflowError, ZeroDivisionError, TypeError):
+        return None
+    return found if isinstance(found, float) else math.nan
+
+
+def numpy_scalar(name: str, *arguments: object) -> object:
+    return python_scalar(numpy_values(name, *arguments))
 
 
 def python_scalar(value: object) -> object:
     kind = type(value)
-    return (
-        bool(value) if kind.__module__ == "numpy" and kind.__name__ in ("bool", "bool_") else value
-    )
+    if kind.__module__ != "numpy":
+        return value
+    if kind.__name__ in ("bool", "bool_"):
+        return bool(value)
+    return int(value) if kind.__name__.startswith(("int", "uint")) else value  # pyright: ignore[reportArgumentType]

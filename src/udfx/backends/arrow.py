@@ -48,6 +48,17 @@ def make_gather(columns: Sequence[pa.Array]) -> Gather:
     return gather
 
 
+def pending_values(
+    backend: Backend[Any], program: Program, pending: Sequence[int], columns: Sequence[pa.Array]
+) -> Any:
+    if program.series is None:
+        return backend.evaluate_pending_rows(program, pending, make_gather(columns))
+    selected = (
+        columns if len(pending) == len(columns[0]) else [column.take(pending) for column in columns]
+    )
+    return backend.run_fallback(lambda: program.batch([column.to_pandas() for column in selected]))
+
+
 def fallback(
     backend: Backend[Any],
     program: Program,
@@ -68,7 +79,7 @@ def fallback(
         if missing is None
         else cast("list[int]", compute.indices_nonzero(missing).to_pylist())
     )
-    values = backend.evaluate_pending_rows(program, pending, make_gather(columns))
+    values = pending_values(backend, program, pending, columns)
     replacements = pa.array(values, type=native.type)
     if missing is None:
         return replacements

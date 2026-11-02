@@ -22,13 +22,16 @@ from udfx.backends.spark.bindings import bind, binding_scope, reading
 from udfx.backends.spark.dtypes import dtype
 from udfx.backends.spark.fallback import EXACT, NATIVE, finish, packet
 from udfx.backends.spark.numbers import WIDE_INTEGERS
-from udfx.backends.spark.rules import RULES
+from udfx.backends.spark.rules import PYTHON_UDFS, RULES
 from udfx.backends.spark.runtime import scope as runtime_scope
 from udfx.errors import Unsupported
 from udfx.graphs import free
 from udfx.ir import Col, Comprehension, Lit, Node
 from udfx.program import Program
 from udfx.types import Kind, Type
+
+LAMBDA_COST = 100_000
+FALLBACK_COST = 100 * LAMBDA_COST
 
 
 def fallback_patch(program: Program) -> Callable[[pa.Array], pa.Array]:
@@ -47,11 +50,29 @@ class SparkBackend(Backend[Column]):
     rules: ClassVar[RuleSet[Column]] = RULES
     indexes: ClassVar[bool] = True
     graphs: ClassVar[bool] = True
+    choose_graphs: ClassVar[bool] = True
+    hoisted: ClassVar[frozenset[Kind]] = frozenset({Kind.INT, Kind.LIST})
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
 
+    def expression_cost(self, expr: Column) -> int:
+        text = str(expr)
+        return len(text) + LAMBDA_COST * text.count(" -> ") + FALLBACK_COST * text.count("patch(")
+
     def lower_program(self, program: Program) -> Lowered[Column]:
+        used: dict[str, Column] = {}
+        token = PYTHON_UDFS.set(used)
+        try:
+            lowered = self.lower_bound(program)
+        finally:
+            PYTHON_UDFS.reset(token)
+        text = f"{lowered.expr} {lowered.exact} {lowered.overflow}"
+        if used and (lowered.prepare is not None or " -> " in text):
+            return self.lower_bound(program)
+        return lowered
+
+    def lower_bound(self, program: Program) -> Lowered[Column]:
         with binding_scope() as scope, lowering_context(binds=True) as context:
             lowered = lower_program(self, program, ResultLowering(self, program))
         if (
@@ -198,7 +219,11 @@ class SparkBackend(Backend[Column]):
         )
 
     def evaluate(
-        self, exprs: Sequence[Column], schema: Mapping[str, Type], rows: Sequence[Row]
+        self,
+        exprs: Sequence[Column],
+        schema: Mapping[str, Type],
+        rows: Sequence[Row],
+        reduced: bool = False,
     ) -> list[list[object]]:
         self.check_names(schema)
         struct = StructType([StructField(name, dtype(type)) for name, type in schema.items()])

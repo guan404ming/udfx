@@ -7,6 +7,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of, nullable_faults
 from udfx.frontend.core.json import array, dynamic, iterable_faults
 from udfx.frontend.core.logic import fold
+from udfx.frontend.core.series import marker
 from udfx.frontend.core.values import (
     Generator,
     Item,
@@ -14,6 +15,7 @@ from udfx.frontend.core.values import (
     Json,
     Method,
     Opaque,
+    Series,
     Set,
     Tuple,
     Value,
@@ -21,6 +23,7 @@ from udfx.frontend.core.values import (
     require_bounded,
 )
 from udfx.frontend.operations.builtins import iterable_node
+from udfx.frontend.operations.ranges import range_iterator
 from udfx.frontend.operations.sets import frozen_set, set_method
 from udfx.frontend.resolve.constants import (
     constant,
@@ -41,6 +44,8 @@ def iterator_of(item: Item) -> tuple[Iterator, list[Fault]]:
         return item, []
     if isinstance(item, Generator):
         return Iterator((), source=item.node), []
+    if isinstance(item, Series):
+        return Iterator((), source=marker(item)), []
     if isinstance(item, Tuple):
         return bounded_iterator(item.items), []
     if isinstance(item, Value) and isinstance(item.node, ListValue):
@@ -98,16 +103,6 @@ def indexed(iterator: Iterator, name: str) -> tuple[Node, Element, Item]:
     element = Element(name, source.type.item)
     value = apply("json.encode", element) if decoded else element
     return source, element, Json(value, str if decoded else None) if iterator.json else Value(value)
-
-
-def constant_range(arguments: Sequence[Item]) -> Opaque:
-    values = [constant_value(argument) for argument in arguments]
-    if not 1 <= len(values) <= 3 or not all(isinstance(value, int) for value in values):
-        raise Unsupported("range requires one to three integer literals")
-    sequence = range(*(value for value in values if isinstance(value, int)))
-    if sequence:
-        require_bounded((sequence[-1] - sequence[0]) // sequence.step + 1)
-    return Opaque(sequence)
 
 
 def enumerate_start(arguments: Sequence[Item]) -> tuple[Node, list[Fault]]:
@@ -197,23 +192,6 @@ def construct(
         source, faults = invoke("list", [node_of(item)], TypeError)
         return Value(source, tuple), faults
     return None
-
-
-def range_iterator(arguments: Sequence[Item]) -> tuple[Item, list[Fault]]:
-    if all(
-        isinstance(argument, Value) and isinstance(argument.node, Lit) for argument in arguments
-    ):
-        return constant_range(arguments), []
-    if not 1 <= len(arguments) <= 3:
-        raise Unsupported("range requires one to three arguments")
-    nodes = [node_of(argument) for argument in arguments]
-    if len(nodes) > 1:
-        if not isinstance(nodes[0], Lit) or (len(nodes) == 3 and not isinstance(nodes[2], Lit)):
-            raise Unsupported("range start and step require integer literals")
-        if len(nodes) == 2:
-            nodes.append(lit(1))
-    source, faults = invoke("range", nodes, TypeError)
-    return Iterator((), source=source, requires_native=True), faults
 
 
 def call_iterable(

@@ -44,6 +44,7 @@ uv run python -m bench --suites qure
 Runs scalar functions from `python/` and `froid/`, excluding full queries.
 Import fixes produce `adapted` results.
 QURE is opt-in. Start with small inputs because preparation materializes joins.
+Add `--cases` to build only the joins those cases read.
 
 Keep cached sources, inputs, and raw reports private.
 Export with `python -m bench.report RESULT.json --public`.

@@ -193,6 +193,16 @@ def lowercase_contains(node: Call) -> Node | None:
     return apply("re.contains", source.arguments[0], lit(pattern), lit(0))
 
 
+def split_count(node: Call) -> Node | None:
+    source = node.arguments[0]
+    if not isinstance(source, Call) or source.op.name != ".split" or len(source.arguments) != 2:
+        return None
+    text, separator = source.arguments
+    if not (isinstance(separator, Lit) and isinstance(separator.value, str) and separator.value):
+        return None
+    return apply("__add__", apply(".count", text, separator), lit(1))
+
+
 def combined_search(node: Call) -> Node | None:
     left, right = node.arguments
     if not all(

@@ -6,7 +6,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.lowering_context import bindings_enabled
-from udfx.backends.program_lowering import lower_program
+from udfx.backends.program_lowering import choosing_graph, lower_program
 from udfx.backends.spark import backend as spark
 from udfx.backends.spark import json as spark_json
 from udfx.frontend import trace
@@ -91,7 +91,8 @@ def test_guarded_bindings_keep_only_numeric_reuse(
 
     monkeypatch.setattr(spark, "lower_program", lower)
     schema = {"text": STR}
-    backend.build(trace(function, schema))
+    with choosing_graph(False):
+        backend.build(trace(function, schema))
     assert passes == ([True, False] if unbound else [True])
     rows = [(value,) for value in ("", "A", "a", "A-b", "A-b:c", "ß-a", "ɤ:a-b", "中-a:b")]
     assert check_function(function, schema, backend, rows) == []

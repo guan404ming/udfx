@@ -24,6 +24,13 @@ ARITHMETIC: dict[str, Binary] = {
     "__mul__": operator.mul,
 }
 
+WRAPPING: dict[str, Binary] = {
+    "numpy.add": operator.add,
+    "numpy.subtract": operator.sub,
+    "numpy.multiply": operator.mul,
+}
+INT64_SPAN = 2**64
+
 COMPARISONS: dict[str, Binary] = {
     "__lt__": operator.lt,
     "__le__": operator.le,
@@ -201,3 +208,8 @@ def int_divmod(
         remainder,
         ~division_overflows(literal, left, right),
     )
+
+
+def wrap_int64(literal: Callable[[int], Any], low_bits: Callable[[Any], Any], wide: Any) -> Any:
+    half = literal(-INT64_MIN)
+    return low_bits(wide + half) - half

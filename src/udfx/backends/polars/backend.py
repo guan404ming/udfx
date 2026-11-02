@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import ClassVar
 
 import polars as pl
@@ -35,9 +35,9 @@ class PolarsBackend(Backend[pl.Expr]):
                 raise Unsupported("Polars cannot capture outer list elements")
         return super().lower(node, elements)
 
-    def run_fallback_rows(self, program: Program, rows: Iterable[Sequence[object]]) -> list[object]:
+    def run_fallback[T](self, run: Callable[[], T]) -> T:
         try:
-            return program.run(rows)
+            return run()
         except Exception as error:
             RAISED.error = error
             raise
@@ -126,7 +126,18 @@ class PolarsBackend(Backend[pl.Expr]):
                 item if len(item) == length else item.new_from_index(0, length)
                 for item in (outputs.struct.field("0"), outputs.struct.field("1"))
             )
-            pending = (~flags.fill_null(False)).arg_true().to_list()
+            missing = (~flags.fill_null(False)).arg_true()
+            if program.series is not None and len(missing):
+                everything = len(missing) == length
+                columns = series if everything else [column.gather(missing) for column in series]
+                found = pl.Series(
+                    self.run_fallback(
+                        lambda: program.batch([column.to_pandas() for column in columns])
+                    ),
+                    dtype=result,
+                )
+                return found if everything else values.scatter(missing, found)
+            pending = missing.to_list()
 
             def gather(rows: Sequence[int]) -> list[list[object]]:
                 indices = rows if isinstance(rows, list) else list(rows)
@@ -150,7 +161,11 @@ class PolarsBackend(Backend[pl.Expr]):
         return self.fallback_record(self.record([exact, native]), program)
 
     def evaluate(
-        self, exprs: Sequence[pl.Expr], schema: Mapping[str, Type], rows: Sequence[Row]
+        self,
+        exprs: Sequence[pl.Expr],
+        schema: Mapping[str, Type],
+        rows: Sequence[Row],
+        reduced: bool = False,
     ) -> list[list[object]]:
         self.check_names(schema)
         columns = transpose_rows(rows, len(schema))

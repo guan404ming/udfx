@@ -18,7 +18,7 @@ def test_exact_batch_keeps_native_array(values: list[int | None]) -> None:
     native = pa.array(values, pa.int64())
     flags = pa.array([True] * len(values), pa.bool_())
     with (
-        patch.object(backend, "run_fallback_rows") as run,
+        patch.object(backend, "run_fallback") as run,
         patch.object(compute, "indices_nonzero", side_effect=AssertionError("row indices")),
     ):
         assert arrow.fallback(backend, program, flags, native, [native]) is native

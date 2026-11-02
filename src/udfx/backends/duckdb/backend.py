@@ -3,8 +3,6 @@ from __future__ import annotations
 import hashlib
 import itertools
 import string
-import threading
-import weakref
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from typing import ClassVar, cast
@@ -17,6 +15,7 @@ from duckdb.func import ARROW, SPECIAL
 from udfx import __version__
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
+from udfx.backends.duckdb.connections import CONNECTION, connection_number
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
@@ -33,16 +32,8 @@ NATIVE = f"{RESERVED}native"
 ROW = f"{RESERVED}row"
 FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
-CONNECTIONS = weakref.WeakKeyDictionary[duckdb.DuckDBPyConnection, int]()
-NUMBERS = itertools.count()
 ELEMENTS = itertools.count()
-LOCK = threading.Lock()
 DEFAULT_FAULTS = NativeFaults()
-
-
-def connection_number(connection: duckdb.DuckDBPyConnection) -> int:
-    with LOCK:
-        return CONNECTIONS.setdefault(connection, next(NUMBERS))
 
 
 def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> str:
@@ -54,6 +45,7 @@ def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> st
         code.co_consts,
         code.co_names,
         schema,
+        program.series is not None,
         digest(program.value),
         digest(program.fault),
     )
@@ -72,7 +64,11 @@ class DuckDBBackend(Backend[Expression]):
         self._connection = connection
 
     def lower_program(self, program: Program) -> Lowered[Expression]:
-        return lower_program(self, program, ResultLowering(self, program))
+        token = CONNECTION.set(self.connection)
+        try:
+            return lower_program(self, program, ResultLowering(self, program))
+        finally:
+            CONNECTION.reset(token)
 
     def compose(self, value: Lowered[Expression], program: Program) -> Expression:
         value = fallback_result(
@@ -215,7 +211,11 @@ class DuckDBBackend(Backend[Expression]):
         return when(exact, native, function(name, packed))
 
     def evaluate(
-        self, exprs: Sequence[Expression], schema: Mapping[str, Type], rows: Sequence[Row]
+        self,
+        exprs: Sequence[Expression],
+        schema: Mapping[str, Type],
+        rows: Sequence[Row],
+        reduced: bool = False,
     ) -> list[list[object]]:
         self.check_names(schema)
         columns = transpose_rows(rows, len(schema))
@@ -234,5 +234,6 @@ class DuckDBBackend(Backend[Expression]):
         )
         names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
-        outputs = self.execute(lambda: typed.select(*aliased).fetchall())
+        relation = typed.aggregate(aliased) if reduced else typed.select(*aliased)
+        outputs = self.execute(relation.fetchall)
         return [list(values) for values in zip(*outputs, strict=True)] or [[] for _ in exprs]

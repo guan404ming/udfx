@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from udfx.backends.polars.rules import RULES
+from udfx.backends.polars.rules import RULES, broadcast
 from udfx.backends.registration import register_missing
 from udfx.types import Kind
 
@@ -35,3 +35,15 @@ def bool_truth(value: pl.Expr) -> pl.Expr:
 @RULES("bool", Kind.LIST)
 def list_truth(value: pl.Expr) -> pl.Expr:
     return value.is_not_null() & (value.list.len() > 0)
+
+
+for _method in ("max", "min"):
+    for _kind in (Kind.INT, Kind.FLOAT):
+        RULES(f"aggregate {_method}", _kind, Kind.BOOL)(
+            lambda value, present, method=_method: getattr(
+                broadcast(value).filter(broadcast(present)), method
+            )()
+        )
+RULES("aggregate len", Kind.BOOL)(
+    lambda present: broadcast(present).fill_null(False).sum().cast(pl.Int64)
+)

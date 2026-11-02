@@ -158,9 +158,7 @@ class DataFusionBackend(Backend[Expr]):
         def run(packed: pa.Array) -> pa.Array:
             batch = cast(pa.StructArray, packed)
             columns = [batch.field(name) for name in program.schema]
-            values = self.evaluate_pending_rows(
-                program, range(len(batch)), arrow.make_gather(columns)
-            )
+            values = arrow.pending_values(self, program, range(len(batch)), columns)
             return pa.array(values, type=result)
 
         slow = udf(
@@ -176,7 +174,11 @@ class DataFusionBackend(Backend[Expr]):
         return functions.when(exact, native).otherwise(slow(packed.cast(fields)))
 
     def evaluate(
-        self, exprs: Sequence[Expr], schema: Mapping[str, Type], rows: Sequence[Row]
+        self,
+        exprs: Sequence[Expr],
+        schema: Mapping[str, Type],
+        rows: Sequence[Row],
+        reduced: bool = False,
     ) -> list[list[object]]:
         self.check_names(schema)
         columns = transpose_rows(rows, len(schema))
@@ -192,7 +194,10 @@ class DataFusionBackend(Backend[Expr]):
         names = output_names(len(exprs))
         aliased = [expr.alias(name) for expr, name in zip(exprs, names, strict=True)]
         frame = self.context.from_arrow(table)
-        outputs = self.execute(
-            lambda: frame.select(column(ROW), *aliased).sort(column(ROW)).to_arrow_table()
+        selected = (
+            frame.aggregate([], aliased)
+            if reduced
+            else frame.select(column(ROW), *aliased).sort(column(ROW))
         )
+        outputs = self.execute(selected.to_arrow_table)
         return [cast("list[object]", outputs.column(name).to_pylist()) for name in names]

@@ -2,7 +2,7 @@
 
 ## Usage
 
-`udfx.compile(function, schema, backend="polars", *, result=None)` returns a `Translation`.
+`udfx.compile(function, schema, backend="polars", *, result=None, series=False)` returns a `Translation`.
 Pass a backend name or instance. See [Backends](backends.md).
 Define the schema with [udfx.types](types.md).
 
@@ -20,6 +20,32 @@ def prefix(text: str) -> str:
 translation = udfx.compile(prefix, {"text": STR}, backend="polars")
 assert translation.ok, translation.unsupported
 ```
+
+## pandas scalar UDFs
+
+Pass `series=True` to compile a pandas scalar UDF. The function takes one `pandas.Series` per
+schema column and returns a `pandas.Series` of the same length. Columns must be non-null `STR`,
+`INT`, `FLOAT`, or `BOOL`.
+
+```python
+import numpy as np
+import pandas as pd
+import udfx
+from udfx.types import FLOAT
+
+
+def sigmoid(price: pd.Series) -> pd.Series:
+    return pd.Series([1 / (1 + np.exp(-value)) for value in price])
+
+
+translation = udfx.compile(sigmoid, {"price": FLOAT}, series=True)
+```
+
+udfx turns loops over the series and vectorized series operations into one native value per row.
+A function whose rows depend on other rows, such as `len(values)`, is unsupported.
+Rows that the engine cannot match exactly run the original function on those rows.
+
+For pandas aggregate UDFs, see [udfx.aggregate](aggregate.md).
 
 ## JSON results
 

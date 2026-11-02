@@ -10,6 +10,7 @@ from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.values import Item, Opaque, Set, Tuple, Value
 from udfx.frontend.operations.datetimes import datetime_binary, datetime_comparison
 from udfx.frontend.operations.formatting import format_percent
+from udfx.frontend.operations.series import series_binary, series_comparison, series_negation
 from udfx.frontend.operations.sets import set_operator
 from udfx.frontend.resolve.constants import (
     annotation,
@@ -53,6 +54,9 @@ def binary_operation(symbol: str, left: Item, right: Item, where: str) -> Evalua
     ):
         container = "set" if isinstance(left, Set) else "list"
         raise Unsupported(f"in-place {container} mutation", where)
+    vectorized = series_binary(base, left, right)
+    if vectorized is not None:
+        return vectorized
     special = set_operator(base, left, right) or datetime_binary(base, left, right)
     if special is not None:
         item, faults = special
@@ -91,6 +95,9 @@ def string_format(left: Value, right: Item, where: str) -> Evaluation:
 
 
 def comparison(symbol: str, left: Item, right: Item, where: str) -> Evaluation:
+    vectorized = series_comparison(symbol, left, right)
+    if vectorized is not None:
+        return vectorized
     name = COMPARE_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"comparison {symbol}", where)
@@ -115,6 +122,9 @@ def logical_not(item: Item) -> Evaluation:
 
 
 def negation(item: Item) -> Evaluation:
+    vectorized = series_negation(item)
+    if vectorized is not None:
+        return vectorized
     node, faults = invoke("__neg__", [node_of(item)], TypeError)
     return single(Value(node), faults)
 

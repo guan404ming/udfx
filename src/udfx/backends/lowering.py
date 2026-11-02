@@ -43,7 +43,11 @@ def lower_if[E](
     predicate = fold_predicate(node.condition, backend.rules.rewrite_call)
     if predicate in (TRUE, FALSE):
         return lower(node.then if predicate == TRUE else node.orelse, elements)
-    repeated = repeated_condition(node, elements) if bindings_enabled(backend.binds) else None
+    repeated = (
+        repeated_condition(node, elements, backend.hoisted)
+        if bindings_enabled(backend.binds)
+        else None
+    )
     if repeated is not None and exact_free(backend, repeated, elements):
         return hoist(backend, node, elements, repeated, lower_result)
     selected = lower_cases(backend, node, elements)

@@ -34,7 +34,7 @@ def test_schema_values_must_be_types() -> None:
 
 def test_public_surface() -> None:
     assert sorted(udfx.__all__) == sorted(
-        ["Translation", "Unsupported", "__version__", "compile", "explain", "types"]
+        ["Translation", "Unsupported", "__version__", "aggregate", "compile", "explain", "types"]
     )
     assert udfx.__version__ == version("udfx")
     assert udfx.types.STR == STR

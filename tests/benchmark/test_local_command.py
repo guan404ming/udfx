@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from bench.command import main, parse_arguments
-from workloads import udfbench
+from workloads import qure, udfbench
 from workloads.catalog import DEFAULT_SUITES, load
 from workloads.prepare import main as prepare
 
@@ -81,3 +81,21 @@ def test_failed_verification_never_loads_external_definitions(
     results = json.loads(output.read_text())["results"]
     assert len(results) == 2
     assert all(result["status"] == "error" for result in results)
+
+
+def test_prepare_cases_select_only_their_tables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    selections = []
+    monkeypatch.setattr("workloads.prepare.resolve_sources", lambda *arguments: ([], []))
+    monkeypatch.setattr("workloads.prepare.save_tables", lambda *arguments, **keywords: None)
+    monkeypatch.setattr(qure, "prepare", lambda paths, selected: selections.append(selected) or {})
+    sources = []
+    for name in ("code", "tpch"):
+        (tmp_path / name).mkdir()
+        sources += ["--source", f"qure.{name}={tmp_path / name}"]
+    prepare(["--suites", "qure", "--root", str(tmp_path), "--cases", "qure/froid/q6", *sources])
+    assert selections == [{"lineitem_partsupp"}]
+    with pytest.raises(SystemExit) as error:
+        prepare(["--suites", "udfbench", "--cases", "qure/froid/q6"])
+    assert error.value.code == 2

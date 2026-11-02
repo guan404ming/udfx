@@ -5,11 +5,15 @@ from udfx.frontend.core.evaluation import Evaluation, always, single
 from udfx.frontend.core.expressions import invoke, node_of
 from udfx.frontend.core.logic import fold
 from udfx.frontend.core.values import Item, Json, Opaque, Row, Slice, Tuple, Value
+from udfx.frontend.operations.series import series_filter
 from udfx.frontend.resolve.constants import GENERICS, annotation, constant, constant_value, lookup
 from udfx.ir import Lit
 
 
 def subscript(container: Item, index: Item, where: str) -> Evaluation:
+    filtered = series_filter(container, index)
+    if filtered is not None:
+        return filtered
     if isinstance(container, Json):
         node, faults = invoke("json.item", [node_of(container), node_of(index)], TypeError)
         return single(Json(node), faults)
