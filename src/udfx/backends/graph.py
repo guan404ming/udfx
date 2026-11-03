@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from udfx.backends.rules import Lowered, Scope
-from udfx.graphs import free, substitute
+from udfx.graphs import free_finder, substitute
 from udfx.ir import FALSE, Col, Comprehension, Element, Lit, Node, children
 from udfx.semantics.bindings import bound_sources
 
@@ -14,16 +14,18 @@ if TYPE_CHECKING:
     from udfx.backends.base import Backend
 
 
-def dependencies(node: Node) -> tuple[Node, ...]:
+def dependencies(node: Node, find: Callable[[Node], frozenset[Element]]) -> tuple[Node, ...]:
     if not isinstance(node, Comprehension):
         return children(node)
-    outer = free(node)
+    outer = find(node)
     found: dict[int, Node] = {}
+    seen: set[int] = set()
 
     def visit(part: Node) -> None:
-        if id(part) in found or isinstance(part, Element | Lit):
+        if id(part) in seen or isinstance(part, Element | Lit):
             return
-        if free(part) <= outer:
+        seen.add(id(part))
+        if find(part) <= outer:
             found[id(part)] = part
             return
         for child in children(part):
@@ -38,6 +40,8 @@ def layers(roots: Sequence[Node], incoming: Scope[object]) -> tuple[list[Node], 
     order: list[Node] = []
     seen: set[int] = set()
     counts: Counter[int] = Counter()
+    parts: dict[int, tuple[Node, ...]] = {}
+    find = free_finder()
 
     bound = {id(node) for node in incoming}
 
@@ -46,7 +50,8 @@ def layers(roots: Sequence[Node], incoming: Scope[object]) -> tuple[list[Node], 
         if id(node) in seen or id(node) in bound:
             return
         seen.add(id(node))
-        for child in dependencies(node):
+        parts[id(node)] = dependencies(node, find)
+        for child in parts[id(node)]:
             visit(child)
         order.append(node)
 
@@ -55,7 +60,7 @@ def layers(roots: Sequence[Node], incoming: Scope[object]) -> tuple[list[Node], 
     groups: dict[int, list[Node]] = {}
     depths: dict[int, int] = {}
     for node in order:
-        level = max((depths.get(id(part), 0) for part in dependencies(node)), default=0)
+        level = max((depths.get(id(part), 0) for part in parts[id(node)]), default=0)
         if counts[id(node)] > 1 and not isinstance(node, Col | Element | Lit):
             groups.setdefault(level, []).append(node)
             level += 1

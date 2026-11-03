@@ -69,6 +69,7 @@ def test_polars_broadcast_skips_length_preserving_expressions(height: int) -> No
     scalar = column.first().fill_null(0)
     assert scalar.meta.root_names() == ["value"]
     assert frame.select(broadcast(scalar)).to_series().to_list() == [1] * height
+    assert str(broadcast(scalar)).count("first") == 1
 
 
 @pytest.mark.parametrize("height", [0, 1, 3])

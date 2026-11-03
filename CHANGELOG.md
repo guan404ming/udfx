@@ -28,6 +28,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - Cache DuckDB fallback registrations per connection object; use a separate connection or cursor per thread.
 - Reduce operand repetition in int64 clamps, integer division, slicing, rounding, and min/max; document the remaining nested-chain growth limits.
+- Analyze shared comprehension graphs in linear time and stop copying guarded comprehension bodies and Polars broadcasts.
 - Round large half-integers to even on DuckDB.
 - Rebuild exceptions from their messages in raw Polars queries for builtin types and single-argument constructors; restore the exact exception object through `backend.execute(run)`.
 - Preserve rebuilt fallback error messages so `backend.execute(run)` can restore builtin exception types that accept a message.

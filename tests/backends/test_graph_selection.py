@@ -2,16 +2,16 @@ from typing import Any
 
 import pytest
 
-from udfx.backends import graph_cost, program_lowering
+from udfx.backends import graph, graph_cost, program_lowering
 from udfx.backends.duckdb import DuckDBBackend
 from udfx.backends.hoisting import worth_binding
 from udfx.backends.lowering_context import lowering_context
 from udfx.backends.rules import Lowered
 from udfx.errors import Unsupported
-from udfx.ir import FALSE, Col, Node, children
+from udfx.ir import FALSE, TRUE, Col, Comprehension, Element, Node, children
 from udfx.ops import apply
 from udfx.program import Program
-from udfx.types import STR
+from udfx.types import STR, list_of
 
 
 def repeated(depth: int) -> Node:
@@ -47,6 +47,26 @@ def test_operation_count_visits_shared_nodes_once(monkeypatch: pytest.MonkeyPatc
     assert graph_cost.operation_count(value) == 2**40 - 1
     assert visits == 41
     assert worth_binding(value, 2)
+
+
+def test_comprehension_dependencies_visit_shared_nodes_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    element = Element("item", STR)
+    value: Node = element
+    for _ in range(20):
+        value = apply("__add__", value, value)
+    comprehension = Comprehension(Col("items", list_of(STR)), element, value, TRUE, FALSE)
+    visits = 0
+
+    def counted(node: Node) -> tuple[Node, ...]:
+        nonlocal visits
+        visits += 1
+        return children(node)
+
+    monkeypatch.setattr(graph, "children", counted)
+    graph.layers([comprehension], {})
+    assert visits <= 22
 
 
 @pytest.mark.parametrize("depth, expected", [(10, False), (11, False), (12, True)])

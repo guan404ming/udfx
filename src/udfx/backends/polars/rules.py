@@ -19,7 +19,7 @@ def broadcast(value: pl.Expr) -> pl.Expr:
     except (pl.exceptions.ColumnNotFoundError, pl.exceptions.InvalidOperationError):
         if value.meta.root_names():
             return value
-    return when(pl.int_range(pl.len()) % 2 == 0, value, value)
+    return pl.struct(value.alias("0"), pl.int_range(pl.len()).alias("1")).struct.field("0")
 
 
 def evaluate_list(source: pl.Expr, body: pl.Expr) -> pl.Expr:

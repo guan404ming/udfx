@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from udfx.backends.graph import lower_block
@@ -44,7 +45,9 @@ def lower_graph_comprehension[E](
                 finish,
             )
         guarded = output.exact is not None
-        return backend.record([output.expr, backend.exact_expression(output)])
+        return output.consume(
+            lambda part: backend.record([part.expr, backend.exact_expression(part)])
+        )
 
     records = backend.list_transform(source.expr, body)
 
@@ -76,11 +79,21 @@ def lower_graph_comprehension[E](
         )
         return backend.record([values, exact, backend.negate(safe)])
 
+    def fields(value: E) -> Lowered[E]:
+        return Lowered(
+            backend.field(value, 0),
+            backend.conjunction(
+                backend.exact(source), backend.field(value, 1) if guarded else None
+            ),
+            backend.field(value, 2) if node.fault != FALSE else None,
+        )
+
     value = backend.bind(records, result)
-    return Lowered(
-        backend.field(value, 0),
-        backend.conjunction(backend.exact(source), backend.field(value, 1) if guarded else None),
-        backend.field(value, 2) if node.fault != FALSE else None,
+    lowered = fields(value)
+    if lowered.exact is None and lowered.overflow is None:
+        return lowered
+    return replace(
+        lowered, prepare=lambda finish: backend.bind(value, lambda bound: finish(fields(bound)))
     )
 
 

@@ -104,6 +104,10 @@ def unique_size(roots: Sequence[Node]) -> int:
 
 
 def free(node: Node) -> frozenset[Element]:
+    return free_finder()(node)
+
+
+def free_finder() -> Callable[[Node], frozenset[Element]]:
     seen: dict[int, frozenset[Element]] = {}
 
     def visit(part: Node) -> frozenset[Element]:
@@ -118,4 +122,4 @@ def free(node: Node) -> frozenset[Element]:
             seen[id(part)] = result
         return seen[id(part)]
 
-    return visit(node)
+    return visit
