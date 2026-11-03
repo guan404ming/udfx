@@ -41,6 +41,8 @@ No additional download or compilation is required.
 and Python fallback. If Apache Spark rejects runtime registration, udfx reports a warning
 and uses its existing expression implementation.
 
+Functions with very large expressions, or with lambdas that need Python fallback, run in Python.
+
 Runtime UDFs execute in Apache Spark's JVM. They do not imply native execution in Apache DataFusion Comet.
 
 See [Apache DataFusion Comet](../comet.md) for native execution with Apache DataFusion Comet.

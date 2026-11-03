@@ -22,6 +22,7 @@ Unbounded loops, mutation, I/O, timezone-aware datetimes, and unsupported calls 
 compilation. Read `translation.unsupported` for the reason.
 
 Large helper pipelines can compile as shared expression graphs on Polars, DuckDB, and Apache Spark.
+Apache Spark may run them in Python.
 Apache DataFusion needs engine fixes for these graphs. See
 [Apache DataFusion > Large functions](backends/datafusion.md#large-functions).
 Successful compilation does not guarantee a speedup.

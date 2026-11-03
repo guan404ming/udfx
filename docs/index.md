@@ -9,10 +9,10 @@ without any manual rewrites.
 
 **Overall speedups on all four engines, in both execution modes.**
 
-Geometric mean speedups across 24 selected UDFBench UDFs, including Python fallback.
+Geometric mean speedups across 25 selected UDFBench UDFs, including Python fallback.
 Each engine's Python UDF is the 1x baseline.
 
-![UDFBench speedups, memory / query: Polars 2.12× / 1.68×. DuckDB 1.42× / 1.18×. Apache DataFusion 1.22× / 1.18×. Apache Spark 1.31× / 1.06×. Python UDF baseline is 1×.](assets/udfbench.svg)
+![UDFBench speedups, memory / query: Polars 2.21× / 1.78×. DuckDB 1.49× / 1.24×. Apache DataFusion 1.23× / 1.18×. Apache Spark 1.30× / 1.05×. Python UDF baseline is 1×.](assets/udfbench.svg)
 
 Geometric mean speedups across 36 selected QURE functions, including Python fallback.
 

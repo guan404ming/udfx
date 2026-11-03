@@ -22,8 +22,8 @@ UDFBench source stays in the local cache with its upstream GPL provenance. Its R
 lists 24 scalar UDFs. The `Spark` directory contains 25 Python files, including `jsonparse`.
 The inventory keeps all 25. `addnoise` uses distribution validation because it is random.
 Unsupported deterministic functions remain in the inventory. The current
-[Performance](index.md#performance) covers 24 functions and excludes `stem` because of
-large-plan costs. Aggregate and table UDFs are outside this scalar compiler evaluation.
+[Performance](index.md#performance) covers all 25 functions. Aggregate and table UDFs are
+outside this scalar compiler evaluation.
 
 ## Local sources
 
