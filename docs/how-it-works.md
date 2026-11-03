@@ -41,7 +41,6 @@ flowchart LR
 ```
 
 Native errors or Python fallback can raise an exception and fail the query.
-
 Use [udfx.explain](explain.md) to inspect native execution and fallback conditions.
 
 Compile your first function with [Quick Start](quickstart.md).

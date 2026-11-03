@@ -30,17 +30,28 @@ value = plan.finish(
 
 ## Execution
 
-`plan.columns` are native per-row expressions. Select them in one engine query.
-`plan.finish(columns, inputs)` runs the pandas reductions `sum`, `mean`, `var`, `std`, `max`,
-`min`, `count`, `corr`, and `len` on those columns and computes the result. If a reduction
-result would make the function raise or behave differently, `finish` calls `inputs()` and runs
-the original function on the full input columns instead.
+1. Select `plan.columns`, the native per-row expressions, in one engine query.
+2. Pass the outputs to `plan.finish(columns, inputs)`. It runs the pandas reductions and
+   computes the result.
+3. If a reduction result could make the function raise or differ, `finish` calls `inputs()` and
+   runs the original function on the full input columns.
+
+Supported reductions: `sum`, `mean`, `var`, `std`, `max`, `min`, `count`, `corr`, and `len`.
+
+### Native aggregates
 
 If every reduction is `max`, `min`, or `len`, `plan.reduced` is true and `plan.columns` are
-native aggregate expressions. Run them in one aggregate query, for example
-`relation.aggregate(columns)` in DuckDB or `frame.aggregate([], columns)` in DataFusion, and pass
-the one-row columns to `finish`. `finish` calls `inputs()` when a native result is null, NaN, or
-zero, because pandas may differ there.
+native aggregate expressions.
+
+| Engine | One aggregate query |
+| --- | --- |
+| DuckDB | `relation.aggregate(columns)` |
+| Apache DataFusion | `frame.aggregate([], columns)` |
+
+- Pass the one-row columns to `finish`.
+- `finish` calls `inputs()` when a native result is null, NaN, or zero, because pandas may differ.
+
+### Row order
 
 Floating sums depend on row order, as in pandas. Pass the columns in the order the engine
 returns them.

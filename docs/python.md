@@ -18,44 +18,49 @@ udfx supports a subset of Python. Always check `translation.ok` before using its
 
 ## Unsupported
 
-Unbounded loops, mutation, I/O, timezone-aware datetimes, and unsupported calls can reject
-compilation. Read `translation.unsupported` for the reason.
+These reject compilation. Read `translation.unsupported` for the reason.
 
-Large helper pipelines can compile as shared expression graphs on Polars, DuckDB, and Apache Spark.
-Apache Spark may run them in Python.
-Apache DataFusion needs engine fixes for these graphs. See
-[Apache DataFusion > Large functions](backends/datafusion.md#large-functions).
+- Unbounded loops, mutation, and I/O
+- Timezone-aware datetimes
+- Unsupported calls
+
+Large helper pipelines compile as shared expression graphs:
+
+| Engine | Large pipelines |
+| --- | --- |
+| Polars, DuckDB | Shared graphs |
+| Apache Spark | Shared graphs, or Python |
+| Apache DataFusion | Needs engine fixes. See [Large functions](backends/datafusion.md#large-functions) |
+
 Successful compilation does not guarantee a speedup.
 
 ## Semantics
 
 ### Results
 
-Each row uses a native result where it matches Python, or runs the original function.
-A raising row fails the query. This behavior is checked by tests, not a formal proof.
+- Each row uses the native result where it matches Python. Other rows run the original function.
+- A raising row fails the query. Tests check this behavior. It is not a formal proof.
+- `backend.execute(run)` restores Python exceptions. DuckDB and Apache Spark restore builtin
+  exception types and `JSONDecodeError` from engine error messages.
 
-JSON output supports `ensure_ascii=False`. Some backends use Python fallback when native
-encoding cannot preserve Python Unicode escapes.
+### JSON
 
-DuckDB and Apache Spark also lower JSON object lookups, array indexing, and typed scalar results
-natively. Keys can come from columns. Other engines retain the native string and string-array
-paths and use Python for dynamic objects.
+| JSON feature | DuckDB, Apache Spark | Polars, Apache DataFusion |
+| --- | --- | --- |
+| Strings and string arrays | Native | Native |
+| Object lookups, array indexing, typed scalars | Native, keys can come from columns | Python |
 
-Rows use fallback when an engine cannot preserve Python semantics. This includes duplicate
-keys, some numeric values, and unsupported JSON paths. Apache Spark currently keeps JSON documents
-with floating-point numbers on Python. Dynamic JSON returns need a result type.
-See [udfx.compile > JSON results](compile.md#json-results).
-Native coverage does not guarantee a speedup.
-
-`backend.execute(run)` restores Python exceptions. DuckDB and Apache Spark restore builtin exception
-types and `JSONDecodeError` through engine error messages.
+- `ensure_ascii=False` works. Some backends use Python when native encoding cannot keep Python
+  Unicode escapes.
+- Duplicate keys, some numeric values, and unsupported paths use Python.
+  Apache Spark keeps documents with floating-point numbers on Python.
+- Dynamic JSON returns need a result type. See [udfx.compile > JSON results](compile.md#json-results).
 
 ### Captured Inputs
 
-Declare nullable columns with `.or_none()`. udfx does not validate input data against the schema.
-Globals and closure constants are frozen at compile time for native and fallback paths.
-Supported local imports use the same snapshot, including in Apache Spark workers.
-
-Positional row access follows pandas 2.x behavior. Use named fields for portable code.
+- Declare nullable columns with `.or_none()`. udfx does not validate input data against the schema.
+- Globals, closure constants, and supported local imports are frozen at compile time.
+  Native, fallback, and Apache Spark worker paths use the same snapshot.
+- Positional row access follows pandas 2.x. Use named fields for portable code.
 
 Compile a function with [udfx.compile](compile.md) or inspect its execution paths with [udfx.explain](explain.md).

@@ -14,22 +14,23 @@ uv run python -m workloads.prepare
 uv run pytest -m public
 ```
 
-Downloads live under `.cache/workloads`. Source manifests pin URLs, checksums, selection,
-and provenance. A checksum change fails preparation. Tests never fetch data.
-`--rows` takes a prefix without repeating rows.
+- Downloads go to `.cache/workloads`. Tests never fetch data.
+- Source manifests pin URLs, checksums, selection, and provenance. A checksum change fails
+  preparation.
+- `--rows` takes a prefix without repeating rows.
 
-UDFBench source stays in the local cache with its upstream GPL provenance. Its README
-lists 24 scalar UDFs. The `Spark` directory contains 25 Python files, including `jsonparse`.
-The inventory keeps all 25. `addnoise` uses distribution validation because it is random.
-Unsupported deterministic functions remain in the inventory. The current
-[Performance](index.md#performance) covers all 25 functions. Aggregate and table UDFs are
-outside this scalar compiler evaluation.
+### UDFBench
+
+- Source stays in the local cache with its upstream GPL provenance.
+- 25 functions: the README lists 24, and the `Spark` directory adds `jsonparse`.
+  The inventory keeps all 25, including unsupported ones.
+- `addnoise` is random, so it uses distribution validation.
+- [Performance](index.md#performance) covers all 25. Aggregate and table UDFs are out of scope.
 
 ## Local sources
 
 QURE uses the Microsoft Research License: non-commercial, non-revenue-generating research only.
-Redistribution is prohibited. Obtain QURE and retain its license.
-Supply TPC-H `.tbl` files.
+Redistribution is prohibited. Obtain QURE, retain its license, and supply TPC-H `.tbl` files.
 
 ```sh
 uv run python -m workloads.prepare --suites qure \
@@ -38,19 +39,18 @@ uv run python -m workloads.prepare --suites qure \
 uv run python -m bench --suites qure
 ```
 
-Runs scalar functions from `python/` and `froid/`, excluding full queries.
-Import fixes produce `adapted` results.
-QURE is opt-in. Start with small inputs because preparation materializes joins.
-Add `--cases` to build only the joins those cases read.
-
-Keep cached sources, inputs, and raw reports private.
-Export with `python -m bench.report RESULT.json --public`.
+- Runs scalar functions from `python/` and `froid/`, not full queries. Import fixes produce
+  `adapted` results.
+- QURE is opt-in. Preparation materializes joins, so start with small inputs.
+  `--cases` builds only the joins those cases read.
+- Keep cached sources, inputs, and raw reports private.
+  Export with `python -m bench.report RESULT.json --public`.
 
 ## Extend
 
-Add a source manifest and preparation function, then register a suite loader in
-`workloads/catalog.py`. Each workload declares its original function, argument types,
-column bindings, result type, and optional query category.
-
-Add adapter correctness checks. No runner changes are needed for
-another dataset. A new query operator needs explicit adapter implementations and tests.
+1. Add a source manifest and a preparation function.
+2. Register a suite loader in `workloads/catalog.py`.
+3. Declare each workload's original function, argument types, column bindings, result type,
+   and optional query category.
+4. Add adapter correctness checks. The runner needs no changes. A new query operator needs
+   explicit adapter implementations and tests.

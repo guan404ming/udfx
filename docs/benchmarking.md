@@ -15,46 +15,48 @@ Small runs validate the framework. They do not establish production speedups.
 
 ## Measurements
 
-The runner checks full outputs against Python before timing. It keeps every selected row.
-An oracle exception or mismatch produces an error, with no speedup reported.
-
-Each case has two warmups and seven rounds. The runner rotates execution order and saves
-every sample. Reports use the median of paired baseline/udfx ratios, plus variation and
-slower-case counts. Each Python UDF form appears separately.
-The primary Python baseline is fixed before timing.
-Apache DataFusion registers these deterministic Python functions as immutable.
-The deduplicated mean gives each distinct compiled-plan fingerprint equal weight.
-Reports separate engine expressions, runtime UDFs, guarded execution, and Python fallback.
-Overall speedup includes every timed case, including Python-only cases.
+- **Validation:** full outputs must match Python before timing. Every selected row stays.
+  An oracle exception or mismatch is an error, with no speedup.
+- **Timing:** two warmups and seven rounds per case, in rotated order. Every sample is saved.
+- **Ratios:** the median of paired baseline/udfx ratios, plus variation and slower-case counts.
+- **Baselines:** each Python UDF form appears separately. The primary one is fixed before timing.
+  Apache DataFusion registers these deterministic functions as immutable.
+- **Means:** Overall includes every timed case, Python-only cases too. Dedup gives each distinct
+  compiled-plan fingerprint equal weight.
+- **Status:** engine expressions, runtime UDFs, guarded execution, and Python fallback are
+  reported separately.
 
 ### Execution modes
 
-- **Memory:** project the UDF over prepared input. Apache Spark caches input first.
-- **Query:** scan Apache Parquet, apply the UDF, filter null outputs, and group when the workload
-  defines a category.
+| Mode | What runs |
+| --- | --- |
+| Memory | The UDF over prepared input. Apache Spark caches input first. |
+| Query | Apache Parquet scan, the UDF, a null-output filter, and grouping when the workload defines a category. |
 
-All engines materialize Apache Arrow output. These are adapted queries, not a reproduction of all
-21 upstream UDFBench queries. Compilation and first execution have separate timings.
-First execution is per case and mode, not a cold process or cold filesystem measurement.
+- All engines materialize Apache Arrow output.
+- These are adapted queries, not all 21 upstream UDFBench queries.
+- Compilation and first execution have separate timings. First execution is per case and mode,
+  not a cold process or cold filesystem.
 
 ### Published results
 
 The [UDFBench and QURE results](index.md#performance) use this scope:
 
-- One machine, up to 10,000 rows per case.
-- 25 UDFBench UDFs.
-- 36 QURE functions: 27 Python and 9 Froid.
-- Apache DataFusion uses a patched build ([Apache DataFusion > Large functions](backends/datafusion.md#large-functions)).
-- Apache Spark uses JVM runtime UDFs ([Apache Spark > Execution](backends/spark.md#execution)).
+| Item | Scope |
+| --- | --- |
+| Machine | One machine, up to 10,000 rows per case |
+| UDFBench | 25 UDFs |
+| QURE | 36 functions: 27 Python and 9 Froid |
+| Apache DataFusion | Patched build ([Large functions](backends/datafusion.md#large-functions)) |
+| Apache Spark | JVM runtime UDFs ([Execution](backends/spark.md#execution)) |
 
 ## Reproducibility
 
-Versioned JSON records code and data hashes, Python and engine versions, CPU, threads,
-Apache Spark settings, and raw samples. Data preparation can cache downloads. Timing never caches.
-
-For user-supplied sources, see [Public Datasets > Local sources](datasets.md#local-sources).
-Add `--public` to `bench.report` before sharing a report. It omits private diagnostics and inputs.
-
-Use an otherwise idle machine without coverage instrumentation. The manual GitHub workflow
-requires an existing self-hosted Linux runner labelled `udfx-benchmark`.
-The local lock prevents concurrent benchmark commands in one checkout.
+- Versioned JSON records code and data hashes, Python and engine versions, CPU, threads,
+  Apache Spark settings, and raw samples.
+- Data preparation can cache downloads. Timing never caches.
+- For user-supplied sources, see [Public Datasets > Local sources](datasets.md#local-sources).
+- Add `--public` to `bench.report` before sharing. It omits private diagnostics and inputs.
+- Use an idle machine without coverage instrumentation. The manual GitHub workflow needs a
+  self-hosted Linux runner labelled `udfx-benchmark`.
+- A local lock prevents concurrent benchmark commands in one checkout.
