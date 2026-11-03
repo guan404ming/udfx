@@ -1,7 +1,10 @@
-from udfx.ir import Call, If, Node, lit
+import re
+
+from udfx.ir import Call, If, Lit, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics.lists import SET_OPERATIONS, SET_PREDICATES
 from udfx.semantics.ranges import proven
+from udfx.semantics.regex_patterns import literal_union
 from udfx.types import BOOL
 
 SET_CALLS = frozenset(f"set_{operation}" for operation in SET_OPERATIONS)
@@ -41,6 +44,20 @@ def disjoint_ratio(node: Call) -> Node | None:
         return None
     empty = apply("__eq__", numerator, lit(0))
     return If(empty, lit(0.0), node, node.type) if proven(empty) is None else None
+
+
+def literal_membership(minimum: int, node: Call) -> Node | None:
+    container, item = node.arguments
+    if (
+        not isinstance(container, Lit)
+        or not isinstance(container.value, tuple | list)
+        or item.type.nullable
+        or len(container.value) < minimum
+        or not all(type(value) is str for value in container.value)
+    ):
+        return None
+    pattern = rf"\A{literal_union(tuple(container.value))}\Z"
+    return apply("re.contains", item, lit(pattern), lit(re.UNICODE.value))
 
 
 def simplify_set(node: Call) -> Node:

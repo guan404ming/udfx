@@ -156,14 +156,19 @@ class RuleSet[E]:
             OpKey("bool", (Kind.LIST,)): cardinality,
             OpKey("__getitem__", (Kind.STR, Kind.INT)): literal_string_item,
         }
+        self._registered: set[OpKey] = set()
 
     def rewrite(self, name: str, *kinds: Kind) -> Callable[[Rewrite], Rewrite]:
         key = OpKey(name, kinds)
 
         def decorate(rewrite: Rewrite) -> Rewrite:
-            if key in self._rewrites:
+            if key in self._registered:
                 raise ValueError(f"duplicate rewrite {key}")
-            self._rewrites[key] = rewrite
+            self._registered.add(key)
+            shared = self._rewrites.get(key)
+            self._rewrites[key] = (
+                rewrite if shared is None else lambda node: shared(node) or rewrite(node)
+            )
             return rewrite
 
         return decorate

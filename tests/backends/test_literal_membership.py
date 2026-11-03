@@ -4,11 +4,14 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from udfx.backends.diagnostics import capture_lowering
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops import OpKey, apply
 from udfx.testing import check_function
 from udfx.types import STR, Kind, list_of
+
+WORDS = frozenset({f"word{index}" for index in range(4000)} | {"Été", "a.b"})
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -94,3 +97,28 @@ def test_literal_membership_omits_unneeded_null_checks(
     assert backend.evaluate([expression], schema, [(value,) for value in values]) == [
         [selected(value) for value in values]
     ]
+
+
+@pytest.mark.parametrize("backend", backend_params())
+def test_large_literal_membership_uses_native_regex(backend: Backend[Any]) -> None:
+    if backend.name != "duckdb":
+        pytest.skip("DuckDB matches large literal sets with one regex")
+
+    def known(word: str) -> bool:
+        return bool(word) and word[0].lower() + word[1:] in WORDS
+
+    with capture_lowering() as details:
+        expression = backend.build(trace(known, {"word": STR}))
+    assert details[-1].exact is None
+    assert "regexp_matches" in str(expression)
+    rows = [
+        ("",),
+        ("Word12",),
+        ("word3999",),
+        ("word4000",),
+        ("été",),
+        ("Été",),
+        ("a.b",),
+        ("aXb",),
+    ]
+    assert check_function(known, {"word": STR}, backend, rows) == []

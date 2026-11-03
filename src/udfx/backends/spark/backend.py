@@ -14,7 +14,7 @@ from udfx.backends.base import Backend, Row, output_names, transpose_rows
 from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.indexing import literal_range
 from udfx.backends.lowering_context import lowering_context
-from udfx.backends.program_lowering import lower_program
+from udfx.backends.program_lowering import lower_program, python_only
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.results import ResultLowering
 from udfx.backends.rules import Scope
@@ -209,6 +209,8 @@ class SparkBackend(Backend[Column]):
         return functions.raise_error(message).cast(dtype(program.result))
 
     def compose(self, value: Lowered[Column], program: Program) -> Column:
+        if value.exact is not None and (value.prepare or " -> " in f"{value.expr} {value.exact}"):
+            value = python_only(self, program)
         if value.exact is not None and value.exact is not False and value.prepare is not None:
             packed = value.consume(lambda value: packet(self, value, program))
             return finish(packed, program, fallback_patch(program))

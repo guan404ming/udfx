@@ -44,9 +44,14 @@ def build_smallest[E](backend: Backend[E], program: Program) -> E:
     expr = smallest(backend, program)
     if backend.size_limit is None or len(str(expr)) <= backend.size_limit:
         return expr
-    return backend.compose(
-        Lowered(backend.literal(Lit(None, program.result.or_none())), False), program
-    )
+    return backend.compose(python_only(backend, program), program)
+
+
+def python_only[E](backend: Backend[E], program: Program) -> Lowered[E]:
+    details = DIAGNOSTICS.get()
+    if details:
+        details[:] = [replace(details[-1], exact=False)]
+    return Lowered(backend.literal(Lit(None, program.result.or_none())), False)
 
 
 def smallest[E](backend: Backend[E], program: Program) -> E:

@@ -4,6 +4,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
+from udfx.backends.diagnostics import capture_lowering
 from udfx.testing import check_function
 from udfx.types import STR
 
@@ -26,5 +27,7 @@ def test_size_limit_runs_python(backend: Backend[Any], monkeypatch: pytest.Monke
     assert check_function(suffixed, {"text": STR}, backend, rows) == []
     assert not calls
     monkeypatch.setattr(type(backend), "size_limit", 1)
-    assert check_function(suffixed, {"text": STR}, backend, rows) == []
+    with capture_lowering() as details:
+        assert check_function(suffixed, {"text": STR}, backend, rows) == []
     assert calls
+    assert details[-1].exact is False

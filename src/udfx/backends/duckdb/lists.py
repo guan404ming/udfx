@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 
 import duckdb
 from duckdb import Expression
@@ -11,6 +12,7 @@ from udfx.backends.duckdb.slicing import SEQUENCE
 from udfx.backends.duckdb.strings import list_contains
 from udfx.backends.registration import Lowered, register_lists
 from udfx.frontend.core.comprehensions import lowercase_words
+from udfx.frontend.core.sets import literal_membership
 from udfx.semantics.frequencies import FrequencyPrimitives, ordered_frequencies
 from udfx.semantics.lists import ListPrimitives, SetPrimitives, literal_index
 from udfx.semantics.sequences import take_prefix
@@ -40,6 +42,9 @@ def contains_strings(container: Expression | list | tuple, item: Expression) -> 
         )
         return found | item.isnull() if None in container else found
     return list_contains(container, item)
+
+
+RULES.rewrite("__contains__", Kind.LIST, Kind.STR)(partial(literal_membership, 64))
 
 
 @RULES("list", Kind.LIST)

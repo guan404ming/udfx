@@ -7,7 +7,8 @@ from udfx.semantics.text import code_points
 
 
 def escaped(point: int) -> str:
-    return f"\\x{{{point:X}}}"
+    character = chr(point)
+    return character if character.isascii() and character.isalnum() else f"\\x{{{point:X}}}"
 
 
 def ascii_member(name: str, member: Any) -> Any:
