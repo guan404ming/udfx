@@ -13,6 +13,7 @@ from udfx.frontend.operations.json import call_json
 from udfx.frontend.operations.paths import call_path
 from udfx.frontend.operations.regex import call_regex
 from udfx.frontend.operations.series import series_call
+from udfx.frontend.operations.series_methods import series_method
 from udfx.frontend.resolve.constants import (
     constant,
     constant_value,
@@ -45,7 +46,9 @@ def unpacked_arguments(packed: Item, where: str) -> tuple[Item, ...]:
 def ordinary_call(
     callee: Item, arguments: Sequence[Item], keywords: Mapping[str, Item], path: Node
 ) -> Evaluation:
-    vectorized = series_call(callee, arguments, keywords)
+    vectorized = series_method(callee, arguments, keywords)
+    if vectorized is None:
+        vectorized = series_call(callee, arguments, keywords)
     if vectorized is not None:
         return vectorized
     special = (

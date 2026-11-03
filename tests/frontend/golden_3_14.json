@@ -749,7 +749,7 @@
 "tests/frontend/test_small_gaps.py:19:<lambda>:a67c5ea8|left:bool?,right:bool?": "p:4c425234ec7c9bd1",
 "tests/frontend/test_small_gaps.py:30:<lambda>:3cfc8571|value:int": "u:no op and(int, int)",
 "tests/frontend/test_small_gaps.py:30:<lambda>:74f4b84b|value:int": "u:no op or(int, int)",
-"tests/frontend/test_small_gaps.py:30:<lambda>:996e0747|value:int": "u:opcode UNARY_INVERT at <lambda>+N",
+"tests/frontend/test_small_gaps.py:30:<lambda>:996e0747|value:int": "u:no op __invert__(int)",
 "tests/frontend/test_small_gaps.py:37:local_membership:1778b2a5|value:int": "p:fed9a3b7077aff8a",
 "tests/frontend/test_small_gaps.py:51:<lambda>:014c6509|value:int": "p:bfd664430a3990dc",
 "tests/frontend/test_small_gaps.py:51:<lambda>:71370ab1|value:int": "p:6125a7fd95c6b941",

@@ -94,6 +94,8 @@ CALLABLE_IDENTITIES = {
     ("numpy", "ufunc", "floor"): "numpy.floor",
     ("numpy", "ufunc", "ceil"): "numpy.ceil",
     ("numpy", "numpy", "round"): "numpy.round",
+    ("numpy", "numpy", "where"): "numpy.where",
+    ("numpy", "numpy", "clip"): "numpy.clip",
 }
 
 

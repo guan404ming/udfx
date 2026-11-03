@@ -69,6 +69,7 @@ STACK_EFFECTS[(3, 12)] = {
     "STORE_FAST": (-1, -1),
     "STORE_GLOBAL": (-1, -1),
     "SWAP": (0, 0),
+    "UNARY_INVERT": (0, 0),
     "UNARY_NEGATIVE": (0, 0),
     "UNARY_NOT": (0, 0),
     "UNPACK_EX": (2, 2),

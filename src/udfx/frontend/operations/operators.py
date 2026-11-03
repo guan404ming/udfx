@@ -121,11 +121,11 @@ def logical_not(item: Item) -> Evaluation:
     return single(Value(negate(test)), faults)
 
 
-def negation(item: Item) -> Evaluation:
-    vectorized = series_negation(item)
+def negation(item: Item, inverted: bool = False) -> Evaluation:
+    vectorized = series_negation(item, inverted)
     if vectorized is not None:
         return vectorized
-    node, faults = invoke("__neg__", [node_of(item)], TypeError)
+    node, faults = invoke("__invert__" if inverted else "__neg__", [node_of(item)], TypeError)
     return single(Value(node), faults)
 
 

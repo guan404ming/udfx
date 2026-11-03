@@ -10,9 +10,10 @@ from udfx.frontend.core.expressions import invoke, node_of
 from udfx.frontend.core.logic import choose, conjunction, disjunction, negate
 from udfx.frontend.core.series import AGGREGATE
 from udfx.frontend.core.tracing import AGGREGATES
-from udfx.frontend.core.values import Item, Method, Opaque, Series, Value
+from udfx.frontend.core.values import Item, Method, Opaque, Series, Value, describe
 from udfx.frontend.resolve.callables import known_op
 from udfx.ir import FALSE, TRUE, Col, Guarded, If, Lit, Node, lit
+from udfx.ops import Fault
 from udfx.program import Reduction
 from udfx.types import FLOAT, INT, INT64_MAX, INT64_MIN, Kind
 
@@ -34,6 +35,8 @@ REDUCTIONS = {"count", "sum", "mean", "var", "std", "max", "min", "corr"}
 
 
 def operand(item: Item) -> Node:
+    if isinstance(item, Series) and item.text:
+        raise Unsupported("the pandas str accessor is not a series")
     node = item.node if isinstance(item, Series) else node_of(item)
     if node.type.nullable or node.type.kind not in (*NUMBERS, Kind.STR, Kind.BOOL):
         raise Unsupported("series operands must be non-null scalars")
@@ -44,11 +47,28 @@ def operand(item: Item) -> Node:
     return node
 
 
+def series_attribute(owner: Item, name: str, where: str) -> Evaluation:
+    if (
+        not isinstance(owner, Series)
+        or name != "str"
+        or owner.text
+        or owner.node.type.kind is not Kind.STR
+    ):
+        raise Unsupported(f"attribute load {name} of {describe(owner)}", where)
+    return single(Series(owner.node, owner.present, text=True))
+
+
 def elementwise(
     name: str, items: Sequence[Item], arguments: Sequence[Node], *, align: bool = False
 ) -> Evaluation:
-    presents = list(dict.fromkeys(item.present for item in items if isinstance(item, Series)))
     node, faults = invoke(name, arguments, TypeError)
+    return settled(items, node, faults, align=align)
+
+
+def settled(
+    items: Sequence[Item], node: Node, faults: Sequence[Fault], *, align: bool = False
+) -> Evaluation:
+    presents = list(dict.fromkeys(item.present for item in items if isinstance(item, Series)))
     inexact = reduce(disjunction, (fault.when for fault in faults), FALSE)
     value = node if inexact == FALSE else Guarded(node, negate(inexact))
     if len(presents) == 1:
@@ -101,6 +121,9 @@ def series_comparison(symbol: str, left: Item, right: Item) -> Evaluation | None
         return None
     first, second = operand(left), operand(right)
     kinds = {first.type.kind, second.type.kind}
+    if kinds == {Kind.BOOL} and symbol in ("==", "!="):
+        same = disjunction(conjunction(first, second), conjunction(negate(first), negate(second)))
+        return settled((left, right), same if symbol == "==" else negate(same), [])
     if symbol not in COMPARISONS or (len(kinds) > 1 and kinds != set(NUMBERS)):
         raise Unsupported(f"series comparison {symbol}")
     if kinds == set(NUMBERS) and not any(
@@ -111,10 +134,14 @@ def series_comparison(symbol: str, left: Item, right: Item) -> Evaluation | None
     return elementwise(COMPARISONS[symbol], (left, right), [first, second])
 
 
-def series_negation(item: Item) -> Evaluation | None:
+def series_negation(item: Item, inverted: bool) -> Evaluation | None:
     if not isinstance(item, Series):
         return None
     node = operand(item)
+    if inverted:
+        if node.type.kind is not Kind.BOOL:
+            raise Unsupported("series ~ needs a boolean series")
+        return elementwise("not", (item,), [node])
     name = "numpy.negative" if node.type.kind is Kind.INT else "__neg__"
     return elementwise(name, (item,), [node])
 

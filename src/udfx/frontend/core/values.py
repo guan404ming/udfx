@@ -105,6 +105,7 @@ class Iterator:
 class Series:
     node: Node
     present: Node = TRUE
+    text: bool = False
 
 
 @dataclass(frozen=True)

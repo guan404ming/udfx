@@ -38,6 +38,7 @@ BASE: dict[str, Rule] = {
     "CONTAINS_OP": values.membership,
     "UNARY_NOT": values.unary_not,
     "UNARY_NEGATIVE": values.unary_negative,
+    "UNARY_INVERT": values.unary_invert,
     "BINARY_SUBSCR": values.subscript,
     "BINARY_SLICE": values.cut,
     "BUILD_SLICE": values.build_slice,

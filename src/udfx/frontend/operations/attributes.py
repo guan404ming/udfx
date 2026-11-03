@@ -21,9 +21,9 @@ from udfx.frontend.core.values import (
     Series,
     Set,
     Value,
-    describe,
 )
 from udfx.frontend.operations.datetimes import duration_attribute
+from udfx.frontend.operations.series import series_attribute
 from udfx.frontend.resolve.constants import constant
 from udfx.frontend.resolve.frozen import Snapshot
 from udfx.semantics.dates import ATTRIBUTES as DATE_ATTRIBUTES
@@ -73,5 +73,5 @@ def load_attribute(
         case Value():
             raise Unsupported(f"attribute access on a column value (attribute load {name})", where)
         case _:
-            raise Unsupported(f"attribute load {name} of {describe(owner)}", where)
+            return series_attribute(owner, name, where)
     return Evaluation((attribute, NULL)) if method else single(attribute)

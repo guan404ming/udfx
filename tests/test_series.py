@@ -1,3 +1,4 @@
+import math
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -76,6 +77,41 @@ def summed(first: pd.Series, second: pd.Series) -> pd.Series:
     return first + second
 
 
+def cleaned(comment: pd.Series) -> pd.Series:
+    stripped = comment.str.strip().str.upper()
+    return stripped + comment.str.len().astype(str) + comment.str.slice(1, 4)
+
+
+def searched(comment: pd.Series) -> pd.Series:
+    found = comment.str.contains("ab+c") | comment.str.startswith("x")
+    return found & ~comment.str.contains("+", regex=False)
+
+
+def substituted(comment: pd.Series) -> pd.Series:
+    replaced = comment.str.replace("a", "b").str.replace(r"\d+", "#", regex=True)
+    return replaced + comment.str.count("[aeiou]").astype(str)
+
+
+def bounded(price: pd.Series) -> pd.Series:
+    return price.fillna(0).round(1).clip(-5, 5) + price.where(price > 0).fillna(-1.0)
+
+
+def flagged(price: pd.Series) -> pd.Series:
+    return pd.isna(price) | price.between(0, 1, inclusive="left") | price.notna().eq(False)
+
+
+def chosen(price: pd.Series, quantity: pd.Series) -> pd.Series:
+    selected = pd.Series(np.where(price > 0, price, quantity))
+    return selected + price.mask(price < 1, 3) + quantity.rsub(10).astype(float)
+
+
+def compared(first: pd.Series, second: pd.Series) -> pd.Series:
+    return pd.Series(np.clip(first, 0, 10)).gt(second) & first.ne(3)
+
+
+PRICES = [(math.nan,), (math.inf,), (-math.inf,), (-0.0,), (2.25,), (0.5,), (1e300,), (-7.0,)]
+TEXTS = [("  ab c ",), ("xabbbc+12",), ("",), ("a1b22 é",), ("ß+",)]
+
 CASES = [
     (priced, {"price": FLOAT, "mode": STR}, [(10.0, "AIR"), (-1.0, "MAIL"), (2.5, "SHIP")]),
     (sigmoid, {"price": FLOAT}, [(900.0,), (0.5,), (-3.0,), (0.0,)]),
@@ -84,6 +120,13 @@ CASES = [
     (ratio, {"first": INT, "second": INT}, [(3, 2), (4, 0), (0, 0), (2**63 - 1, -1)]),
     (wrapped, {"first": INT, "second": INT}, [(2**63 - 1, 1), (-(2**63), -(2**63)), (3, -4)]),
     (summed, {"first": INT, "second": INT}, [(2**63 - 1, 1), (1, 2)]),
+    (cleaned, {"comment": STR}, TEXTS),
+    (searched, {"comment": STR}, TEXTS),
+    (substituted, {"comment": STR}, TEXTS),
+    (bounded, {"price": FLOAT}, PRICES),
+    (flagged, {"price": FLOAT}, PRICES),
+    (chosen, {"price": FLOAT, "quantity": INT}, [(1.5, 2), (-1.0, 4), (math.nan, -3), (0.5, 0)]),
+    (compared, {"first": INT, "second": INT}, [(3, 2), (-4, -1), (12, 9), (7, 7)]),
 ]
 
 

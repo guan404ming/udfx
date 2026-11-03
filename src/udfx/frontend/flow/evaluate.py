@@ -92,7 +92,7 @@ def logical_not(frame: Frame, flow: Flow, op: ops.Not) -> list[Result]:
 
 @evaluates(ops.Negate)
 def negate(frame: Frame, flow: Flow, op: ops.Negate) -> list[Result]:
-    return frame.settle(flow.bindings, operators.negation(flow.values[op.source]))
+    return frame.settle(flow.bindings, operators.negation(flow.values[op.source], op.inverted))
 
 
 @evaluates(ops.ExceptionMatch)

@@ -43,6 +43,21 @@ translation = udfx.compile(sigmoid, {"price": FLOAT}, series=True)
 
 udfx turns loops over the series and vectorized series operations into one native value per row.
 A function whose rows depend on other rows, such as `len(values)`, is unsupported.
+
+Supported series operations:
+
+- Operators: `+`, `-`, `*`, `/`, `**`, comparisons, `&`, `|`, `~`, and unary `-`.
+- Methods: `add`, `sub`, `mul`, `div`, `truediv`, `pow`, their `r` forms, `eq`, `ne`, `lt`,
+  `le`, `gt`, `ge`, `abs`, `round`, `clip`, `between`, `where`, `mask`, `isna`, `isnull`,
+  `notna`, `notnull`, `fillna`, `astype(float)`, `astype(str)`, and `map` with a dict.
+- The `str` accessor: `len`, `slice`, `contains`, `count`, `replace`, and the Python string
+  methods `lower`, `upper`, `strip`, `lstrip`, `rstrip`, `title`, `capitalize`, `swapcase`,
+  `casefold`, `startswith`, `endswith`, `find`, `rfind`, `zfill`, `center`, `ljust`, `rjust`,
+  and the `is` predicates.
+- Functions: `pandas.isna`, `pandas.notna`, `numpy.where`, `numpy.clip`, `numpy.power`,
+  `numpy.minimum` and `numpy.maximum` on integers, and the numpy math functions that udfx knows.
+
+Pattern, flag, and bound arguments must be literals.
 Rows that the engine cannot match exactly run the original function on those rows.
 
 For pandas aggregate UDFs, see [udfx.aggregate](aggregate.md).

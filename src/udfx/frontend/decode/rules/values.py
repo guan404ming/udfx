@@ -85,6 +85,10 @@ def unary_negative(builder: Builder, instruction: dis.Instruction) -> None:
     builder.push(builder.produce(Negate, builder.pop()))
 
 
+def unary_invert(builder: Builder, instruction: dis.Instruction) -> None:
+    builder.push(builder.produce(Negate, builder.pop(), inverted=True))
+
+
 def subscript(builder: Builder, instruction: dis.Instruction) -> None:
     index, container = builder.pop(), builder.pop()
     builder.push(builder.produce(Subscript, container, index))

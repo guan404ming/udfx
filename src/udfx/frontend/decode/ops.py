@@ -129,6 +129,7 @@ class Compare(Op):
 class Negate(Op):
     result: int
     source: int
+    inverted: bool = False
 
 
 @dataclass(frozen=True)

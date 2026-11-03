@@ -70,10 +70,6 @@ def formatted(value):
     return f"{value!r:>5}-{value}"
 
 
-def inverted(value):
-    return ~value
-
-
 def waiting(value):
     with value:
         return 1
@@ -190,7 +186,6 @@ def test_binary_operator_keeps_its_symbol() -> None:
 @pytest.mark.parametrize(
     ("function", "reason"),
     [
-        (inverted, "opcode UNARY_INVERT"),
         (waiting, "with blocks"),
         (spinning, "loops and comprehensions"),
     ],
