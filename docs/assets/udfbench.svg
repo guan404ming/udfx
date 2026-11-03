@@ -4,9 +4,6 @@
   <style>
     text { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; }
     :root { --memory: #363636; --query: #a3a3a3; --text: #303030; --grid: #dedede; --baseline: #707070; }
-    @media (prefers-color-scheme: dark) {
-      :root { --memory: #ededed; --query: #858585; --text: #d6d6d6; --grid: #414141; --baseline: #b8b8b8; }
-    }
   </style>
   <path d="M 180.0 292.824 L 698.4 292.824" style="fill: none" />
   <path d="M 180.0 292.824 L 180.0 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />

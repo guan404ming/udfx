@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 352.8" version="1.1" role="img" aria-labelledby="title description">
+  <title id="title">UDFBench speedups by engine</title>
+  <desc id="description">Geometric mean speedups over all 25 UDFs. Python UDF baseline is 1×. Polars: memory 2.21×, query 1.78×. DuckDB: memory 1.49×, query 1.24×. Apache DataFusion: memory 1.23×, query 1.18×. Apache Spark: memory 1.30×, query 1.05×.</desc>
+  <style>
+    text { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; }
+    :root { --memory: #ededed; --query: #858585; --text: #d6d6d6; --grid: #414141; --baseline: #b8b8b8; }
+  </style>
+  <path d="M 180.0 292.824 L 698.4 292.824" style="fill: none" />
+  <path d="M 180.0 292.824 L 180.0 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="180.0" y="311.941188">0</text>
+  <path d="M 283.68 292.824 L 283.68 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="283.68" y="311.941188">0.5×</text>
+  <path d="M 387.36 292.824 L 387.36 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="387.36" y="311.941188">1×</text>
+  <path d="M 491.04 292.824 L 491.04 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="491.04" y="311.941188">1.5×</text>
+  <path d="M 594.72 292.824 L 594.72 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="594.72" y="311.941188">2×</text>
+  <path d="M 698.4 292.824 L 698.4 56.448" clip-path="url(#plot)" style="fill: none; stroke: var(--grid); stroke-width: 0.7; stroke-linecap: square" />
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="698.4" y="311.941188">2.5×</text>
+  <text style="font-size: 12px; text-anchor: middle; fill: var(--text)" x="439.2" y="337.942125">Speedup vs. Python UDF · higher is faster</text>
+  <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="89.158496">Polars</text>
+  <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="149.182874">DuckDB</text>
+  <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="209.207252">Apache DataFusion</text>
+  <text style="font-size: 12px; text-anchor: end; fill: var(--text)" x="170" y="269.23163">Apache Spark</text>
+  <path d="M 180.0 67.192364 L 638.2656 67.192364 L 638.2656 82.798702 L 180.0 82.798702 z" clip-path="url(#plot)" style="fill: var(--memory)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="645.2656" y="78.11272">2.21×</text>
+  <path d="M 180.0 127.216742 L 488.9664 127.216742 L 488.9664 142.82308 L 180.0 142.82308 z" clip-path="url(#plot)" style="fill: var(--memory)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="495.9664" y="138.137098">1.49×</text>
+  <path d="M 180.0 187.24112 L 435.0528 187.24112 L 435.0528 202.847458 L 180.0 202.847458 z" clip-path="url(#plot)" style="fill: var(--memory)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="442.0528" y="198.161476">1.23×</text>
+  <path d="M 180.0 247.265498 L 449.568 247.265498 L 449.568 262.871836 L 180.0 262.871836 z" clip-path="url(#plot)" style="fill: var(--memory)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="456.568" y="258.185854">1.30×</text>
+  <path d="M 180.0 86.400165 L 549.1008 86.400165 L 549.1008 102.006503 L 180.0 102.006503 z" clip-path="url(#plot)" style="fill: var(--query)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="556.1008" y="97.320521">1.78×</text>
+  <path d="M 180.0 146.424543 L 437.1264 146.424543 L 437.1264 162.030881 L 180.0 162.030881 z" clip-path="url(#plot)" style="fill: var(--query)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="444.1264" y="157.344899">1.24×</text>
+  <path d="M 180.0 206.448921 L 424.6848 206.448921 L 424.6848 222.055259 L 180.0 222.055259 z" clip-path="url(#plot)" style="fill: var(--query)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="431.6848" y="217.369277">1.18×</text>
+  <path d="M 180.0 266.473299 L 397.728 266.473299 L 397.728 282.079637 L 180.0 282.079637 z" clip-path="url(#plot)" style="fill: var(--query)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="404.728" y="277.393655">1.05×</text>
+  <text style="font-size: 11px; text-anchor: middle; fill: var(--baseline)" x="387.36" y="44.6292">Python UDF · 1×</text>
+  <path d="M 387.36 292.824 L 387.36 56.448" clip-path="url(#plot)" style="fill: none; stroke-dasharray: 4.4,4.4; stroke-dashoffset: 0; stroke: var(--baseline); stroke-width: 1.1" />
+  <path d="M 4.176 29.090925 L 18.576 29.090925 L 18.576 20.690925 L 4.176 20.690925 z" style="fill: var(--memory)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="28.176" y="29.090925">Memory</text>
+  <path d="M 98.580375 29.090925 L 112.980375 29.090925 L 112.980375 20.690925 L 98.580375 20.690925 z" style="fill: var(--query)" />
+  <text style="font-size: 12px; text-anchor: start; fill: var(--text)" x="122.580375" y="29.090925">Query</text>
+  <defs>
+    <clipPath id="plot">
+      <rect x="180.0" y="56.448" width="518.4" height="236.376" />
+    </clipPath>
+  </defs>
+</svg>
