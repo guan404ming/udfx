@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 352.8" version="1.1" role="img" aria-labelledby="title description">
   <title id="title">UDFBench speedups by engine</title>
-  <desc id="description">Geometric mean speedups over 25 selected UDFs. Python UDF baseline is 1×. Polars: memory 2.21×, query 1.78×. DuckDB: memory 1.49×, query 1.24×. Apache DataFusion: memory 1.23×, query 1.18×. Apache Spark: memory 1.30×, query 1.05×.</desc>
+  <desc id="description">Geometric mean speedups over all 25 UDFs. Python UDF baseline is 1×. Polars: memory 2.21×, query 1.78×. DuckDB: memory 1.49×, query 1.24×. Apache DataFusion: memory 1.23×, query 1.18×. Apache Spark: memory 1.30×, query 1.05×.</desc>
   <style>
     text { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; }
     :root { --memory: #363636; --query: #a3a3a3; --text: #303030; --grid: #dedede; --baseline: #707070; }
