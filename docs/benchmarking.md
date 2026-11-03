@@ -39,10 +39,11 @@ First execution is per case and mode, not a cold process or cold filesystem meas
 
 ### Published results
 
-The [UDFBench results](index.md#performance) use this scope:
+The [UDFBench and QURE results](index.md#performance) use this scope:
 
 - One machine, up to 10,000 rows per case.
-- 24 UDFs. `stem` is excluded because of large-plan costs.
+- 24 UDFBench UDFs. `stem` is excluded because of large-plan costs.
+- 36 QURE functions: 27 Python and 9 Froid.
 - Apache DataFusion uses a patched build ([Apache DataFusion > Large functions](backends/datafusion.md#large-functions)).
 - Apache Spark uses JVM runtime UDFs ([Apache Spark > Execution](backends/spark.md#execution)).
 
