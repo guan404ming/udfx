@@ -6,7 +6,7 @@ import pyarrow
 from duckdb.func import ARROW, DEFAULT, NATIVE, SPECIAL
 
 from bench.callables import batched, null_boundary
-from bench.data import CATEGORY, JOIN_KEY, LOOKUP_KEY, POSITION, Input
+from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
 from udfx.backends.duckdb import DuckDBBackend
@@ -57,12 +57,7 @@ class Engine(Adapter):
 
     def execute(self, expr: Any, mode: str) -> pyarrow.Table:
         frame = self.connection.read_parquet(str(self.data.path)) if mode == "query" else self.frame
-        if mode == "query" and self.data.lookup_path is not None:
-            lookup = self.connection.read_parquet(str(self.data.lookup_path))
-            frame = frame.join(lookup, f'"{JOIN_KEY}" = "{LOOKUP_KEY}"', how="left")
-        grouped = mode == "query" and (
-            self.data.lookup is not None or CATEGORY in self.data.table.column_names
-        )
+        grouped = mode == "query" and CATEGORY in self.data.table.column_names
         if grouped:
             frame = frame.select(duckdb.ColumnExpression(CATEGORY), expr.alias("value"))
             return (

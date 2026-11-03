@@ -7,6 +7,7 @@ import pytest
 from conftest import backend_params
 
 from bench.fingerprint import expression_text, fingerprint
+from tests.benchmark.samples import postal_code
 from udfx.backends.base import Backend
 from udfx.backends.datafusion import DataFusionBackend
 from udfx.backends.duckdb import DuckDBBackend
@@ -14,7 +15,6 @@ from udfx.frontend import trace
 from udfx.ir import Col
 from udfx.program import Program
 from udfx.types import BOOL, INT, STR
-from workloads.nyc311 import postal_code
 
 
 @pytest.mark.parametrize("backend", backend_params())

@@ -3,7 +3,7 @@ from typing import Any
 import polars
 import pyarrow
 
-from bench.data import CATEGORY, JOIN_KEY, LOOKUP_KEY, POSITION, Input
+from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.polars.dtypes import dtype
@@ -39,16 +39,7 @@ class Engine(Adapter):
 
     def execute(self, expr: polars.Expr, mode: str) -> pyarrow.Table:
         frame = polars.scan_parquet(self.data.path) if mode == "query" else self.frame.lazy()
-        if mode == "query" and self.data.lookup_path is not None:
-            frame = frame.join(
-                polars.scan_parquet(self.data.lookup_path),
-                left_on=JOIN_KEY,
-                right_on=LOOKUP_KEY,
-                how="left",
-            )
-        grouped = mode == "query" and (
-            self.data.lookup is not None or CATEGORY in self.data.table.column_names
-        )
+        grouped = mode == "query" and CATEGORY in self.data.table.column_names
         if grouped:
             result = (
                 frame.select(CATEGORY, expr.alias("value"))

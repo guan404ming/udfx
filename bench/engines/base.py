@@ -23,10 +23,6 @@ class Adapter:
     def execute(self, expr: Any, mode: str) -> pyarrow.Table:
         raise NotImplementedError
 
-    def native(self) -> Any | None:
-        factory = self.workload.native.get(self.backend.name)
-        return None if factory is None else factory()
-
     def actions(
         self, expressions: dict[str, Any], mode: str
     ) -> dict[str, Callable[[], pyarrow.Table]]:

@@ -7,7 +7,6 @@ import pyarrow
 from pyarrow import parquet
 
 DIRECTORY = Path(__file__).parent
-FIXTURES = DIRECTORY / "fixtures"
 DEFAULT_CACHE = Path(".cache/workloads")
 
 

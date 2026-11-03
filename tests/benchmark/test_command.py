@@ -11,27 +11,36 @@ import pytest
 from bench.command import main
 from bench.runner import run
 from bench.timing import Settings
-from workloads.flights import load
-from workloads.storage import FIXTURES
+from tests.benchmark.samples import SUITE, load
 
 pytestmark = pytest.mark.xdist_group("benchmark-command")
 
 
-def test_command_sets_polars_threads_before_loading_workloads(tmp_path: Path) -> None:
+SCRIPT = (
+    "import sys\n"
+    "from pytest import MonkeyPatch\n"
+    "from tests.benchmark.samples import register\n"
+    "from bench.command import main\n"
+    "register(MonkeyPatch())\n"
+    "raise SystemExit(main(sys.argv[1:]))\n"
+)
+
+
+def test_command_sets_polars_threads_before_loading_workloads(tmp_path: Path, sample: Path) -> None:
     output = tmp_path / "result.json"
     subprocess.run(
         [
             sys.executable,
-            "-m",
-            "bench",
+            "-c",
+            SCRIPT,
             "--suites",
-            "flights",
+            SUITE,
             "--engines",
             "polars",
             "--root",
-            str(FIXTURES),
+            str(sample),
             "--cases",
-            "flights/year_month",
+            f"{SUITE}/route",
             "--threads",
             "2",
             "--rounds",
@@ -60,21 +69,21 @@ def metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.usefixtures("metadata")
-def test_command_writes_all_requested_results(tmp_path: Path) -> None:
+def test_command_writes_all_requested_results(tmp_path: Path, sample: Path) -> None:
     path = tmp_path / "results.json"
     assert (
         main(
             [
                 "--suites",
-                "flights",
+                SUITE,
                 "--engines",
                 "polars",
                 "--root",
-                str(FIXTURES),
+                str(sample),
                 "--output",
                 str(path),
                 "--cases",
-                "flights/year_month",
+                f"{SUITE}/route",
                 "--rounds",
                 "1",
                 "--warmups",
@@ -87,17 +96,16 @@ def test_command_writes_all_requested_results(tmp_path: Path) -> None:
     assert result["complete"]
     assert len(result["results"]) == 2
     assert all(row["status"] == "native" for row in result["results"])
-    assert all("native" in row["samples"][0] for row in result["results"])
 
 
-@pytest.mark.usefixtures("metadata")
+@pytest.mark.usefixtures("metadata", "sample")
 def test_missing_data_is_recorded_for_every_requested_case(tmp_path: Path) -> None:
     output = tmp_path / "result.json"
     assert (
         main(
             [
                 "--suites",
-                "flights",
+                SUITE,
                 "--engines",
                 "polars",
                 "duckdb",
@@ -123,7 +131,7 @@ def test_missing_data_is_recorded_for_every_requested_case(tmp_path: Path) -> No
         ["--threads", "0"],
         ["--engines", "missing"],
         ["--engines", "polars", "polars"],
-        ["--suites", "flights", "flights"],
+        ["--suites", "udfbench", "udfbench"],
         ["--suites", "missing"],
         ["--cases", "missing"],
     ],
@@ -137,12 +145,12 @@ def test_invalid_arguments(arguments: list[str]) -> None:
 def test_instrumented_benchmarks_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("bench.command.metadata", lambda: {"instrumented": True})
     with pytest.raises(SystemExit) as error:
-        main(["--suites", "flights"])
+        main(["--suites", "udfbench"])
     assert error.value.code == 2
 
 
 @pytest.mark.usefixtures("metadata")
-def test_concurrent_benchmark_is_rejected(tmp_path: Path) -> None:
+def test_concurrent_benchmark_is_rejected(tmp_path: Path, sample: Path) -> None:
     lock = Path(".cache/benchmark.lock")
     lock.parent.mkdir(exist_ok=True)
     with lock.open("w") as stream:
@@ -151,9 +159,9 @@ def test_concurrent_benchmark_is_rejected(tmp_path: Path) -> None:
             main(
                 [
                     "--suites",
-                    "flights",
+                    SUITE,
                     "--root",
-                    str(FIXTURES),
+                    str(sample),
                     "--output",
                     str(tmp_path / "result.json"),
                 ]
@@ -161,8 +169,10 @@ def test_concurrent_benchmark_is_rejected(tmp_path: Path) -> None:
     assert error.value.code == 2
 
 
-def test_runner_distinguishes_exclusions_unsupported_and_errors(tmp_path: Path) -> None:
-    workload = load(FIXTURES)[0]
+def test_runner_distinguishes_exclusions_unsupported_and_errors(
+    tmp_path: Path, sample: Path
+) -> None:
+    workload = load(sample)[0]
     settings = Settings(warmups=0, rounds=1)
     variants = [
         (replace(workload, exclusion="random"), "excluded"),
@@ -179,7 +189,7 @@ def test_runner_distinguishes_exclusions_unsupported_and_errors(tmp_path: Path) 
 
 @pytest.mark.usefixtures("metadata")
 def test_interrupted_run_keeps_the_entire_denominator(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, sample: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def interrupt(*args: object) -> None:
         raise KeyboardInterrupt
@@ -190,11 +200,11 @@ def test_interrupted_run_keeps_the_entire_denominator(
         main(
             [
                 "--suites",
-                "flights",
+                SUITE,
                 "--engines",
                 "polars",
                 "--root",
-                str(FIXTURES),
+                str(sample),
                 "--output",
                 str(output),
             ]

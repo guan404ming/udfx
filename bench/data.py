@@ -14,16 +14,12 @@ from workloads.storage import digest
 
 POSITION = f"{RESERVED}position"
 CATEGORY = f"{RESERVED}category"
-JOIN_KEY = f"{RESERVED}join_key"
-LOOKUP_KEY = f"{RESERVED}lookup_key"
 
 
 @dataclass(frozen=True)
 class Input:
     table: pyarrow.Table
     path: Path
-    lookup: pyarrow.Table | None
-    lookup_path: Path | None
     expected: list[object]
     metadata: dict
 
@@ -56,36 +52,11 @@ def prepare(workload: Workload, directory: Path, rows: int | None) -> Input:
     table = table.append_column(POSITION, pyarrow.array(range(table.num_rows), pyarrow.int64()))
     if workload.category is not None:
         table = table.append_column(CATEGORY, source[workload.category])
-    lookup = None
-    lookup_path = None
-    if workload.join is not None:
-        lookup = (
-            parquet.read_table(workload.join.table)
-            .select(
-                [
-                    workload.join.right,
-                    workload.join.category,
-                ]
-            )
-            .rename_columns([LOOKUP_KEY, CATEGORY])
-        )
-        keys = lookup[LOOKUP_KEY].to_pylist()
-        if len(set(keys)) != len(keys) or None in keys:
-            raise ValueError("The lookup must have unique, non-null keys")
-        table = table.append_column(JOIN_KEY, source[workload.join.left])
     metadata = {
         "source_sha256": digest(workload.table),
         "columns": dict(workload.columns),
         "constants": dict(workload.constants),
         "category": workload.category,
-        "join": None
-        if workload.join is None
-        else {
-            "left": workload.join.left,
-            "right": workload.join.right,
-            "category": workload.join.category,
-            "sha256": digest(workload.join.table),
-        },
         "rows": table.num_rows,
         "row_selection": "source prefix" if rows is not None else "all source rows",
         "schema": {name: str(type) for name, type in workload.schema.items()},
@@ -96,27 +67,13 @@ def prepare(workload: Workload, directory: Path, rows: int | None) -> Input:
     path = directory / f"{identifier}.parquet"
     parquet.write_table(table, path)
     metadata["input_sha256"] = digest(path)
-    if lookup is not None:
-        lookup_path = directory / f"{identifier}-lookup.parquet"
-        parquet.write_table(lookup, lookup_path)
-        metadata["lookup_sha256"] = digest(lookup_path)
-    return Input(table, path, lookup, lookup_path, expected, metadata)
+    return Input(table, path, expected, metadata)
 
 
 def expected_query(data: Input) -> list[list[object]]:
-    if data.lookup is not None:
-        mapping = dict(
-            zip(
-                data.lookup[LOOKUP_KEY].to_pylist(),
-                data.lookup[CATEGORY].to_pylist(),
-                strict=True,
-            )
-        )
-        categories = [mapping.get(key) for key in data.table[JOIN_KEY].to_pylist()]
-    elif CATEGORY in data.table.column_names:
-        categories = data.table[CATEGORY].to_pylist()
-    else:
+    if CATEGORY not in data.table.column_names:
         return [[index, value] for index, value in enumerate(data.expected)]
+    categories = data.table[CATEGORY].to_pylist()
     counts: dict[tuple[object, object], int] = {}
     for category, value in zip(categories, data.expected, strict=True):
         if value is not None:

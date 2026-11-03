@@ -1,15 +1,13 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from workloads import flights, nyc311, qure, udfbench
+from workloads import qure, udfbench
 from workloads.models import Workload
 
-DEFAULT_SUITES = ("udfbench", "flights", "nyc311")
+DEFAULT_SUITES = ("udfbench",)
 
 SUITES: dict[str, Callable[..., list[Workload]]] = {
     "udfbench": udfbench.load,
-    "flights": flights.load,
-    "nyc311": nyc311.load,
     "qure": qure.load,
 }
 

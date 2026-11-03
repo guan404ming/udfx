@@ -171,7 +171,7 @@ def test_qure_loads_original_callable_and_filters_full_identifiers(
         f"open({str(marker)!r}, 'w').write('query')\n",
     )
     monkeypatch.setattr(qure, "read_manifest", lambda name: {"files": [entry]})
-    workloads = qure.load(tmp_path, {"qure/python/q1", "flights/year_month"})
+    workloads = qure.load(tmp_path, {"qure/python/q1", "udfbench/lowerize"})
     assert len(workloads) == 1
     workload = workloads[0]
     assert workload.identifier == "qure/python/q1"
@@ -179,7 +179,7 @@ def test_qure_loads_original_callable_and_filters_full_identifiers(
     assert workload.error is None
     assert workload.function is not None and workload.function(4) == 11
     assert not marker.exists()
-    assert qure.load(tmp_path, {"flights/year_month"}) == []
+    assert qure.load(tmp_path, {"udfbench/lowerize"}) == []
     with pytest.raises(ValueError, match="Unknown QURE"):
         qure.load(tmp_path, {"qure/python/missing"})
 

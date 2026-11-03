@@ -6,15 +6,9 @@ from pathlib import Path
 import pyarrow
 import pytest
 
+from tests.benchmark.samples import load
 from workloads import catalog, udfbench
-from workloads.storage import FIXTURES, digest, download, save_tables, verify_tables
-
-
-@pytest.mark.parametrize("suite", ["flights", "nyc311"])
-def test_offline_fixture_provenance(suite: str) -> None:
-    metadata = verify_tables(suite, FIXTURES)
-    assert metadata["source"]["files"]
-    assert all(record["rows"] > 0 for record in metadata["tables"].values())
+from workloads.storage import digest, download, save_tables, verify_tables
 
 
 def test_download_checks_cached_and_fresh_bytes(tmp_path: Path) -> None:
@@ -41,31 +35,31 @@ def test_invalid_download_never_becomes_a_cached_source(tmp_path: Path) -> None:
 
 
 def test_prepared_data_and_manifest_tampering_fail(tmp_path: Path) -> None:
-    save_tables("flights", {"flights": pyarrow.table({"value": [1]})}, tmp_path)
-    verify_tables("flights", tmp_path)
-    path = tmp_path / "flights/manifest.json"
+    save_tables("udfbench", {"rows": pyarrow.table({"value": [1]})}, tmp_path)
+    verify_tables("udfbench", tmp_path)
+    path = tmp_path / "udfbench/manifest.json"
     metadata = json.loads(path.read_text())
     metadata["source"]["selection"] = "changed"
     path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="Source manifest changed"):
-        verify_tables("flights", tmp_path)
+        verify_tables("udfbench", tmp_path)
     metadata["schema_version"] = 2
     path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="Unsupported prepared-data schema"):
-        verify_tables("flights", tmp_path)
-    save_tables("flights", {"flights": pyarrow.table({"value": [1]})}, tmp_path)
-    (tmp_path / "flights/flights.parquet").write_text("changed")
+        verify_tables("udfbench", tmp_path)
+    save_tables("udfbench", {"rows": pyarrow.table({"value": [1]})}, tmp_path)
+    (tmp_path / "udfbench/rows.parquet").write_text("changed")
     with pytest.raises(ValueError, match="Checksum mismatch"):
-        verify_tables("flights", tmp_path)
+        verify_tables("udfbench", tmp_path)
 
 
 def test_catalog_rejects_duplicate_identifiers(monkeypatch: pytest.MonkeyPatch) -> None:
-    workload = catalog.load(["flights"], FIXTURES)[0]
+    workload = load(Path())[0]
     monkeypatch.setitem(
         catalog.SUITES, "duplicate", lambda *args, **kwargs: [workload, replace(workload)]
     )
     with pytest.raises(ValueError, match="unique"):
-        catalog.load(["duplicate"], FIXTURES)
+        catalog.load(["duplicate"], Path())
 
 
 def test_missing_upstream_source_is_an_error_not_unsupported(tmp_path: Path) -> None:

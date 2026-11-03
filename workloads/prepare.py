@@ -1,85 +1,14 @@
 import argparse
 from collections.abc import Callable
 from pathlib import Path
-from zipfile import ZipFile
 
 import pyarrow
-from pyarrow import compute, csv, parquet
+from pyarrow import parquet
 
 from workloads import qure
 from workloads.catalog import DEFAULT_SUITES
 from workloads.source import parse_sources, resolve_sources
 from workloads.storage import DEFAULT_CACHE, read_manifest, save_tables
-
-FLIGHT_COLUMNS = {
-    "FlightDate": "date",
-    "Reporting_Airline": "carrier",
-    "Origin": "origin",
-    "OriginCityName": "city",
-    "Dest": "destination",
-    "DepTime": "departure_time",
-    "ArrDelay": "arrival_delay",
-    "Cancelled": "cancelled",
-    "Distance": "distance",
-}
-
-
-def flights(paths: list[Path]) -> dict[str, pyarrow.Table]:
-    types = {name: pyarrow.string() for name in FLIGHT_COLUMNS}
-    with ZipFile(paths[0]) as archive:
-        filename = next(name for name in archive.namelist() if name.endswith(".csv"))
-        with archive.open(filename) as stream:
-            table = csv.read_csv(
-                stream,
-                convert_options=csv.ConvertOptions(
-                    include_columns=list(types),
-                    column_types=types,
-                    strings_can_be_null=True,
-                ),
-            ).rename_columns(list(FLIGHT_COLUMNS.values()))
-    for name, type in (
-        ("departure_time", pyarrow.int64()),
-        ("arrival_delay", pyarrow.float64()),
-        ("cancelled", pyarrow.float64()),
-        ("distance", pyarrow.float64()),
-    ):
-        table = table.set_column(table.schema.get_field_index(name), name, table[name].cast(type))
-    airports = (
-        table.select(["origin", "city"])
-        .group_by(["origin", "city"])
-        .aggregate([])
-        .sort_by([("origin", "ascending"), ("city", "ascending")])
-    )
-    if len(set(airports["origin"].to_pylist())) != airports.num_rows:
-        raise ValueError("The airport lookup needs one city per airport")
-    return {"flights": table, "airports": airports.rename_columns(["airport", "city"])}
-
-
-def nyc311(paths: list[Path]) -> dict[str, pyarrow.Table]:
-    names = [
-        "unique_key",
-        "created_date",
-        "closed_date",
-        "agency",
-        "complaint_type",
-        "descriptor",
-        "incident_zip",
-        "borough",
-    ]
-    table = csv.read_csv(
-        paths[0],
-        convert_options=csv.ConvertOptions(
-            column_types=dict.fromkeys(names, pyarrow.string()),
-            strings_can_be_null=True,
-        ),
-    )
-    for name in ("created_date", "closed_date"):
-        table = table.set_column(
-            table.schema.get_field_index(name),
-            name,
-            compute.cast(table[name], pyarrow.timestamp("us")),
-        )
-    return {"requests": table}
 
 
 def udfbench(paths: list[Path]) -> dict[str, pyarrow.Table]:
@@ -94,8 +23,6 @@ def udfbench(paths: list[Path]) -> dict[str, pyarrow.Table]:
 
 PREPARERS: dict[str, Callable[[list[Path]], dict[str, pyarrow.Table]]] = {
     "udfbench": udfbench,
-    "flights": flights,
-    "nyc311": nyc311,
     "qure": qure.prepare,
 }
 

@@ -10,7 +10,7 @@ uv run python -m bench.report .cache/results/run.json --markdown .cache/results/
 ```
 
 For a quick check, add `--rows 1000 --warmups 0 --rounds 1`.
-Select cases with `--cases flights/year_month` or engines with `--engines spark`.
+Select cases with `--cases udfbench/lowerize` or engines with `--engines spark`.
 Small runs validate the framework. They do not establish production speedups.
 
 ## Measurements
@@ -20,8 +20,8 @@ An oracle exception or mismatch produces an error, with no speedup reported.
 
 Each case has two warmups and seven rounds. The runner rotates execution order and saves
 every sample. Reports use the median of paired baseline/udfx ratios, plus variation and
-slower-case counts. Each Python UDF form appears separately. Handwritten native expressions
-appear where provided. The primary Python baseline is fixed before timing.
+slower-case counts. Each Python UDF form appears separately.
+The primary Python baseline is fixed before timing.
 Apache DataFusion registers these deterministic Python functions as immutable.
 The deduplicated mean gives each distinct compiled-plan fingerprint equal weight.
 Reports separate engine expressions, runtime UDFs, guarded execution, and Python fallback.
@@ -31,7 +31,7 @@ Overall speedup includes every timed case, including Python-only cases.
 
 - **Memory:** project the UDF over prepared input. Apache Spark caches input first.
 - **Query:** scan Apache Parquet, apply the UDF, filter null outputs, and group when the workload
-  defines a category. The flight delay query also joins an airport lookup.
+  defines a category.
 
 All engines materialize Apache Arrow output. These are adapted queries, not a reproduction of all
 21 upstream UDFBench queries. Compilation and first execution have separate timings.

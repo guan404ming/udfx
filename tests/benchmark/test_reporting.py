@@ -164,7 +164,7 @@ def test_code_summary_keeps_framework_and_compiler_separate() -> None:
             for name in [
                 "src/udfx/api.py",
                 "bench/runner.py",
-                "workloads/flights.py",
+                "workloads/udfbench.py",
                 "tests/test_api.py",
                 "workloads/corpus/cases.py",
                 "bench/mine/command.py",

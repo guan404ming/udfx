@@ -5,7 +5,7 @@ import pyarrow
 from datafusion import functions
 
 from bench.callables import batched
-from bench.data import CATEGORY, JOIN_KEY, LOOKUP_KEY, POSITION, Input
+from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
 from udfx.backends.datafusion import DataFusionBackend
@@ -38,16 +38,7 @@ class Engine(Adapter):
 
     def execute(self, expr: Any, mode: str) -> pyarrow.Table:
         frame = self.context.read_parquet(str(self.data.path)) if mode == "query" else self.frame
-        if mode == "query" and self.data.lookup_path is not None:
-            frame = frame.join(
-                self.context.read_parquet(str(self.data.lookup_path)),
-                left_on=JOIN_KEY,
-                right_on=LOOKUP_KEY,
-                how="left",
-            )
-        grouped = mode == "query" and (
-            self.data.lookup is not None or CATEGORY in self.data.table.column_names
-        )
+        grouped = mode == "query" and CATEGORY in self.data.table.column_names
         if grouped:
             projected = frame.select(column(CATEGORY), expr.alias("value"))
             return (

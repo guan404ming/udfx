@@ -14,23 +14,23 @@ from bench.data import prepare
 from bench.runner import ENGINES, run
 from bench.timing import Settings
 from bench.validation import validate
+from tests.benchmark.samples import load
 from udfx.frontend import trace
 from udfx.types import DATE, FLOAT, INT, STR
-from workloads.catalog import load
 from workloads.models import Workload
-from workloads.storage import FIXTURES
 
-WORKLOADS = load(["flights", "nyc311"], FIXTURES)
+NAMES = [workload.name for workload in load(Path())]
 PARAMETERS = [
     pytest.param(engine, id=engine, marks=pytest.mark.xdist_group(engine)) for engine in ENGINES
 ]
 
 
 @pytest.mark.parametrize("engine", PARAMETERS)
-@pytest.mark.parametrize("workload", WORKLOADS, ids=lambda workload: workload.identifier)
-def test_public_inputs_match_python_on_every_engine(
-    workload: Workload, engine: str, tmp_path: Path
+@pytest.mark.parametrize("name", NAMES)
+def test_sample_inputs_match_python_on_every_engine(
+    name: str, engine: str, tmp_path: Path, sample: Path
 ) -> None:
+    workload = next(workload for workload in load(sample) if workload.name == name)
     results = run(workload, [engine], Settings(warmups=0, rounds=1), tmp_path)
     assert len(results) == 2
     for result in results:
@@ -44,9 +44,9 @@ def test_public_inputs_match_python_on_every_engine(
 
 @pytest.mark.parametrize("engine", PARAMETERS)
 def test_benchmark_does_not_time_wrong_results(
-    engine: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    engine: str, tmp_path: Path, sample: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    workload = WORKLOADS[2]
+    workload = load(sample)[0]
     module = importlib.import_module(f"bench.engines.{engine}")
     original = module.Engine.python
 
@@ -65,9 +65,9 @@ def test_benchmark_does_not_time_wrong_results(
 
 @pytest.mark.parametrize("engine", PARAMETERS)
 def test_baselines_do_not_call_program_run(
-    engine: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    engine: str, tmp_path: Path, sample: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    workload = WORKLOADS[2]
+    workload = load(sample)[0]
     data = prepare(workload, tmp_path, 3)
     assert workload.function is not None
     program = trace(workload.function, workload.schema)

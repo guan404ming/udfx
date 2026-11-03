@@ -65,9 +65,6 @@ def measure(
         else "native"
     )
     expressions = {**adapter.python(), "udfx": expr}
-    native = adapter.native()
-    if native is not None:
-        expressions["native"] = native
     common = {
         "validation": "exact" if workload.deterministic else "distribution",
         "compile_seconds": compile_seconds,
@@ -82,7 +79,6 @@ def measure(
         "settings": adapter.settings(),
         "timing": asdict(settings),
         "primary_baseline": adapter.primary,
-        "handwritten_native": "available" if native is not None else "not provided",
         "fingerprint": hashlib.sha256(fingerprint(adapter.backend, program).encode()).hexdigest(),
     }
     records = []
