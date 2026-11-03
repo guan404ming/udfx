@@ -28,6 +28,10 @@ jobs:
             filter: not spark
           - name: spark
             filter: spark
+            paths: --ignore=tests/backends
+          - name: spark-backends
+            filter: spark
+            paths: tests/backends
     name: check (${{ matrix.python }}, ${{ matrix.shard.name }})
     env:
       UDFX_TESTS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'full' || 'fast' }}
@@ -48,11 +52,12 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
           uv run pyright
-      - run: uv run pytest -k "${{ matrix.shard.filter }}" --cov --cov-report= --junitxml=reports/tests-${{ matrix.python }}-${{ matrix.shard.name }}.xml
-      - run: uv run pytest -m corpus -k "${{ matrix.shard.filter }}" --cov --cov-append --cov-report= --junitxml=reports/corpus-${{ matrix.python }}-${{ matrix.shard.name }}.xml
-      - if: env.UDFX_TESTS == 'full'
+      - run: uv run pytest ${{ matrix.shard.paths }} -k "${{ matrix.shard.filter }}" --cov --cov-report= --junitxml=reports/tests-${{ matrix.python }}-${{ matrix.shard.name }}.xml
+      - if: matrix.shard.name != 'spark'
+        run: uv run pytest -m corpus -k "${{ matrix.shard.filter }}" --cov --cov-append --cov-report= --junitxml=reports/corpus-${{ matrix.python }}-${{ matrix.shard.name }}.xml
+      - if: env.UDFX_TESTS == 'full' && matrix.shard.name != 'spark-backends'
         run: uv run python -m workloads.prepare --suites udfbench --rows 32
-      - if: env.UDFX_TESTS == 'full'
+      - if: env.UDFX_TESTS == 'full' && matrix.shard.name != 'spark-backends'
         run: uv run pytest -m public -k "${{ matrix.shard.filter }}" --cov --cov-append --cov-report= --junitxml=reports/public-${{ matrix.python }}-${{ matrix.shard.name }}.xml
       - if: always()
         run: mv .coverage reports/.coverage.${{ matrix.python }}.${{ matrix.shard.name }}
