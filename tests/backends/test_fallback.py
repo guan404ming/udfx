@@ -8,7 +8,8 @@ from pyspark.sql import functions
 from pyspark.sql.types import LongType
 
 from udfx import compile
-from udfx.backends.base import Backend, FallbackError
+from udfx.backends.base import Backend
+from udfx.backends.faults import FallbackError
 from udfx.backends.polars import PolarsBackend
 from udfx.backends.spark import SparkBackend
 from udfx.ir import FALSE, Col, Lit

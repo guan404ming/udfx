@@ -8,8 +8,11 @@ from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
 from udfx.backends.spark import SparkBackend
+from udfx.ir import Col, Lit, lit
+from udfx.ops import apply
+from udfx.semantics.facts import integer_operation_fits
 from udfx.testing import check_function
-from udfx.types import INT, INT64_MAX, INT64_MIN
+from udfx.types import INT, INT64_MAX, INT64_MIN, STR
 
 
 @pytest.mark.parametrize("backend", backend_params())
@@ -80,3 +83,11 @@ def test_bounded_integer_arithmetic_avoids_fallback(
         assert not fallback_in_plan(translation.expr, backend.name)
     values = (INT64_MIN, INT64_MIN + 1, -257, -101, -1, 0, 101, 257, INT64_MAX)
     assert check_function(function, schema, backend, [(value,) for value in values]) == []
+
+
+def test_missing_slice_bound_keeps_integer_operation_fit() -> None:
+    text = Col("text", STR)
+    sliced = apply("slice", text, apply(".find", text, lit("a")), Lit(None, INT.or_none()))
+    assert integer_operation_fits(
+        apply("__sub__", apply("len", sliced), lit(5)), size_limit=INT64_MAX
+    )

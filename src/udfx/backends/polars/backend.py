@@ -46,7 +46,11 @@ class PolarsBackend(Backend[pl.Expr]):
         return pl.col(node.name)
 
     def bind(self, value: pl.Expr, body: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
-        return pl.concat_arr(value).arr.to_list().list.eval(body(pl.element())).list.first()
+        return (
+            pl.struct(value.alias("0"))
+            .struct.with_fields(body(pl.field("0")).alias("1"))
+            .struct.field("1")
+        )
 
     def bind_sequence(
         self, value: pl.Expr, steps: Sequence[Callable[[pl.Expr], pl.Expr]]
@@ -89,6 +93,10 @@ class PolarsBackend(Backend[pl.Expr]):
 
     def list_filter(self, source: pl.Expr, predicate: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
         return evaluate_list(source, pl.element().filter(predicate(pl.element())))
+
+    def list_distinct(self, source: pl.Expr, transform: Callable[[pl.Expr], pl.Expr]) -> pl.Expr:
+        values = self.list_transform(source.list.unique().list.sort(), transform)
+        return values.list.gather(source.list.eval(pl.element().rank("dense").cast(pl.Int64) - 1))
 
     def list_indexed(
         self,

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Container, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from udfx.backends.rules import Lowered, Scope
-from udfx.graphs import free_finder, substitute
-from udfx.ir import FALSE, Col, Comprehension, Element, Lit, Node, children
+from udfx.backends.siblings import View, fusing, share, shared, sharing, siblings
+from udfx.graphs import free_finder, needed, substitute
+from udfx.ir import FALSE, Call, Col, Comprehension, Element, Lit, Node, children
 from udfx.semantics.bindings import bound_sources
+from udfx.types import Kind
 
 if TYPE_CHECKING:
     from udfx.backends.base import Backend
+
+type Place[E] = tuple[int, bool | None, bool] | tuple[int, View[E]]
 
 
 def dependencies(node: Node, find: Callable[[Node], frozenset[Element]]) -> tuple[Node, ...]:
@@ -57,32 +61,41 @@ def layers(roots: Sequence[Node], incoming: Scope[object]) -> tuple[list[Node], 
 
     for root in roots:
         visit(root)
-    groups: dict[int, list[Node]] = {}
-    depths: dict[int, int] = {}
-    for node in order:
-        level = max((depths.get(id(part), 0) for part in parts[id(node)]), default=0)
-        if counts[id(node)] > 1 and not isinstance(node, Col | Element | Lit):
-            groups.setdefault(level, []).append(node)
-            level += 1
-        depths[id(node)] = level
-    return order, list(groups.values())
+    fused = siblings(order)
+    forced: dict[int, int] = {}
+    while True:
+        groups: dict[int, list[Node]] = {}
+        depths: dict[int, int] = {}
+        grouped: set[int] = set()
+        for node in order:
+            level = max((depths.get(id(part), 0) for part in parts[id(node)]), default=0)
+            level = max(level, forced.get(id(node), 0))
+            if id(node) in fused or (
+                counts[id(node)] > 1
+                and not isinstance(node, Col | Element | Lit)
+                and not recomputed(node, grouped)
+            ):
+                grouped.add(id(node))
+                groups.setdefault(level, []).append(node)
+                level += 1
+            depths[id(node)] = level
+        found = {
+            key: max(depths[id(member)] - 1 for member in members) for key, members in fused.items()
+        }
+        if found == forced:
+            return order, list(groups.values())
+        forced = found
 
 
-def needed(roots: Sequence[Node], variables: Container[int]) -> set[int]:
-    found: set[int] = set()
-    seen: set[int] = set()
-
-    def visit(node: Node) -> None:
-        if id(node) in variables:
-            found.add(id(node))
-        elif id(node) not in seen:
-            seen.add(id(node))
-            for child in children(node):
-                visit(child)
-
-    for root in roots:
-        visit(root)
-    return found
+def recomputed(node: Node, grouped: set[int]) -> bool:
+    return (
+        isinstance(node, Call)
+        and node.type.kind in (Kind.INT, Kind.BOOL)
+        and not node.op.costly
+        and all(
+            isinstance(part, Col | Element | Lit) or id(part) in grouped for part in node.arguments
+        )
+    )
 
 
 def lower_graph[E](backend: Backend[E], node: Node, scope: Scope[E]) -> Lowered[E]:
@@ -90,6 +103,16 @@ def lower_graph[E](backend: Backend[E], node: Node, scope: Scope[E]) -> Lowered[
 
 
 def lower_block[E](
+    backend: Backend[E],
+    roots: Sequence[Node],
+    incoming: Scope[E],
+    finish: Callable[[Sequence[Lowered[E]]], Lowered[E]],
+) -> Lowered[E]:
+    with sharing():
+        return lower_layers(backend, roots, incoming, finish)
+
+
+def lower_layers[E](
     backend: Backend[E],
     roots: Sequence[Node],
     incoming: Scope[E],
@@ -126,21 +149,27 @@ def lower_block[E](
         if id(node) in symbols
     }
 
-    def lower(node: Node, local: dict[int, Lowered[E]]) -> Lowered[E]:
+    def lower(nodes: Sequence[Node], local: dict[int, Lowered[E]]) -> list[Lowered[E]]:
         replacements = {key: symbols[key] for key in local}
-        with bound_sources(sources):
-            return backend.lower(
-                substitute(node, replacements),
-                {symbols[key]: value for key, value in local.items()},
-            )
+        substituted = [substitute(node, replacements) for node in nodes]
+        bound = {symbols[key]: value for key, value in local.items()}
+        with bound_sources(sources), fusing(substituted):
+            return [backend.lower(node, bound) for node in substituted]
 
     def exact_state(value: Lowered[E]) -> bool | None:
         return None if value.exact is None else value.exact is not False
 
-    def pack(local: dict[int, Lowered[E]]) -> tuple[E, dict[int, tuple[int, bool | None, bool]]]:
+    def pack(local: dict[int, Lowered[E]]) -> tuple[E, dict[int, Place[E]]]:
         values: list[E] = []
-        offsets: dict[int, tuple[int, bool | None, bool]] = {}
+        offsets: dict[int, Place[E]] = {}
+        bases: dict[int, int] = {}
         for key, value in local.items():
+            if (found := shared(value)) is not None:
+                if id(found[0]) not in bases:
+                    bases[id(found[0])] = len(values)
+                    values.append(found[0])
+                offsets[key] = bases[id(found[0])], found[1]
+                continue
             offsets[key] = len(values), exact_state(value), value.overflow is not None
             values.append(value.expr)
             if value.exact is not None and value.exact is not False:
@@ -149,22 +178,25 @@ def lower_block[E](
                 values.append(value.overflow)
         return backend.record(values), offsets
 
-    def unpack(
-        record: E, offsets: dict[int, tuple[int, bool | None, bool]]
-    ) -> dict[int, Lowered[E]]:
-        return {
-            key: Lowered(
-                backend.field(record, offset),
-                False if exact is False else backend.field(record, offset + 1) if exact else None,
-                backend.field(record, offset + 1 + (exact is True)) if overflow else None,
-            )
-            for key, (offset, exact, overflow) in offsets.items()
-        }
+    def unpack(record: E, offsets: dict[int, Place[E]]) -> dict[int, Lowered[E]]:
+        return {key: place(record, value) for key, value in offsets.items()}
 
-    def advance(
-        index: int, local: dict[int, Lowered[E]]
-    ) -> tuple[E, dict[int, tuple[int, bool | None, bool]]]:
-        variables = {**local, **{id(node): lower(node, local) for node in groups[index]}}
+    def place(record: E, found: Place[E]) -> Lowered[E]:
+        if len(found) == 2:
+            base = backend.field(record, found[0])
+            return share(found[1](base), base, found[1])
+        offset, exact, overflow = found
+        return Lowered(
+            backend.field(record, offset),
+            False if exact is False else backend.field(record, offset + 1) if exact else None,
+            backend.field(record, offset + 1 + (exact is True)) if overflow else None,
+        )
+
+    def advance(index: int, local: dict[int, Lowered[E]]) -> tuple[E, dict[int, Place[E]]]:
+        variables = {
+            **local,
+            **dict(zip(map(id, groups[index]), lower(groups[index], local), strict=True)),
+        }
         required = needed(
             [*roots, *(node for group in groups[index + 1 :] for node in group)], variables
         )
@@ -182,7 +214,7 @@ def lower_block[E](
 
     def output(value: E) -> E:
         local = unpack(value, offsets)
-        lowered = finish([lower(node, local) for node in roots])
+        lowered = finish(lower(roots, local))
         metadata.append((exact_state(lowered), lowered.overflow is not None))
         return backend.record(
             [

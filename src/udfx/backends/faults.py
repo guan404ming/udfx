@@ -22,6 +22,11 @@ def encode_fallback_error(error: Exception) -> str:
     return f"{FALLBACK_MARKER}{type(error).__name__}: {detail}"
 
 
+class FallbackError(RuntimeError):
+    def __init__(self, error: Exception | str) -> None:
+        super().__init__(error if isinstance(error, str) else encode_fallback_error(error))
+
+
 def decode_fallback_error(text: str) -> Exception | None:
     _, found, detail = text.partition(FALLBACK_MARKER)
     name, _, message = detail.partition(": ")

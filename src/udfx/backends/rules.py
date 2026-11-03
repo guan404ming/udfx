@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from udfx.backends.guarantees import Guarantee
+from udfx.backends.siblings import share, shared
 from udfx.frontend.core.comprehensions import cardinality
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.membership import comparison_membership, initial_lowercase_membership
@@ -33,14 +34,18 @@ class Lowered[E]:
     def consume(self, finish: Callable[[Lowered[E]], E]) -> E:
         return finish(self) if self.prepare is None else self.prepare(finish)
 
-    def map(self, transform: Callable[[Lowered[E]], Lowered[E]]) -> Lowered[E]:
-        if self.prepare is None:
-            return transform(self)
+    def map(self, transform: Callable[[Lowered[E]], Lowered[E]], pure: bool = False) -> Lowered[E]:
         value = transform(replace(self, prepare=None))
-        return replace(
-            value,
-            prepare=lambda finish: self.consume(lambda part: transform(part).consume(finish)),
-        )
+        if self.prepare is not None:
+            value = replace(
+                value,
+                prepare=lambda finish: self.consume(lambda part: transform(part).consume(finish)),
+            )
+        found = shared(self) if pure else None
+        if found is None:
+            return value
+        base, view = found
+        return share(value, base, lambda bound: transform(view(bound)))
 
 
 type Scope[E] = Mapping[Node, E | Lowered[E]]

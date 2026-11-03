@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import reduce
 from typing import Any, ClassVar, Literal, cast
 
-from udfx.backends.faults import NativeFaults, decode_fallback_error, encode_fallback_error
+from udfx.backends.faults import FallbackError, NativeFaults, decode_fallback_error
 from udfx.backends.lowering_context import (
     distinct_guards,
     factored_guards,
@@ -38,11 +38,6 @@ def output_names(count: int) -> list[str]:
     return [f"{OUTPUT} {index}" for index in range(count)]
 
 
-class FallbackError(RuntimeError):
-    def __init__(self, error: Exception | str) -> None:
-        super().__init__(error if isinstance(error, str) else encode_fallback_error(error))
-
-
 class Backend[E](ABC):
     name: ClassVar[str]
     rules: ClassVar[RuleSet[Any]]
@@ -51,6 +46,7 @@ class Backend[E](ABC):
     binds: ClassVar[bool] = False
     hoisted: ClassVar[frozenset[Kind]] = frozenset({Kind.STR, Kind.INT, Kind.LIST})
     indexes: ClassVar[bool] = False
+    size_limit: ClassVar[int | None] = None
 
     def supports_graphs(self) -> bool:
         return self.graphs
@@ -146,6 +142,9 @@ class Backend[E](ABC):
 
     def list_filter(self, source: E, predicate: Callable[[E], E]) -> E:
         raise Unsupported(f"{self.name} has no list filter")
+
+    def list_distinct(self, source: E, transform: Callable[[E], E]) -> E | None:
+        return None
 
     def list_indexed(
         self, source: E, value: Callable[[E, E], E], condition: Callable[[E, E], E] | None

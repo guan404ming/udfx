@@ -35,6 +35,7 @@ class Op:
     reference: Callable[..., object]
     faults: Callable[..., tuple[Fault, ...]] = field(default=no_faults)
     deterministic: bool = True
+    costly: bool = False
 
     @property
     def key(self) -> OpKey:

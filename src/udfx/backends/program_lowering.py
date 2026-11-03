@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import operator
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -8,14 +9,16 @@ from typing import TYPE_CHECKING
 
 from udfx.backends.diagnostics import CURRENT as DIAGNOSTICS
 from udfx.backends.diagnostics import capture_lowering, record_lowering
+from udfx.backends.factoring import factor_branches
 from udfx.backends.graph import lower_block
 from udfx.backends.graph_cost import graph_cost
 from udfx.backends.hoisting import size
 from udfx.backends.lowering_context import bindings_enabled, lowering_context, runtime_udfs
 from udfx.backends.rules import Lowered, fold_predicate, knowing_parents
+from udfx.backends.suffixes import dispatch_suffixes
 from udfx.errors import Unsupported
 from udfx.graphs import canonicalize, unique_size
-from udfx.ir import FALSE, Lit
+from udfx.ir import FALSE, Call, Lit
 from udfx.program import Program
 from udfx.semantics.assumptions import assuming
 
@@ -38,6 +41,15 @@ def choosing_graph(graph: bool) -> Generator[None]:
 
 
 def build_smallest[E](backend: Backend[E], program: Program) -> E:
+    expr = smallest(backend, program)
+    if backend.size_limit is None or len(str(expr)) <= backend.size_limit:
+        return expr
+    return backend.compose(
+        Lowered(backend.literal(Lit(None, program.result.or_none())), False), program
+    )
+
+
+def smallest[E](backend: Backend[E], program: Program) -> E:
     backend.check_names(program.schema)
     roots = canonicalize((program.value, program.fault))
     ordinary, shared = graph_cost(roots)
@@ -71,6 +83,7 @@ def lower_program[E](
             exact, value_guard=True, fault_guard=False, failure=False, native_errors=False
         )
         return Lowered(backend.literal(Lit(None, program.result.or_none())), exact)
+    program = factored(backend, program)
     expanded = size(program.value) + size(program.fault)
     graph = False
     selected = program
@@ -97,6 +110,18 @@ def lower_program[E](
             raise
     with lowering_context(), knowing_parents(roots):
         return lower_result(backend, program, results, False)
+
+
+def factored[E](backend: Backend[E], program: Program) -> Program:
+    def literal(call: Call, index: int) -> bool:
+        return index in backend.rules.options(call.op.key).literals
+
+    roots = canonicalize((program.value, program.fault))
+    rewritten = factor_branches(dispatch_suffixes(roots, literal), literal)
+    if all(map(operator.is_, rewritten, roots)):
+        return program
+    value, fault = canonicalize(rewritten)
+    return replace(program, value=value, fault=fault)
 
 
 def lower_result[E](

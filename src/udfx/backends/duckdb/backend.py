@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import itertools
 import string
 from collections.abc import Callable, Mapping, Sequence
@@ -12,10 +11,9 @@ import pyarrow as pa
 from duckdb import Expression, sqltypes
 from duckdb.func import ARROW, SPECIAL
 
-from udfx import __version__
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
-from udfx.backends.duckdb.connections import CONNECTION, connection_number
+from udfx.backends.duckdb.connections import CONNECTION, fallback_name
 from udfx.backends.duckdb.dtypes import dtype
 from udfx.backends.duckdb.rules import RULES, bind, column, constant, function, when
 from udfx.backends.faults import NativeFaults, faults_for
@@ -23,34 +21,16 @@ from udfx.backends.lowering_context import lowering_context
 from udfx.backends.program_lowering import lower_program
 from udfx.backends.registration import Lowered, RuleSet
 from udfx.backends.results import FallbackLowering, ResultLowering, fallback_result
-from udfx.ir import Col, Lit, digest
+from udfx.ir import Col, Lit
 from udfx.program import Program
 from udfx.types import Kind, Type
 
 EXACT = f"{RESERVED}exact"
 NATIVE = f"{RESERVED}native"
 ROW = f"{RESERVED}row"
-FALLBACK = "udfx fallback"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 ELEMENTS = itertools.count()
 DEFAULT_FAULTS = NativeFaults()
-
-
-def fallback_name(program: Program, connection: duckdb.DuckDBPyConnection) -> str:
-    code = program.function.__code__
-    schema = [(name, str(type)) for name, type in program.schema.items()]
-    parts = (
-        __version__,
-        code.co_code,
-        code.co_consts,
-        code.co_names,
-        schema,
-        program.series is not None,
-        digest(program.value),
-        digest(program.fault),
-    )
-    key = hashlib.sha256(repr(parts).encode()).hexdigest()
-    return f"{FALLBACK} {key} {connection_number(connection)}"
 
 
 class DuckDBBackend(Backend[Expression]):
@@ -121,6 +101,14 @@ class DuckDBBackend(Backend[Expression]):
     def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
         return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")
 
+    def bind_sequence(
+        self, value: Expression, steps: Sequence[Callable[[Expression], Expression]]
+    ) -> Expression:
+        items = function("list_value", value)
+        for step in steps:
+            items = self.list_transform(items, step)
+        return function("list_extract", items, constant(1))
+
     def select_value(
         self,
         value: Expression,
@@ -149,6 +137,22 @@ class DuckDBBackend(Backend[Expression]):
         name = f"{RESERVED}element {next(ELEMENTS)}"
         return function(
             "list_transform", source, duckdb.LambdaExpression(name, transform(column(name)))
+        )
+
+    def list_distinct(
+        self, source: Expression, transform: Callable[[Expression], Expression]
+    ) -> Expression:
+        return self.bind(
+            function("list_distinct", source),
+            lambda keys: self.bind(
+                self.list_transform(keys, transform),
+                lambda values: self.list_transform(
+                    source,
+                    lambda item: function(
+                        "list_extract", values, function("list_position", keys, item)
+                    ),
+                ),
+            ),
         )
 
     def list_filter(

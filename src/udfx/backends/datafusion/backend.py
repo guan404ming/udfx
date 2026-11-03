@@ -98,7 +98,8 @@ class DataFusionBackend(Backend[Expr]):
             lowered.map(
                 lambda value: replace(
                     value, expr=value.expr.cast(dtype(node.type, string_type=pa.string_view()))
-                )
+                ),
+                pure=True,
             )
             if isinstance(node, Comprehension | Element) and node.type.kind is Kind.LIST
             else lowered

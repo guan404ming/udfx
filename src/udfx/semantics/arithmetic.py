@@ -2,7 +2,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from udfx.ir import Call, Node, children
+from udfx.ir import Call, Lit, Node, children
 from udfx.semantics.bindings import source
 from udfx.semantics.numbers import ARITHMETIC
 from udfx.semantics.ranges import integer_bounds
@@ -35,7 +35,7 @@ def integer_dependencies(node: Node) -> Iterator[Node]:
         if id(part) in seen:
             continue
         seen.add(id(part))
-        if part is node or part.type.kind is Kind.INT:
+        if part is node or (part.type.kind is Kind.INT and part != Lit(None, part.type)):
             yield part
         pending.extend(children(source(part)))
 

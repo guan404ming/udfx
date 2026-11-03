@@ -52,6 +52,7 @@ class SparkBackend(Backend[Column]):
     graphs: ClassVar[bool] = True
     choose_graphs: ClassVar[bool] = True
     hoisted: ClassVar[frozenset[Kind]] = frozenset({Kind.INT, Kind.LIST})
+    size_limit: ClassVar[int | None] = 500_000
 
     def __init__(self, session: SparkSession | None = None) -> None:
         self._session = session
@@ -157,7 +158,7 @@ class SparkBackend(Backend[Column]):
     def bind_sequence(self, value: Column, steps: Sequence[Callable[[Column], Column]]) -> Column:
         for step in steps:
             value = functions.aggregate(
-                functions.array(functions.lit(0)), value, lambda total, item: total, step
+                functions.array().cast("array<int>"), value, lambda total, item: total, step
             )
         return value
 

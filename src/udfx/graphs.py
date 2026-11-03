@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pickle
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Container, Sequence
 from dataclasses import fields, replace
 
 from udfx.ir import Call, Comprehension, Element, Node, children
@@ -123,3 +123,20 @@ def free_finder() -> Callable[[Node], frozenset[Element]]:
         return seen[id(part)]
 
     return visit
+
+
+def needed(roots: Sequence[Node], variables: Container[int]) -> set[int]:
+    found: set[int] = set()
+    seen: set[int] = set()
+
+    def visit(node: Node) -> None:
+        if id(node) in variables:
+            found.add(id(node))
+        elif id(node) not in seen:
+            seen.add(id(node))
+            for child in children(node):
+                visit(child)
+
+    for root in roots:
+        visit(root)
+    return found

@@ -3,7 +3,8 @@ from dataclasses import replace
 import duckdb
 import pytest
 
-from udfx.backends.duckdb.backend import DuckDBBackend, fallback_name
+from udfx.backends.duckdb.backend import DuckDBBackend
+from udfx.backends.duckdb.connections import fallback_name
 from udfx.backends.duckdb.rules import column, constant
 from udfx.ir import Call, Col, lit
 from udfx.ops import apply

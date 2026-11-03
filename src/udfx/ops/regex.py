@@ -37,10 +37,12 @@ def split(text: str, pattern: str, flags: int, count: int) -> list[str]:
 
 
 for name in ("search", "match", "fullmatch"):
-    register(Op(f"re.{name}", (STR, STR, INT), STR.or_none(), partial(match_text, name)))
-register(Op("re.contains", (STR, STR, INT), BOOL, contains))
-register(Op("re.sub", (STR, STR, INT, STR, INT), STR, substitute))
-register(Op("re.findall", (STR, STR, INT), list_of(STR), findall))
-register(Op("re.first", (STR, STR, INT), STR.or_none(), first))
-register(Op("re.count", (STR, STR, INT), INT, count_matches))
-register(Op("re.split", (STR, STR, INT, INT), list_of(STR), split))
+    register(
+        Op(f"re.{name}", (STR, STR, INT), STR.or_none(), partial(match_text, name), costly=True)
+    )
+register(Op("re.contains", (STR, STR, INT), BOOL, contains, costly=True))
+register(Op("re.sub", (STR, STR, INT, STR, INT), STR, substitute, costly=True))
+register(Op("re.findall", (STR, STR, INT), list_of(STR), findall, costly=True))
+register(Op("re.first", (STR, STR, INT), STR.or_none(), first, costly=True))
+register(Op("re.count", (STR, STR, INT), INT, count_matches, costly=True))
+register(Op("re.split", (STR, STR, INT, INT), list_of(STR), split, costly=True))

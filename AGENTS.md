@@ -30,7 +30,8 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
 | `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
 | `src/udfx/backends/program_lowering.py` | Program limits, graph selection, and final fault handling |
-| `src/udfx/backends/graph.py` | Shared expression bindings. `graph_lists.py` combines comprehension values and guards |
+| `src/udfx/backends/graph.py` | Shared expression bindings. `graph_lists.py` combines comprehension values and guards. `siblings.py` fuses comprehensions over the same source and element. Graph records store a fused comprehension result once. Cheap shared integer and boolean calls are recomputed, not bound |
+| `src/udfx/backends/suffixes.py` | Rewrites `.endswith` chains into one `re.search` and a lookup. `factoring.py` moves branch conditions into shared call arguments |
 | `src/udfx/graphs.py` | IR canonicalization and substitution by node identity |
 | `src/udfx/backends/lowering_context.py` | Stores lowered expressions and binding settings for one lowering scope. Cache keys include branch conditions |
 | `src/udfx/backends/arithmetic.py` | Lowers proven integer regions with wide engine arithmetic. `reductions.py` unrolls bounded integer sums |
@@ -66,6 +67,7 @@ An op is an `Op(name, parameters, result, reference, faults)` in `src/udfx/ops/<
 - A param with `nullable=True` accepts `None`. The frontend adds `TypeError` or `AttributeError` faults for `None` on other params.
 - `faults(*args)` returns `Fault(kind, when)` items. `when` is an IR predicate. It must be true exactly when Python raises `kind`. Build it with `apply(name, *nodes)`.
 - Fault order matters. The first true fault wins.
+- Set `costly=True` on an op that graph lowering must not recompute. Regex ops set it.
 - `not`, `and`, and `or` lower to `~`, `&`, and `|` on every engine. `RuleSet()` registers these rules. Do not write backend rules for them.
 
 Op names:
@@ -111,10 +113,12 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `select_many` builds a flat case expression for literal choices. Shared lowering checks each choice for guards first.
 - A scalar binding adds three engine operations: an array, a transform, and an element selection. Hoist a repeated condition string only when it removes more operations. `hoisted` lists the kinds a backend hoists. Spark does not hoist strings, because a lambda turns off code generation for the body.
 - `lower_program(program)` returns a lowered program. `build` checks column names and applies fallback. Backend overrides call the shared lowering functions.
+- `list_distinct(source, transform)` applies `transform` once per distinct element and maps the results back. Shared comprehension lowering uses it for large bodies over `STR` or `INT` elements. Return `None` when the engine has no support.
 - `list_value` builds lists. `list_transform` and `list_filter` enable native comprehensions. `list_indexed` passes each element and its index, for engines that cannot lower `range`. Set `indexes = True` to try it before `range`. Only Spark sets it, because its lambdas repeat the source per element. Register word rewrites with `RULES.rewrite` to replace list operations with regexes. Spark keeps list operations because it shares one split between those uses. `base.py` uses Python fallback when a comprehension needs an unsupported list operation.
 - `bind(value, body)` evaluates `value` once and passes it to `body`. Set `binds = True` to lower an invariant list call once outside the comprehension lambdas. DuckDB binds. Spark also keeps numeric bindings with Python fallback when no nested lambda captures the bound value.
 - `graphs = True` enables shared graph lowering above the expression size limit. It requires `record`, `field`, and `bind`. `supports_graphs()` checks availability. DataFusion plans a small nested lambda once per backend to check engine support. This check does not execute a query. Bound values retain exactness and overflow predicates.
-- `bind_sequence` composes native record steps. Each step runs once during expression construction. Polars nests the steps. DuckDB uses successive bindings. Spark uses aggregate finish lambdas. DataFusion uses successive array transforms.
+- `size_limit` caps the length of the built expression text. Above it, `build` runs the whole program through `fallback`. Spark sets 500_000, because it interprets large lambda bodies slower than Python.
+- `bind_sequence` composes native record steps. Each step runs once during expression construction. Polars nests the steps. Spark uses aggregate finish lambdas over an empty array, so it never copies the record. DuckDB and DataFusion use successive list transforms.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and runs `program.run(rows)` through `run_fallback`. A pandas series program skips row gathering: the backend passes its pending columns to `program.batch` through `run_fallback`.
 - `evaluate(exprs, schema, rows, reduced)` runs expressions on in-memory rows for tests. With `reduced`, it runs aggregate expressions as one aggregate query. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
 - `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.

@@ -1,6 +1,7 @@
 from collections.abc import Mapping, Sequence
 
-from udfx.backends.graph import layers, needed
+from udfx.backends.graph import layers
+from udfx.graphs import needed
 from udfx.ir import Col, Element, Node, children
 
 
