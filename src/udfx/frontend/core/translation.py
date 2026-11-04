@@ -2,7 +2,7 @@ from typing import cast
 
 from udfx.ir import Call, Lit, Node, lit
 from udfx.ops import apply
-from udfx.semantics.translation import compose_replacement
+from udfx.semantics.text.translation import compose_replacement
 from udfx.types import STR, list_of
 
 

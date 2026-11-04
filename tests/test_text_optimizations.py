@@ -9,16 +9,16 @@ from conftest import backend_params
 from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
-from udfx.backends.duckdb import DuckDBBackend
-from udfx.backends.polars import PolarsBackend
-from udfx.backends.program_lowering import lower_program
-from udfx.backends.spark import SparkBackend
+from udfx.backends.engines.duckdb import DuckDBBackend
+from udfx.backends.engines.polars import PolarsBackend
+from udfx.backends.engines.spark import SparkBackend
+from udfx.backends.lowering.programs import lower_program
 from udfx.frontend import trace
 from udfx.frontend.core.text import combined_search
 from udfx.ir import Call, Col, lit
 from udfx.ops import apply
-from udfx.semantics.text import ANY_CHAR, char_class, whitespace
-from udfx.semantics.text_predicates import ascii_free
+from udfx.semantics.text.characters import ANY_CHAR, char_class, whitespace
+from udfx.semantics.text.predicates import ascii_free
 from udfx.testing import check_function
 from udfx.testing.text_traps import STRING_TRAPS
 from udfx.types import STR

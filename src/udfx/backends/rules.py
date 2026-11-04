@@ -7,8 +7,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from udfx.backends.guarantees import Guarantee
-from udfx.backends.siblings import share, shared
+from udfx.backends.graph.siblings import share, shared
+from udfx.backends.lowering.guarantees import Guarantee
 from udfx.frontend.core.comprehensions import cardinality
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.membership import comparison_membership, initial_lowercase_membership
@@ -17,8 +17,8 @@ from udfx.frontend.core.text import combined_search, joined_split, lowercase_con
 from udfx.graphs import parent_names
 from udfx.ir import FALSE, TRUE, Call, Guarded, If, Node
 from udfx.ops.registry import OpKey
-from udfx.semantics.assumptions import assuming
-from udfx.semantics.ranges import proven
+from udfx.semantics.numbers.assumptions import assuming
+from udfx.semantics.numbers.ranges import proven
 from udfx.types import Kind
 
 

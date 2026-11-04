@@ -10,7 +10,7 @@ It supports Apache DataFusion 55 or later. CI tests 55.0.0.
 ```python
 import udfx
 from datafusion import SessionContext
-from udfx.backends.datafusion import DataFusionBackend
+from udfx.backends.engines.datafusion import DataFusionBackend
 from udfx.types import STR
 
 

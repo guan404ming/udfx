@@ -2,7 +2,7 @@ import re
 
 from udfx.ir import FALSE, Call, Col, Comprehension, Element, If, Lit, Node, lit
 from udfx.ops import apply
-from udfx.semantics.ranges import proven
+from udfx.semantics.numbers.ranges import proven
 
 
 def literal_split(node: Node) -> tuple[Node, str] | None:

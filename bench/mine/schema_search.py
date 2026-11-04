@@ -7,7 +7,7 @@ from collections.abc import Iterator
 
 from bench.mine.bindings import HELPER_DEPTH
 from bench.mine.models import Binding, Candidate
-from udfx.semantics.datetimes import ATTRIBUTES
+from udfx.semantics.temporal.datetimes import ATTRIBUTES
 from udfx.types import BOOL, DATETIME, FLOAT, INT, STR, Type
 
 

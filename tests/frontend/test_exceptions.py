@@ -1,7 +1,7 @@
 import pytest
 from hypothesis import given
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.core.logic import conjunction, negate

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from udfx.ir import TRUE, Call, Col, Comprehension, If, ListValue, Lit, Node, lit
 from udfx.ops.registry import apply
-from udfx.semantics import json_paths
-from udfx.semantics.arithmetic import integer_dependencies
-from udfx.semantics.assumptions import CONDITIONS
 from udfx.semantics.bindings import source as bound_source
-from udfx.semantics.numbers import FLOAT_INT_MAX
-from udfx.semantics.ranges import LENGTH_OPS, integer_bounds, maximum_length, proven
-from udfx.semantics.text import has_prefix_suffix_overlap
-from udfx.semantics.text_predicates import ASCII_PREDICATES, ascii_uppercase_free
+from udfx.semantics.json import paths as json_paths
+from udfx.semantics.numbers.assumptions import CONDITIONS
+from udfx.semantics.numbers.operations import FLOAT_INT_MAX
+from udfx.semantics.numbers.ranges import LENGTH_OPS, integer_bounds, maximum_length, proven
+from udfx.semantics.numbers.regions import integer_dependencies
+from udfx.semantics.text.characters import has_prefix_suffix_overlap
+from udfx.semantics.text.predicates import ASCII_PREDICATES, ascii_uppercase_free
 from udfx.types import INT64_MAX, INT64_MIN, STR, Kind, Type, fits
 
 

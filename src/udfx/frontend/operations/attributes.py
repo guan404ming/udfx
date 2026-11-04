@@ -27,8 +27,8 @@ from udfx.frontend.operations.datetimes import duration_attribute
 from udfx.frontend.operations.series import series_attribute
 from udfx.frontend.resolve.constants import constant
 from udfx.frontend.resolve.frozen import Snapshot
-from udfx.semantics.dates import ATTRIBUTES as DATE_ATTRIBUTES
-from udfx.semantics.datetimes import ATTRIBUTES
+from udfx.semantics.temporal.dates import ATTRIBUTES as DATE_ATTRIBUTES
+from udfx.semantics.temporal.datetimes import ATTRIBUTES
 from udfx.types import Kind
 
 CLASS_ATTRIBUTES = {

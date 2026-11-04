@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+import operator
+from collections.abc import Callable
+from functools import reduce
+from typing import Any
+
+from udfx.backends.registration.datetimes import (
+    register_date_arithmetic,
+    register_datetime_arithmetic,
+    register_datetimes,
+)
+from udfx.backends.registration.math import (
+    register_float_variants,
+    register_math,
+    register_trigonometry,
+)
+from udfx.backends.registration.text import (
+    register_json,
+    register_padding,
+    register_regex,
+    register_string_predicates,
+    register_text_conversions,
+    register_translation,
+)
+from udfx.backends.rules import BinaryRule, Lowered, Rule, RuleOptions, RuleResult, RuleSet
+from udfx.semantics.facts import float_exact_operands, nullable_arguments
+from udfx.semantics.lists import (
+    SET_OPERATIONS,
+    SET_PREDICATES,
+    ListPrimitives,
+    SetPrimitives,
+    native_range,
+    native_set,
+    native_set_operation,
+    repeat_list,
+)
+from udfx.semantics.numbers.operations import (
+    COMPARISONS,
+    FLOAT_INT_MAX,
+    Binary,
+    OrderPrimitives,
+    float_compare,
+    float_extremum,
+    widened_exact,
+)
+from udfx.semantics.scalars import missing_expression
+from udfx.types import Kind
+
+__all__ = [
+    "BinaryRule",
+    "Lowered",
+    "Rule",
+    "RuleOptions",
+    "RuleResult",
+    "RuleSet",
+    "register_date_arithmetic",
+    "register_datetime_arithmetic",
+    "register_datetimes",
+    "register_float_variants",
+    "register_json",
+    "register_math",
+    "register_padding",
+    "register_regex",
+    "register_string_predicates",
+    "register_text_conversions",
+    "register_translation",
+    "register_trigonometry",
+]
+
+
+def register_missing[E](
+    rules: RuleSet[E], is_null: Callable[[E], Any], is_nan: Callable[[E], Any]
+) -> None:
+    def missing(value: E) -> Any:
+        return missing_expression(is_null, is_nan, value)
+
+    rules("pandas.isna", Kind.FLOAT)(missing)
+    rules("pandas.notna", Kind.FLOAT)(lambda value: ~missing(value))
+    for kind in (Kind.STR, Kind.INT, Kind.BOOL):
+        rules("pandas.isna", kind)(is_null)
+        rules("pandas.notna", kind)(lambda value: ~is_null(value))
+
+
+def register_widened_variants[E](
+    rules: RuleSet[E], name: str, rule: Binary, to_float: Callable[[E], E], order: OrderPrimitives
+) -> None:
+    def exact(value: Any) -> Any:
+        primitives = (
+            OrderPrimitives(
+                lambda left, right: False,
+                lambda value: value is None,
+                lambda value: value is not None and -FLOAT_INT_MAX <= value <= FLOAT_INT_MAX,
+            )
+            if isinstance(value, int) or value is None
+            else order
+        )
+        return widened_exact(primitives, value)
+
+    rules(name, Kind.INT, Kind.FLOAT, guards={0: exact})(
+        lambda left, right: rule(to_float(left), right)
+    )
+    rules(name, Kind.FLOAT, Kind.INT, guards={1: exact})(
+        lambda left, right: rule(left, to_float(right))
+    )
+
+
+def register_int_truediv[E](rules: RuleSet[E], divide: Binary, order: OrderPrimitives) -> None:
+    def rule(left: E, right: E, known: tuple[bool, ...] = (False, False)) -> Lowered[E]:
+        guards = [
+            order.within_exact_float_range(value)
+            for value, exact in zip((left, right), known, strict=True)
+            if not exact
+        ]
+        return Lowered(divide(left, right), reduce(operator.and_, guards) if guards else None)
+
+    rules("__truediv__", Kind.INT, Kind.INT, facts={"known": float_exact_operands})(rule)
+
+
+def register_comparison[E](
+    rules: RuleSet[E],
+    name: str,
+    compare: Binary,
+    to_float: Callable[[E], E],
+    order: OrderPrimitives,
+) -> None:
+    def ordered(left: E, right: E) -> E:
+        return float_compare(order, compare, left, right)
+
+    def integer(left: E, right: E, nullable: bool = True) -> E:
+        return (
+            operator.eq(left, right) if name == "__eq__" and not nullable else compare(left, right)
+        )
+
+    facts = {"nullable": nullable_arguments} if name == "__eq__" else {}
+    rules(name, Kind.INT, Kind.INT, facts=facts)(integer)
+    rules(name, Kind.FLOAT, Kind.FLOAT)(ordered)
+    register_widened_variants(rules, name, ordered, to_float, order)
+
+
+def register_equality[E](
+    rules: RuleSet[E], equal: Binary, to_float: Callable[[E], E], order: OrderPrimitives
+) -> None:
+    def unequal(left: Any, right: Any, nullable: bool = True) -> Any:
+        return ~equal(left, right) if nullable else left != right
+
+    def float_unequal(left: Any, right: Any) -> Any:
+        return ~float_compare(order, equal, left, right)
+
+    register_comparison(rules, "__eq__", equal, to_float, order)
+    rules("__ne__", Kind.INT, Kind.INT, facts={"nullable": nullable_arguments})(unequal)
+    rules("__ne__", Kind.FLOAT, Kind.FLOAT)(float_unequal)
+    register_widened_variants(rules, "__ne__", float_unequal, to_float, order)
+
+
+def register_extremum[E](
+    rules: RuleSet[E], name: str, pick: Binary, order: OrderPrimitives, when: Callable[[E, E, E], E]
+) -> None:
+    compare = COMPARISONS["__gt__" if name == "max" else "__lt__"]
+    rules(name, Kind.FLOAT, Kind.FLOAT)(
+        lambda left, right: float_extremum(order, compare, when, left, right)
+    )
+    for kind in (Kind.INT, Kind.STR):
+        rules(name, kind, kind)(pick)
+
+
+def register_lists[E](rules: RuleSet[E], primitives: ListPrimitives, sets: SetPrimitives) -> None:
+    for operation in (*SET_OPERATIONS, *SET_PREDICATES):
+        rules(f"set_{operation}", Kind.LIST, Kind.LIST)(
+            lambda left, right, operation=operation: native_set_operation(
+                sets, left, right, operation
+            )
+        )
+    for operation in SET_OPERATIONS:
+        rules(f"set_{operation}_size", Kind.LIST, Kind.LIST)(
+            lambda left, right, operation=operation: native_set_operation(
+                sets, left, right, operation, size=True
+            )
+        )
+    rules("__mul__", Kind.LIST, Kind.INT)(
+        lambda value, count: Lowered(*repeat_list(primitives, value, count))
+    )
+    rules("__mul__", Kind.INT, Kind.LIST)(
+        lambda count, value: Lowered(*repeat_list(primitives, value, count))
+    )
+    rules("range", Kind.INT)(
+        lambda stop: Lowered(
+            *native_range(primitives, primitives.literal(0), stop, primitives.literal(1))
+        )
+    )
+    rules("range", Kind.INT, Kind.INT, Kind.INT)(
+        lambda start, stop, step: Lowered(*native_range(primitives, start, stop, step))
+    )
+    for operation in ("set_size", "set_list", "sorted_set"):
+        for floating in (False, True):
+            rules(operation + ("_float" if floating else ""), Kind.LIST)(
+                lambda value, operation=operation, floating=floating: Lowered(
+                    *native_set(sets, value, operation, floating)
+                )
+            )

@@ -3,11 +3,11 @@ import re
 from udfx.frontend.core.sequences import unit_stride
 from udfx.ir import Call, Guarded, If, Lit, Node, lit
 from udfx.ops.registry import apply
-from udfx.semantics.casing import folded_case, lowercase_pattern
-from udfx.semantics.ranges import integer_bounds
-from udfx.semantics.regex_patterns import literal_suffix
-from udfx.semantics.regex_translation import union_patterns
-from udfx.semantics.text import CASE_METHODS
+from udfx.semantics.numbers.ranges import integer_bounds
+from udfx.semantics.regex.patterns import literal_suffix
+from udfx.semantics.regex.translation import union_patterns
+from udfx.semantics.text.casing import folded_case, lowercase_pattern
+from udfx.semantics.text.characters import CASE_METHODS
 from udfx.types import INT, INT64_MAX, STR, Kind
 
 

@@ -9,8 +9,8 @@ from bench.callables import batched, null_boundary
 from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
-from udfx.backends.duckdb import DuckDBBackend
-from udfx.backends.duckdb.dtypes import dtype
+from udfx.backends.engines.duckdb import DuckDBBackend
+from udfx.backends.engines.duckdb.dtypes import dtype
 from workloads.models import Workload
 
 

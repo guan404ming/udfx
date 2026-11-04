@@ -10,7 +10,7 @@ from hypothesis import given
 import udfx
 from udfx import compile
 from udfx.backends import installed, named
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.testing import batches, check_function
 from udfx.types import INT, STR
 
@@ -67,7 +67,7 @@ def test_missing_engine(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_installed_skips_broken_backends(monkeypatch: pytest.MonkeyPatch) -> None:
     def broken(name: str) -> ModuleType:
-        if name == "udfx.backends.spark":
+        if name == "udfx.backends.engines.spark":
             raise RuntimeError("no Java")
         return IMPORT(name)
 

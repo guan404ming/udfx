@@ -5,8 +5,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from udfx.semantics.numbers import FLOAT_INT_MAX
-from udfx.semantics.sequences import repeat_count
+from udfx.semantics.numbers.operations import FLOAT_INT_MAX
+from udfx.semantics.text.sequences import repeat_count
 
 SET_ORDER_MAX_SIZE = 1
 NATIVE_LIST_LIMIT = 10_000

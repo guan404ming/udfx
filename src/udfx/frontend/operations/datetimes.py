@@ -11,7 +11,7 @@ from udfx.frontend.core.values import Duration, Item, Opaque, Value
 from udfx.frontend.resolve.constants import constant, constant_value
 from udfx.ir import FALSE, TRUE, Node, lit
 from udfx.ops import Fault
-from udfx.semantics.datetimes import (
+from udfx.semantics.temporal.datetimes import (
     MAXIMUM_SHIFT,
     MICROSECONDS_PER_DAY,
     MICROSECONDS_PER_SECOND,

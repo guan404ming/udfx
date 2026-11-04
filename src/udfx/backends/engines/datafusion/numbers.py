@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import operator
+from functools import partial
+
+import pyarrow as pa
+from datafusion import Expr, functions, lit
+
+from udfx.backends.engines.datafusion.rules import RULES, null_safe_equal, when
+from udfx.backends.registration.shared import (
+    BinaryRule,
+    Lowered,
+    register_comparison,
+    register_equality,
+    register_float_variants,
+    register_int_truediv,
+)
+from udfx.frontend.core.sets import disjoint_ratio
+from udfx.semantics.facts import bounded_divisor, integer_fits
+from udfx.semantics.numbers.operations import (
+    ARITHMETIC,
+    COMPARISONS,
+    FLOAT_INT_MAX,
+    WRAPPING,
+    Binary,
+    FloatPrimitives,
+    IntegerPrimitives,
+    OrderPrimitives,
+    float_divmod,
+    int_divmod,
+)
+from udfx.types import INT64_MAX, INT64_MIN, Kind
+
+WIDE = pa.decimal128(19, 0)
+INFINITY = float("inf")
+
+
+def fits_int64(wide: Expr) -> Expr:
+    return wide.between(lit(INT64_MIN), lit(INT64_MAX))
+
+
+def within_exact_float_range(value: Expr) -> Expr:
+    return value.between(lit(-FLOAT_INT_MAX), lit(FLOAT_INT_MAX))
+
+
+def cast_float64(value: Expr) -> Expr:
+    return value.cast(pa.float64())
+
+
+def overflow_checked(operation: Binary) -> BinaryRule[Expr]:
+    def rule(left: Expr, right: Expr, *, bounded: bool = False) -> Lowered[Expr]:
+        if bounded:
+            return Lowered(operation(left, right))
+        wide = operation(left.cast(WIDE), right.cast(WIDE))
+        return Lowered(operation(left, right), overflow=~fits_int64(wide))
+
+    return rule
+
+
+def is_nan(value: Expr) -> Expr:
+    return functions.coalesce(functions.isnan(value), lit(False))
+
+
+def either_nan(left: Expr, right: Expr) -> Expr:
+    return is_nan(left) | is_nan(right)
+
+
+PRIMITIVES = FloatPrimitives(
+    when, functions.floor, functions.signum, lambda left, right: (left % right, None)
+)
+
+
+def float_floordiv(left: Expr, right: Expr) -> Lowered[Expr]:
+    quotient, _, exact = float_divmod(PRIMITIVES, left, right)
+    return Lowered(quotient, exact)
+
+
+def float_mod(left: Expr, right: Expr) -> Lowered[Expr]:
+    _, remainder, exact = float_divmod(PRIMITIVES, left, right)
+    return Lowered(remainder, exact)
+
+
+INTEGERS = IntegerPrimitives(lit, when, operator.truediv, operator.mod)
+
+
+def finite(value: Expr) -> Expr:
+    return ~functions.isnan(value) & (functions.abs(value) != lit(INFINITY))
+
+
+ORDER = OrderPrimitives(either_nan, Expr.is_null, within_exact_float_range)
+
+
+for _name, _operation in ARITHMETIC.items():
+    RULES(
+        _name, Kind.INT, Kind.INT, facts={"bounded": partial(integer_fits, size_limit=INT64_MAX)}
+    )(overflow_checked(_operation))
+    register_float_variants(RULES, _name, _operation, cast_float64)
+
+for _name, _compare in COMPARISONS.items():
+    register_comparison(RULES, _name, _compare, cast_float64, ORDER)
+
+register_float_variants(RULES, "__truediv__", operator.truediv, cast_float64)
+register_float_variants(RULES, "__floordiv__", float_floordiv, cast_float64)
+register_float_variants(RULES, "__mod__", float_mod, cast_float64)
+register_equality(RULES, null_safe_equal, cast_float64, ORDER)
+
+
+register_int_truediv(RULES, lambda left, right: cast_float64(left) / cast_float64(right), ORDER)
+
+
+@RULES("__floordiv__", Kind.INT, Kind.INT, facts={"bounded": bounded_divisor})
+def int_floordiv(left: Expr, right: Expr, bounded: bool = False) -> Lowered[Expr]:
+    quotient, _, exact = int_divmod(INTEGERS, left, right, bounded)
+    return Lowered(quotient, overflow=None if exact is None else ~exact)
+
+
+@RULES("__mod__", Kind.INT, Kind.INT)
+def int_mod(left: Expr, right: Expr) -> Expr:
+    return int_divmod(INTEGERS, left, right)[1]
+
+
+@RULES("__neg__", Kind.INT)
+def int_neg(value: Expr) -> Lowered[Expr]:
+    return Lowered(lit(0) - value, overflow=value == lit(INT64_MIN))
+
+
+@RULES("__neg__", Kind.FLOAT)
+def float_neg(value: Expr) -> Expr:
+    return value * lit(-1.0)
+
+
+@RULES("abs", Kind.INT)
+def int_abs(value: Expr) -> Lowered[Expr]:
+    return Lowered(
+        functions.abs(functions.greatest(value, lit(-INT64_MAX))), overflow=value == lit(INT64_MIN)
+    )
+
+
+@RULES("abs", Kind.FLOAT)
+def float_abs(value: Expr) -> Expr:
+    return functions.abs(value)
+
+
+@RULES("math.isnan", Kind.FLOAT)
+def float_isnan(value: Expr) -> Expr:
+    return functions.isnan(value)
+
+
+@RULES("math.isinf", Kind.FLOAT)
+def float_isinf(value: Expr) -> Expr:
+    return functions.abs(value) == lit(INFINITY)
+
+
+RULES("math.log10", Kind.FLOAT)(functions.log10)
+
+
+@RULES("math.log10", Kind.INT)
+def int_log10(value: Expr) -> Expr:
+    return functions.log10(cast_float64(value))
+
+
+for kind in (Kind.INT, Kind.FLOAT):
+    RULES.rewrite("__truediv__", kind, Kind.INT)(disjoint_ratio)
+
+
+for _name, _operation in WRAPPING.items():
+    RULES(_name, Kind.INT, Kind.INT, linear=True)(_operation)
+
+
+@RULES("numpy.negative", Kind.INT, linear=True)
+def wrapping_neg(value: Expr) -> Expr:
+    return lit(0) - value
+
+
+@RULES("numpy.absolute", Kind.INT)
+def wrapping_abs(value: Expr) -> Expr:
+    return when(
+        value == lit(INT64_MIN),
+        lit(INT64_MIN),
+        functions.abs(functions.greatest(value, lit(-INT64_MAX))),
+    )

@@ -6,8 +6,8 @@ from time import perf_counter
 from udfx.api import compile
 from udfx.backends.base import Backend
 from udfx.backends.diagnostics import LoweringDetails, capture_lowering
-from udfx.backends.hoisting import size
-from udfx.backends.program_lowering import EXPANDED_LIMIT
+from udfx.backends.lowering.programs import EXPANDED_LIMIT
+from udfx.backends.rewrites.hoisting import size
 from udfx.graphs import canonicalize
 from udfx.ir import Call, Col, Comprehension, Element, Guarded, If, ListValue, Lit, Node, children
 from udfx.types import Type

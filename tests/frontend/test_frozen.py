@@ -6,7 +6,7 @@ import pytest
 from pyspark import cloudpickle
 
 from udfx import compile
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.types import STR
 
 OFFSET = 1

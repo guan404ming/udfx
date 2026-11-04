@@ -1,0 +1,250 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+from udfx.backends.graph.sharing import call_rule
+from udfx.backends.graph.sharing import lowered as as_lowered
+from udfx.backends.lowering.context import assuming_exact, bindings_enabled
+from udfx.backends.lowering.guarantees import redundant_guard, required
+from udfx.backends.lowering.guarantees import selected as selected_guarantees
+from udfx.backends.lowering.reductions import lower_reduction
+from udfx.backends.lowering.selection import boolean_select, lower_cases
+from udfx.backends.registration.shared import Lowered, RuleResult
+from udfx.backends.rewrites.hoisting import exact_free, hoist, invariant, repeated_condition
+from udfx.backends.rewrites.indexing import (
+    Parts,
+    comprehension_parts,
+    comprehension_result,
+    indexed_source,
+    literal_range,
+    lower_indexed,
+)
+from udfx.backends.rules import Scope, fold_predicate, fold_value
+from udfx.errors import Unsupported
+from udfx.ir import FALSE, TRUE, Call, Comprehension, If, Lit, Node
+from udfx.ops import OpKey
+from udfx.semantics.numbers.assumptions import assuming
+from udfx.types import Kind
+
+if TYPE_CHECKING:
+    from udfx.backends.base import Backend
+
+
+def lower_if[E](
+    backend: Backend[E],
+    node: If,
+    elements: Scope[E],
+    lower_result: Callable[[Node, Scope[E]], Lowered[E]] | None = None,
+) -> Lowered[E]:
+    lower = lower_result or backend.lower
+    predicate = fold_predicate(node.condition, backend.rules.rewrite_call)
+    if predicate in (TRUE, FALSE):
+        return lower(node.then if predicate == TRUE else node.orelse, elements)
+    repeated = (
+        repeated_condition(node, elements, backend.hoisted)
+        if bindings_enabled(backend.binds)
+        else None
+    )
+    if repeated is not None and exact_free(backend, repeated, elements):
+        return hoist(backend, node, elements, repeated, lower_result)
+    selected = lower_cases(backend, node, elements)
+    if selected is not None:
+        return selected
+    condition = backend.lower(predicate, elements)
+    with assuming(predicate, True), assuming_exact(predicate):
+        then = lower(node.then, elements)
+    with assuming(predicate, False), assuming_exact(predicate):
+        orelse = lower(node.orelse, elements)
+    if condition.overflow is None and redundant_guard(
+        backend, predicate, then, node.orelse, elements
+    ):
+        condition = replace(condition, exact=None, guarantees=())
+    expr = boolean_select(backend, node, condition.expr, then, orelse)
+    exact = backend.exact(condition)
+    if then.exact is not None or orelse.exact is not None:
+        branch = backend.select_exact(condition.expr, then.exact, orelse.exact)
+        exact = backend.conjunction(exact, branch)
+    overflow = None
+    if then.overflow is not None or orelse.overflow is not None:
+        overflow = backend.select(
+            condition.expr,
+            then.overflow if then.overflow is not None else backend.literal(FALSE),
+            orelse.overflow if orelse.overflow is not None else backend.literal(FALSE),
+        )
+
+    def prepare(finish: Callable[[Lowered[E]], E]) -> E:
+        left, right = then.consume(finish), orelse.consume(finish)
+        if isinstance(node.then, If) and isinstance(node.orelse, Lit):
+            inverted = backend.select(condition.expr, backend.literal(FALSE), backend.literal(TRUE))
+            selected = backend.select(inverted, right, left)
+        else:
+            selected = backend.select(condition.expr, left, right)
+        guard = backend.exact(condition)
+        if guard is None:
+            return selected
+        pending = finish(Lowered(expr, backend.literal(FALSE)))
+        return backend.select(backend.predicate(guard), selected, pending)
+
+    return Lowered(
+        expr,
+        exact,
+        overflow,
+        prepare=prepare if then.prepare is not None or orelse.prepare is not None else None,
+        guarantees=required((condition,)) + selected_guarantees(node, then, orelse),
+    )
+
+
+def lower_call[E](backend: Backend[E], node: Call, elements: Scope[E]) -> Lowered[E]:
+    arguments = tuple(
+        fold_value(argument, backend.rules.rewrite_call) for argument in node.arguments
+    )
+    if any(
+        current is not previous for current, previous in zip(arguments, node.arguments, strict=True)
+    ):
+        node = Call(node.op, arguments)
+    reduced = lower_reduction(backend, node, elements)
+    if reduced is not None:
+        return reduced
+    if node.type.kind is Kind.BOOL:
+        folded = fold_predicate(node, backend.rules.rewrite_call)
+        if folded != node:
+            return backend.lower(folded, elements)
+    rewritten = backend.rules.rewrite_call(node)
+    if rewritten is not None and rewritten != node:
+        return backend.lower(rewritten, elements)
+    rule = backend.rules.get(node.op.key)
+    if rule is None:
+        raise Unsupported(f"{backend.name} has no rule for {node.op.key}")
+    options = backend.rules.options(node.op.key)
+    lowered_arguments = [
+        Lowered(cast("Any", argument.value))
+        if index in options.literals and isinstance(argument, Lit)
+        else backend.lower(argument, elements)
+        for index, argument in enumerate(node.arguments)
+    ]
+    expressions = {
+        name: None if (source := expression(node)) is None else backend.lower(source, elements)
+        for name, expression in options.expressions.items()
+    }
+    result: RuleResult[E] = call_rule(
+        backend,
+        node,
+        rule,
+        [argument.expr for argument in lowered_arguments],
+        {
+            **{name: fact(node) for name, fact in options.facts.items()},
+            **{name: None if value is None else value.expr for name, value in expressions.items()},
+        },
+    )
+    lowered = as_lowered(result)
+    guards = [
+        guard(argument.value if isinstance(argument, Lit) else lowered_arguments[index].expr)
+        for index, guard in options.guards.items()
+        for argument in (node.arguments[index],)
+    ]
+    exact = backend.conjunction(
+        *(backend.exact(argument) for argument in lowered_arguments),
+        *(backend.exact(value) for value in expressions.values() if value is not None),
+        *guards,
+    )
+    guarantees = required(
+        (*lowered_arguments, *(value for value in expressions.values() if value is not None)),
+        None if options.proves is None else options.proves(node),
+    )
+    return lowered.map(
+        lambda value: Lowered(
+            value.expr,
+            backend.conjunction(exact, value.exact),
+            value.overflow,
+            value.recover_overflow,
+            guarantees=value.guarantees + guarantees,
+        )
+    )
+
+
+def lower_comprehension[E](
+    backend: Backend[E], node: Comprehension, elements: Scope[E]
+) -> Lowered[E]:
+    hoisted = invariant(node, elements) if bindings_enabled(backend.binds) else None
+    if hoisted is not None and exact_free(backend, hoisted, elements):
+        with suppress(Unsupported):
+            return hoist(backend, node, elements, hoisted)
+    if backend.indexes and (rewritten := rewrite_range(backend, node, elements)) is not None:
+        return rewritten
+    source = backend.lower(node.source, elements)
+
+    guarded = False
+
+    def parts(element: E) -> Parts[E]:
+        nonlocal guarded
+        found = comprehension_parts(backend, node, {**elements, node.element: element})
+        guarded = guarded or found[2] is not None
+        return found
+
+    try:
+        if isinstance(node.source, Lit) and isinstance(node.source.value, tuple | list):
+            chunks: list[E] = []
+            exacts: list[E | Literal[False] | None] = []
+            faults: list[E | None] = []
+            for item in node.source.value:
+                element = backend.lower(Lit(item, node.element.type), elements)
+                condition, value, exact, fault = parts(element.expr)
+                chunks.append(
+                    backend.select(
+                        condition.expr,
+                        backend.list_value([value.expr], node.type),
+                        backend.literal(Lit((), node.type)),
+                    )
+                )
+                exacts.append(exact)
+                faults.append(fault if node.fault != FALSE else None)
+            result = backend.literal(Lit((), node.type))
+            concatenate = backend.rules.get(OpKey("__add__", (Kind.LIST, Kind.LIST)))
+            if concatenate is None:
+                raise Unsupported(f"{backend.name} has no list concatenation")
+            for chunk in chunks:
+                result = cast("E", concatenate(result, chunk))
+            return Lowered(
+                result,
+                backend.conjunction(backend.exact(source), *exacts),
+                backend.disjunction(*faults),
+            )
+        filtered = source.expr
+        if node.condition != TRUE:
+            filtered = backend.list_filter(filtered, lambda element: parts(element)[0].expr)
+        value = filtered
+        if node.value != node.element:
+            value = backend.list_transform(filtered, lambda element: parts(element)[1].expr)
+        return comprehension_result(
+            backend,
+            node,
+            source,
+            value,
+            guarded=guarded,
+            flags=lambda pick: backend.list_transform(
+                source.expr, lambda element: pick(parts(element))
+            ),
+        )
+    except Unsupported:
+        if node.requires_native:
+            raise
+    rewritten = rewrite_range(backend, node, elements)
+    if rewritten is not None:
+        return rewritten
+    return Lowered(backend.literal(Lit((), node.type)), False)
+
+
+def rewrite_range[E](
+    backend: Backend[E], node: Comprehension, elements: Scope[E]
+) -> Lowered[E] | None:
+    with suppress(Unsupported):
+        unrolled = literal_range(node)
+        if unrolled is not None:
+            return lower_comprehension(backend, unrolled, elements)
+        indexed = indexed_source(node)
+        if indexed is not None:
+            return lower_indexed(backend, node, elements, *indexed)
+    return None

@@ -26,8 +26,8 @@ from udfx.frontend.resolve.callables import op_name
 from udfx.frontend.resolve.functions import bind
 from udfx.ir import FALSE, TRUE, Comprehension, Element, Lit, Node, lit
 from udfx.ops import Fault, resolve
-from udfx.semantics.datetimes import MICROSECONDS_PER_SECOND
-from udfx.semantics.translation import translation_table
+from udfx.semantics.temporal.datetimes import MICROSECONDS_PER_SECOND
+from udfx.semantics.text.translation import translation_table
 from udfx.types import BOOL, INT, STR, Kind, list_of
 
 

@@ -3,10 +3,10 @@ from collections.abc import Callable
 
 import pytest
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.ir import Col, lit
 from udfx.ops import apply
-from udfx.semantics.comparisons import float_fact
+from udfx.semantics.numbers.comparisons import float_fact
 from udfx.testing import check_function
 from udfx.types import FLOAT
 

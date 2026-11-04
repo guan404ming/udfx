@@ -2,7 +2,7 @@ from udfx.frontend.core.sequences import unit_stride
 from udfx.graphs import deterministic
 from udfx.ir import FALSE, Call, Lit, Node, lit
 from udfx.ops.registry import apply
-from udfx.semantics.casing import initial_lowercase_values
+from udfx.semantics.text.casing import initial_lowercase_values
 from udfx.types import STR, Kind, list_of
 
 

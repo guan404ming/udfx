@@ -2,7 +2,7 @@ from collections.abc import Callable, Iterable
 
 import pytest
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.testing import check_function

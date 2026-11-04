@@ -5,8 +5,8 @@ import pyarrow
 
 from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
-from udfx.backends.polars import PolarsBackend
-from udfx.backends.polars.dtypes import dtype
+from udfx.backends.engines.polars import PolarsBackend
+from udfx.backends.engines.polars.dtypes import dtype
 from workloads.models import Workload
 
 

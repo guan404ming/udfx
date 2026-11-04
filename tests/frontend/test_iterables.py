@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import pytest
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.core.values import MAX_UNROLL

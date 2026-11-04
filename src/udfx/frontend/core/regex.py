@@ -1,6 +1,6 @@
 from udfx.ir import FALSE, Call, Comprehension, Lit, Node, lit
 from udfx.ops.registry import apply
-from udfx.semantics.regex_patterns import first_run
+from udfx.semantics.regex.patterns import first_run
 
 
 def first_match(node: Call) -> Node | None:

@@ -5,16 +5,16 @@ from datetime import date, datetime
 
 from udfx.ir import Node
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.semantics.dates import ATTRIBUTES as DATE_ATTRIBUTES
-from udfx.semantics.dates import date_difference, date_shift, date_shift_overflows
-from udfx.semantics.datetimes import (
+from udfx.semantics.numbers.operations import COMPARISONS
+from udfx.semantics.temporal.dates import ATTRIBUTES as DATE_ATTRIBUTES
+from udfx.semantics.temporal.dates import date_difference, date_shift, date_shift_overflows
+from udfx.semantics.temporal.datetimes import (
     ATTRIBUTES,
     datetime_difference,
     datetime_shift,
     datetime_shift_overflows,
     strptime_parses,
 )
-from udfx.semantics.numbers import COMPARISONS
 from udfx.types import BOOL, DATE, DATETIME, INT, STR
 
 

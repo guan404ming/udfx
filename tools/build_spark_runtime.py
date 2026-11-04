@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_STORED, ZipFile, ZipInfo
 
-DIRECTORY = Path(__file__).resolve().parents[1] / "src/udfx/backends/spark/runtime"
+DIRECTORY = Path(__file__).resolve().parents[1] / "src/udfx/backends/engines/spark/runtime"
 JAVA_RELEASE = 17
 
 

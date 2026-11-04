@@ -7,7 +7,7 @@ from bench.engines.polars import Engine
 from bench.runner import run
 from bench.timing import Settings
 from tests.benchmark.samples import load
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 
 

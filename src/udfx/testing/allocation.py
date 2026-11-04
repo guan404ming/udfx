@@ -2,7 +2,7 @@ from collections.abc import Iterator, Sequence
 
 from udfx.backends.base import Row
 from udfx.ops import Op
-from udfx.semantics.text import NATIVE_PADDING_LIMIT, PADDING_METHODS
+from udfx.semantics.text.characters import NATIVE_PADDING_LIMIT, PADDING_METHODS
 from udfx.types import Kind
 
 OUTPUT_BYTES = 16 * 1024 * 1024

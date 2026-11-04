@@ -1,7 +1,7 @@
 from udfx.ir import Call, Lit, Node, lit
 from udfx.ops.registry import apply
-from udfx.semantics.assumptions import NEGATED, REVERSED
-from udfx.semantics.numbers import FLOAT_INT_MAX, integer_comparison
+from udfx.semantics.numbers.assumptions import NEGATED, REVERSED
+from udfx.semantics.numbers.operations import FLOAT_INT_MAX, integer_comparison
 from udfx.types import INT64_MAX, INT64_MIN, Kind
 
 ARITHMETIC = frozenset(

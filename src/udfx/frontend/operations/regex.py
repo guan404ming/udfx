@@ -15,9 +15,9 @@ from udfx.frontend.resolve.constants import constant, constant_value
 from udfx.frontend.resolve.functions import bind
 from udfx.ir import FALSE, Comprehension, Element, Lit, Node, lit
 from udfx.ops import Fault, apply
-from udfx.semantics.regex_patterns import bounded_runs, group_prefix, position_safe
-from udfx.semantics.regex_replacement import replacement
-from udfx.semantics.regex_translation import FLAGS, translate
+from udfx.semantics.regex.patterns import bounded_runs, group_prefix, position_safe
+from udfx.semantics.regex.replacement import replacement
+from udfx.semantics.regex.translation import FLAGS, translate
 from udfx.types import INT, STR
 
 

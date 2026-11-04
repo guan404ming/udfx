@@ -3,10 +3,10 @@ import re
 import pytest
 
 from udfx.errors import Unsupported
-from udfx.semantics.regex import ascii_differs
-from udfx.semantics.regex_categories import category
-from udfx.semantics.regex_replacement import replacement
-from udfx.semantics.regex_translation import translate
+from udfx.semantics.regex.categories import category
+from udfx.semantics.regex.lowering import ascii_differs
+from udfx.semantics.regex.replacement import replacement
+from udfx.semantics.regex.translation import translate
 
 
 @pytest.mark.parametrize("dialect", ["rust", "re2", "java"])

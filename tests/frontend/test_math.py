@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.frontend import trace
 from udfx.ir import Call
 from udfx.testing import check_function

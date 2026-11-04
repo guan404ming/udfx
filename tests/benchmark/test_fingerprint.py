@@ -9,8 +9,8 @@ from conftest import backend_params
 from bench.fingerprint import expression_text, fingerprint
 from tests.benchmark.samples import postal_code
 from udfx.backends.base import Backend
-from udfx.backends.datafusion import DataFusionBackend
-from udfx.backends.duckdb import DuckDBBackend
+from udfx.backends.engines.datafusion import DataFusionBackend
+from udfx.backends.engines.duckdb import DuckDBBackend
 from udfx.frontend import trace
 from udfx.ir import Col
 from udfx.program import Program

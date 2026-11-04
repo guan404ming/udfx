@@ -3,7 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from udfx.backends.base import Backend
-from udfx.backends.program_lowering import lower_program
+from udfx.backends.lowering.programs import lower_program
 from udfx.program import Program
 from udfx.testing.outcome import same
 

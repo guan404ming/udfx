@@ -15,7 +15,7 @@ from udfx.frontend.resolve.imports import (
     capture_imports,
 )
 from udfx.semantics.functions import code_names
-from udfx.semantics.randomness import GAUSS, gauss
+from udfx.semantics.numbers.randomness import GAUSS, gauss
 
 
 class Snapshot:

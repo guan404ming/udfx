@@ -4,8 +4,8 @@ from udfx.frontend.core.comprehensions import cardinality, permutation_source
 from udfx.ir import FALSE, TRUE, Call, Comprehension, Element, Guarded, If, Lit, Node, lit
 from udfx.ops import Fault, apply
 from udfx.semantics.facts import json_argument_type, json_argument_validated
-from udfx.semantics.json import ESCAPES, non_ascii_word_pattern
-from udfx.semantics.text import whitespace_pattern
+from udfx.semantics.json.syntax import ESCAPES, non_ascii_word_pattern
+from udfx.semantics.text.characters import whitespace_pattern
 from udfx.types import JSON, STR, Kind, list_of
 
 

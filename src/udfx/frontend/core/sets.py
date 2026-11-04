@@ -3,8 +3,8 @@ import re
 from udfx.ir import Call, If, Lit, Node, lit
 from udfx.ops.registry import apply
 from udfx.semantics.lists import SET_OPERATIONS, SET_PREDICATES
-from udfx.semantics.ranges import proven
-from udfx.semantics.regex_patterns import literal_union
+from udfx.semantics.numbers.ranges import proven
+from udfx.semantics.regex.patterns import literal_union
 from udfx.types import BOOL
 
 SET_CALLS = frozenset(f"set_{operation}" for operation in SET_OPERATIONS)

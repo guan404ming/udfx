@@ -8,14 +8,14 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
-from udfx.backends.datafusion import DataFusionBackend
-from udfx.backends.duckdb import DuckDBBackend
-from udfx.backends.polars import PolarsBackend
-from udfx.backends.spark import SparkBackend
+from udfx.backends.engines.datafusion import DataFusionBackend
+from udfx.backends.engines.duckdb import DuckDBBackend
+from udfx.backends.engines.polars import PolarsBackend
+from udfx.backends.engines.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops import OpKey, apply
-from udfx.semantics.text import PREDICATES
+from udfx.semantics.text.characters import PREDICATES
 from udfx.testing import check_function
 from udfx.testing.text_traps import STRING_TRAPS
 from udfx.types import INT, INT64_MAX, INT64_MIN, JSON, STR, Kind, list_of

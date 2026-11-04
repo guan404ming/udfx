@@ -7,14 +7,14 @@ from conftest import backend_params
 
 from udfx import compile
 from udfx.backends.base import Backend
-from udfx.backends.datafusion import DataFusionBackend
-from udfx.backends.duckdb import DuckDBBackend
-from udfx.backends.duckdb.conversions import TEXT
-from udfx.backends.duckdb.rules import constant, function
+from udfx.backends.engines.datafusion import DataFusionBackend
+from udfx.backends.engines.duckdb import DuckDBBackend
+from udfx.backends.engines.duckdb.conversions import TEXT
+from udfx.backends.engines.duckdb.rules import constant, function
 from udfx.frontend import trace
 from udfx.ir import Col, lit
 from udfx.ops.registry import apply
-from udfx.semantics.literals import parse_int
+from udfx.semantics.text.literals import parse_int
 from udfx.testing import check_function
 from udfx.types import BOOL, FLOAT, INT, STR, Type, list_of
 

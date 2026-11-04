@@ -4,7 +4,7 @@ from collections.abc import Callable
 import pytest
 
 from tests.frontend.streams import VERSION_IDS, VERSIONS, Version, traced
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.ir import FALSE, Col, Lit, lit

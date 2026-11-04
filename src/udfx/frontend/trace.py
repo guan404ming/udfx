@@ -22,7 +22,7 @@ from udfx.frontend.resolve.functions import parameters
 from udfx.ir import TRUE, Col, If, Node
 from udfx.ops import apply
 from udfx.program import Program
-from udfx.semantics.json_values import RESULTS, result_name
+from udfx.semantics.json.values import RESULTS, result_name
 from udfx.types import Kind, Type, unify
 
 SERIES_KINDS = (Kind.STR, Kind.INT, Kind.FLOAT, Kind.BOOL)

@@ -8,15 +8,15 @@ from functools import reduce
 from typing import Any, ClassVar, Literal, cast
 
 from udfx.backends.faults import FallbackError, NativeFaults, decode_fallback_error
-from udfx.backends.lowering_context import (
+from udfx.backends.lowering.context import (
     distinct_guards,
     factored_guards,
     lower_shared,
     remember_guards,
 )
-from udfx.backends.nodes import lower_node
-from udfx.backends.program_lowering import build_smallest, lower_program
-from udfx.backends.registration import Lowered, RuleSet
+from udfx.backends.lowering.nodes import lower_node
+from udfx.backends.lowering.programs import build_smallest, lower_program
+from udfx.backends.registration.shared import Lowered, RuleSet
 from udfx.backends.rules import Scope
 from udfx.errors import Unsupported
 from udfx.ir import FALSE, TRUE, Col, Lit, Node

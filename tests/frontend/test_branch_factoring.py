@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pytest
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.frontend import trace
 from udfx.frontend.core.branches import factor_branches
 from udfx.graphs import unique_size

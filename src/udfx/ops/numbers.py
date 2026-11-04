@@ -6,7 +6,7 @@ from functools import partial
 
 from udfx.ir import Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.semantics.numbers import ARITHMETIC, COMPARISONS, WRAPPING
+from udfx.semantics.numbers.operations import ARITHMETIC, COMPARISONS, WRAPPING
 from udfx.semantics.scalars import numpy_scalar
 from udfx.types import BOOL, FLOAT, INT, Kind, Type
 

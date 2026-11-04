@@ -6,7 +6,7 @@ import pytest
 from conftest import frontend_backend_params
 
 from udfx.backends.base import Backend
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.testing import check_function

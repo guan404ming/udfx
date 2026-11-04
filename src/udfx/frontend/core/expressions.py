@@ -19,7 +19,7 @@ from udfx.frontend.core.values import (
 )
 from udfx.ir import FALSE, TRUE, Call, Lit, Node, lit
 from udfx.ops import Fault, Op, apply, matching
-from udfx.semantics.datetimes import format_parts, parse_parts
+from udfx.semantics.temporal.datetimes import format_parts, parse_parts
 from udfx.types import BOOL, Kind, type_of
 
 

@@ -8,8 +8,8 @@ from bench.callables import batched
 from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
-from udfx.backends.datafusion import DataFusionBackend
-from udfx.backends.datafusion.rules import column
+from udfx.backends.engines.datafusion import DataFusionBackend
+from udfx.backends.engines.datafusion.rules import column
 from workloads.models import Workload
 
 

@@ -8,7 +8,7 @@ from hypothesis import given, seed, settings
 from hypothesis import strategies as st
 
 from udfx.backends.base import Backend, Row
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.ops import Op, all_ops, resolve
 from udfx.semantics.scalars import numpy_scalar
 from udfx.testing import batches, values

@@ -13,7 +13,7 @@ Use your existing session in an application. This example creates a local sessio
 ```python
 import udfx
 from pyspark.sql import SparkSession
-from udfx.backends.spark import SparkBackend
+from udfx.backends.engines.spark import SparkBackend
 from udfx.types import STR
 
 

@@ -20,7 +20,7 @@ from udfx.frontend.resolve.constants import constant, constant_value
 from udfx.frontend.resolve.functions import bind
 from udfx.ir import FALSE, TRUE, Comprehension, Element, If, Lit, Node, lit
 from udfx.ops import Fault, apply
-from udfx.semantics.json import attribute_types
+from udfx.semantics.json.syntax import attribute_types
 from udfx.types import INT, STR, Kind
 
 

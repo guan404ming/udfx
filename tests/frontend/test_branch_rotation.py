@@ -2,12 +2,12 @@ from itertools import product
 
 import pytest
 
-from udfx.backends.lowering_context import evaluated_nodes
+from udfx.backends.lowering.context import evaluated_nodes
 from udfx.frontend.core.branches import factor_branches, shared_branch
 from udfx.graphs import unique_size
 from udfx.ir import FALSE, TRUE, Col, Guarded, If, children, lit
 from udfx.ops import apply
-from udfx.semantics.assumptions import CONDITIONS, assuming, known, predicates
+from udfx.semantics.numbers.assumptions import CONDITIONS, assuming, known, predicates
 from udfx.types import BOOL, STR
 
 

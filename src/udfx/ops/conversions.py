@@ -5,9 +5,9 @@ from collections.abc import Callable
 from udfx.ir import Node, lit
 from udfx.ops.numbers import not_finite
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.semantics.formatting import fixed_format
-from udfx.semantics.json import encode, has_type, simple_array, simple_string, tokens, valid
-from udfx.semantics.literals import saturated_integer
+from udfx.semantics.json.syntax import encode, has_type, simple_array, simple_string, tokens, valid
+from udfx.semantics.numbers.formatting import fixed_format
+from udfx.semantics.text.literals import saturated_integer
 from udfx.types import BOOL, FLOAT, INT, STR, list_of
 
 

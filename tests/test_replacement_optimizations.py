@@ -6,7 +6,7 @@ import pytest
 from conftest import backend_params
 
 from udfx.backends.base import Backend
-from udfx.backends.datafusion import DataFusionBackend
+from udfx.backends.engines.datafusion import DataFusionBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.frontend.core.translation import combined_replacements

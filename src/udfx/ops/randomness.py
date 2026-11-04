@@ -1,7 +1,7 @@
 from itertools import product
 
 from udfx.ops.registry import Op, register
-from udfx.semantics.randomness import gauss
+from udfx.semantics.numbers.randomness import gauss
 from udfx.types import BOOL, FLOAT, INT
 
 for count in range(3):

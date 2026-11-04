@@ -8,7 +8,7 @@ from functools import partial
 from udfx.ir import Lit, Node, lit
 from udfx.ops.numbers import not_finite, not_positive, zero
 from udfx.ops.registry import Fault, Op, apply, register
-from udfx.semantics.math import EXPONENTIAL_LIMIT
+from udfx.semantics.numbers.math import EXPONENTIAL_LIMIT
 from udfx.semantics.scalars import numpy_scalar
 from udfx.types import BOOL, FLOAT, INT, STR, Kind
 

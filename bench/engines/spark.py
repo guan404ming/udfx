@@ -7,8 +7,8 @@ from bench.callables import batched
 from bench.data import CATEGORY, POSITION, Input
 from bench.engines.base import Adapter
 from udfx.backends import arrow
-from udfx.backends.spark import SparkBackend
-from udfx.backends.spark.dtypes import dtype
+from udfx.backends.engines.spark import SparkBackend
+from udfx.backends.engines.spark.dtypes import dtype
 from workloads.models import Workload
 
 

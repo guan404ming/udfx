@@ -7,7 +7,7 @@ from conftest import backend_params
 from bench.inspection import fallback_in_plan
 from udfx import compile
 from udfx.backends.base import Backend
-from udfx.backends.spark import SparkBackend
+from udfx.backends.engines.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.ir import Guarded
 from udfx.testing import check_function

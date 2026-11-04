@@ -3,7 +3,7 @@ import json
 import pytest
 
 from bench.fingerprint import fingerprint, normalize_lambdas
-from udfx.backends.spark import SparkBackend
+from udfx.backends.engines.spark import SparkBackend
 from udfx.frontend import trace
 from udfx.types import STR
 

@@ -17,10 +17,12 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/ir.py` | IR nodes: `Col`, `Lit`, `Call`, `If`, `ListValue`, `Element`, `Comprehension` |
 | `src/udfx/program.py` | `Program`: traced function, schema, value, fault, row mode, and `run` for fallback rows |
 | `src/udfx/ops/` | Op specs: `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py` |
-| `src/udfx/semantics/` | Shared Python facts and policies for scalars, numbers, text, literals, lists, regex, datetimes, translation, and paths. Sequence, split, and padding policies live in `sequences.py`, `splitting.py`, and `padding.py` |
-| `src/udfx/semantics/ranges.py` | Infers integer bounds. `assumptions.py` holds branch conditions and comparison facts |
-| `src/udfx/semantics/arithmetic.py` | Proves bounds for integer arithmetic regions. `casing.py` derives exact Unicode case mappings from Python |
-| `src/udfx/semantics/calendar.py` | Checks Python calendar formats and normalizes Unicode digits before native date parsing |
+| `src/udfx/semantics/` | Shared Python facts and policies. `facts.py` holds rule facts. `scalars.py`, `lists.py`, `frequencies.py`, and `paths.py` stay at the top |
+| `src/udfx/semantics/text/` | Characters, predicates, bounds, case mappings, literals, translation, and the sequence, split, slice, and padding policies. `casing.py` derives exact Unicode case mappings from Python |
+| `src/udfx/semantics/regex/` | Regex lowering, translation, patterns, categories, boundaries, and replacement |
+| `src/udfx/semantics/json/` | JSON syntax, encoding, paths, projection, structure, validation, values, and limits |
+| `src/udfx/semantics/temporal/` | Dates and datetimes. `calendar.py` checks Python calendar formats and normalizes Unicode digits before native date parsing |
+| `src/udfx/semantics/numbers/` | Number operations, math, and formatting. `ranges.py` infers integer bounds, `assumptions.py` holds branch conditions and comparison facts, and `regions.py` proves bounds for integer arithmetic regions |
 | `src/udfx/frontend/` | `trace.py` turns a function and schema into a program. The frontend knows nothing about backends |
 | `src/udfx/frontend/decode/` | Decode version-specific bytecode and stack effects into blocks of semantic ops. `ops.py` defines the ops, `rules/` holds one module per opcode family plus `py313.py`, `py314.py`, and `py315.py` |
 | `src/udfx/frontend/flow/` | Execute decoded blocks, helper calls, loops, and exception paths |
@@ -28,18 +30,13 @@ udfx compiles Python UDFs into native dataframe expressions. Results must never 
 | `src/udfx/frontend/resolve/` | Resolve callables, constants, snapshots, and helper definitions and signatures |
 | `src/udfx/frontend/operations/` | Evaluate Python operators, calls, containers, attributes, and formatting with explicit operands |
 | `src/udfx/backends/base.py` | Backend interface, fallback composition, and `evaluate` helpers |
-| `src/udfx/backends/lowering.py` | Generic lowering for calls, branches, and comprehensions. Backends never reimplement it |
-| `src/udfx/backends/program_lowering.py` | Program limits, graph selection, and final fault handling |
-| `src/udfx/backends/graph.py` | Shared expression bindings. `graph_lists.py` combines comprehension values and guards. `siblings.py` fuses comprehensions over the same source and element. Graph records store a fused comprehension result once. Cheap shared integer and boolean calls are recomputed, not bound |
-| `src/udfx/backends/suffixes.py` | Rewrites `.endswith` chains into one `re.search` and a lookup. `factoring.py` moves branch conditions into shared call arguments |
+| `src/udfx/backends/lowering/` | `expressions.py` lowers calls, branches, and comprehensions; backends never reimplement it. `programs.py` holds program limits, graph selection, and final fault handling. `context.py` stores lowered expressions and binding settings for one scope; cache keys include branch conditions. `arithmetic.py` lowers proven integer regions with wide engine arithmetic, and `reductions.py` unrolls bounded integer sums |
+| `src/udfx/backends/graph/` | `bindings.py` shares expression bindings. `lists.py` combines comprehension values and guards. `siblings.py` fuses comprehensions over the same source and element. Graph records store a fused comprehension result once. Cheap shared integer and boolean calls are recomputed, not bound |
+| `src/udfx/backends/rewrites/` | `suffixes.py` rewrites `.endswith` chains into one `re.search` and a lookup. `factoring.py` moves branch conditions into shared call arguments. `hoisting.py` binds invariant list calls and repeated condition strings once. `indexing.py` unrolls a small literal `range` bound and maps `range(len(items))` to an indexed list transform |
 | `src/udfx/graphs.py` | IR canonicalization and substitution by node identity |
-| `src/udfx/backends/lowering_context.py` | Stores lowered expressions and binding settings for one lowering scope. Cache keys include branch conditions |
-| `src/udfx/backends/arithmetic.py` | Lowers proven integer regions with wide engine arithmetic. `reductions.py` unrolls bounded integer sums |
-| `src/udfx/backends/hoisting.py` | Binds invariant list calls and repeated condition strings once |
-| `src/udfx/backends/indexing.py` | Rewrites `range` comprehensions that a backend cannot lower: unrolls a small literal bound and maps `range(len(items))` to an indexed list transform |
 | `src/udfx/backends/rules.py` | Rule types, `RuleSet`, and boolean rules |
-| `src/udfx/backends/registration.py` | Shared registration helpers and exports. Text and datetime helpers live in `registration_text.py` and `registration_datetimes.py` |
-| `src/udfx/backends/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Backends may also have `slicing.py` and `splitting.py`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |
+| `src/udfx/backends/registration/` | `shared.py` holds shared registration helpers and exports. Text, datetime, math, and JSON helpers have their own modules |
+| `src/udfx/backends/engines/<name>/` | One package per engine: `backend.py`, `rules.py`, and the same family files as `ops/`. Backends may also have `slicing.py` and `splitting.py`. Types use `dtypes.py`, except DataFusion uses `arrow.dtype` |
 | `src/udfx/testing/` | Oracle, strategies, equivalence checks |
 | `src/udfx/testing/allocation.py` | Bounds output allocation per conformance query. It keeps every test row |
 | `tests/conformance/` | Checks every op against Python on every installed backend |
@@ -88,7 +85,7 @@ Op names:
 
 ## Backend rule contract
 
-A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
+A rule is `@RULES(name, *kinds)` in `src/udfx/backends/engines/<name>/<family>.py`.
 
 - Register engine-specific IR choices with `RULES.rewrite(name, *kinds)`. Generic lowering applies the rewrite before it lowers arguments. Rewrite predicates before boolean folding. Reuse shared IR identities. Keep the frontend independent of engine costs. A rewrite that drops an operand reads `parents` first, so it keeps an operand that another node also uses. A backend rewrite runs after the shared rewrite for the same op.
 - Declare `literals=(1, 2)` on a rule to receive Python values for those zero-based parameters when the IR argument is a `Lit`. Nonliteral arguments stay engine expressions. Slice bounds, steps, and translation tables use this same contract.
@@ -103,11 +100,11 @@ A rule is `@RULES(name, *kinds)` in `src/udfx/backends/<name>/<family>.py`.
 - For a Python policy, fill its `*Primitives` record from `semantics/` with engine calls and call the policy function.
 - In `DatetimePrimitives.parse`, accept only `TIMESTAMP_LITERAL`. Return null for invalid text.
 - Set `DatetimePrimitives.calendar` for an engine with native calendar parsing. Its `parse` accepts a year, year-month, or year-month-day. Return a naive midnight datetime. Return null for invalid dates.
-- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, `register_equality`, and `register_extremum` from `registration.py`. Give them the engine cast to float and the `OrderPrimitives` record.
+- Register mixed int and float rules with `register_float_variants`, `register_widened_variants`, `register_comparison`, `register_equality`, and `register_extremum` from `registration/shared.py`. Give them the engine cast to float and the `OrderPrimitives` record.
 
 ## Backend contract
 
-A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `BACKEND`, a `Backend` subclass. `udfx.backends.installed()` discovers it when its engine imports.
+A backend is a package `src/udfx/backends/engines/<name>/` whose `__init__.py` exports `BACKEND`, a `Backend` subclass. `udfx.backends.installed()` discovers it when its engine imports.
 
 - `backend.py`: the `Backend` subclass. `column`, `literal`, and `select` build expressions. `both` and `negate` default to `&` and `~` in `base.py`. Override them only when the engine needs other operators.
 - `select_many` builds a flat case expression for literal choices. Shared lowering checks each choice for guards first.
@@ -121,7 +118,7 @@ A backend is a package `src/udfx/backends/<name>/` whose `__init__.py` exports `
 - `bind_sequence` composes native record steps. Each step runs once during expression construction. Polars nests the steps. Spark uses aggregate finish lambdas over an empty array, so it never copies the record. DuckDB and DataFusion use successive list transforms.
 - `fallback(native, exact, program)` runs Python on rows where `exact` is false and keeps `native` elsewhere. It calls `evaluate_pending_rows(program, pending, gather)`, which gathers the pending rows and runs `program.run(rows)` through `run_fallback`. A pandas series program skips row gathering: the backend passes its pending columns to `program.batch` through `run_fallback`.
 - `evaluate(exprs, schema, rows, reduced)` runs expressions on in-memory rows for tests. With `reduced`, it runs aggregate expressions as one aggregate query. Use `transpose_rows` for the input columns and `output_names` for the output aliases from `base.py`. Keep frame construction and result extraction in the backend.
-- `rules.py`: `RULES = RuleSet()` from `registration.py` and engine helpers shared by rule files.
+- `rules.py`: `RULES = RuleSet()` from `registration/shared.py` and engine helpers shared by rule files.
 - `dtypes.py`: `Type` to engine type. DataFusion uses `arrow.dtype` instead.
 - `core.py`, `strings.py`, `numbers.py`, `conversions.py`, `math.py`, `lists.py`, `regex.py`, `datetimes.py`: rules, one file per op family. Backends may put slice and split rules in `slicing.py` and `splitting.py`.
 - Internal column names start with `RESERVED` (`"udfx "`) from `base.py`. `build` and `evaluate` reject user names that start with it after `fold_name`.

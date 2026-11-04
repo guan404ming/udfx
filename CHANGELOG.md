@@ -22,6 +22,10 @@ All notable changes to this project are documented in this file. The format foll
 - Engines keep their own sessions: udfx sets no Spark or DuckDB configuration.
 - Unicode case mapping differences are computed once per engine version and cached on disk.
 
+### Changed
+
+- Move engine packages to `udfx.backends.engines`, for example `udfx.backends.engines.duckdb.DuckDBBackend`.
+
 ### Fixed
 
 - Exclude versioned virtual environments from source distributions.

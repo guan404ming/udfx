@@ -4,12 +4,12 @@ from collections.abc import Callable
 
 import pytest
 
-from udfx.backends.polars import PolarsBackend
+from udfx.backends.engines.polars import PolarsBackend
 from udfx.errors import Unsupported
 from udfx.frontend import trace
 from udfx.ir import Call, Col, lit
 from udfx.ops import apply
-from udfx.semantics.text import PREDICATES
+from udfx.semantics.text.characters import PREDICATES
 from udfx.testing import check_function
 from udfx.types import BOOL, FLOAT, INT, STR, Type
 

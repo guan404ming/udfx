@@ -12,7 +12,7 @@ from udfx.frontend.operations.datetimes import datetime_binary
 from udfx.frontend.resolve.constants import constant_value
 from udfx.ir import FALSE, TRUE, Lit, Node, lit
 from udfx.ops import Fault
-from udfx.semantics.datetimes import EPOCH, MICROSECONDS_PER_SECOND, duration_microseconds
+from udfx.semantics.temporal.datetimes import EPOCH, MICROSECONDS_PER_SECOND, duration_microseconds
 from udfx.types import Kind
 
 DELEGATED = frozenset({"date", "weekday", "isoweekday", "toordinal", "strftime"})

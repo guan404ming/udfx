@@ -5,8 +5,8 @@ from functools import partial
 from udfx.ir import Node
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.ops.strings import out_of_range
-from udfx.semantics.json import encode, has_type
-from udfx.semantics.json_values import (
+from udfx.semantics.json.syntax import encode, has_type
+from udfx.semantics.json.values import (
     RESULTS,
     convert,
     document,

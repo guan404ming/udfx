@@ -70,7 +70,7 @@ the fixed public-workload coverage denominator.
 - Reuse helpers. Never copy logic between files.
 - Full words in names. The only abbreviations are `op`, `ir`, and `expr`.
 - Python facts live in `src/udfx/ops/` and `src/udfx/semantics/`. Engine calls live in
-  `src/udfx/backends/<name>/`.
+  `src/udfx/backends/engines/<name>/`.
 
 ## Add an op
 
@@ -79,14 +79,14 @@ the fixed public-workload coverage denominator.
    `when` predicate is true exactly when Python raises `kind`.
 2. A builtin or module function also needs an entry in `CALLABLES` in
    `src/udfx/frontend/calls.py`. Methods and operators resolve by name.
-3. Add `@RULES(name, *kinds)` in every backend's `src/udfx/backends/<name>/<family>.py`. A rule
+3. Add `@RULES(name, *kinds)` in every backend's `src/udfx/backends/engines/<name>/<family>.py`. A rule
    never raises. If it matches Python only on some rows, return `Lowered(expr, exact)`.
 
 `tests/conformance` covers the new op on every backend. Do not write per-op value tests.
 
 ## Add a backend
 
-Copy the layout of `src/udfx/backends/polars/`: `backend.py` (a `Backend` subclass exported as
+Copy the layout of `src/udfx/backends/engines/polars/`: `backend.py` (a `Backend` subclass exported as
 `BACKEND`), `rules.py`, `dtypes.py`, and one rule file per op family. `base.py` owns lowering and
 fallback composition; never reimplement them. Internal column names contain a space. The backend
 is ready when `uv run pytest` passes with its engine installed.

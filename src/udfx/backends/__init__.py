@@ -4,13 +4,14 @@ import importlib
 import pkgutil
 from typing import Any
 
+from udfx.backends import engines
 from udfx.backends.base import Backend
 
 __all__ = ["installed", "named"]
 
 
 def known() -> list[str]:
-    return sorted(module.name for module in pkgutil.iter_modules(__path__) if module.ispkg)
+    return sorted(module.name for module in pkgutil.iter_modules(engines.__path__) if module.ispkg)
 
 
 def named(name: str) -> Backend[Any]:
@@ -18,7 +19,7 @@ def named(name: str) -> Backend[Any]:
     if name not in names:
         raise ValueError(f"unknown backend {name!r}; known backends: {', '.join(names)}")
     try:
-        module = importlib.import_module(f"udfx.backends.{name}")
+        module = importlib.import_module(f"udfx.backends.engines.{name}")
     except ImportError as error:
         raise ImportError(
             f"backend {name!r} needs its engine: pip install 'udfx[{name}]'"

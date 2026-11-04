@@ -12,7 +12,7 @@ Build and execute on the same connection object.
 ```python
 import duckdb
 import udfx
-from udfx.backends.duckdb import DuckDBBackend
+from udfx.backends.engines.duckdb import DuckDBBackend
 from udfx.types import STR
 
 

@@ -5,7 +5,7 @@ import pytest
 from udfx.backends.rules import fold_predicate
 from udfx.ir import FALSE, TRUE, Col, If, lit
 from udfx.ops import apply
-from udfx.semantics.ranges import proven
+from udfx.semantics.numbers.ranges import proven
 from udfx.types import BOOL, FLOAT
 
 

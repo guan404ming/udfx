@@ -10,7 +10,7 @@ from udfx.frontend.flow.machine import Step, explore, follow
 from udfx.frontend.operations.iterables import source_of
 from udfx.ir import FALSE, Call, lit
 from udfx.ops import apply
-from udfx.semantics.assumptions import known, predicates
+from udfx.semantics.numbers.assumptions import known, predicates
 
 
 def repeats(frame: Frame, header: int, body: int) -> bool:

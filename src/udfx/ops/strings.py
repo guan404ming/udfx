@@ -6,8 +6,8 @@ from udfx.ir import Lit, Node, lit
 from udfx.ops.registry import Fault, Op, apply, register
 from udfx.semantics.facts import minimum_length
 from udfx.semantics.scalars import coalesce
-from udfx.semantics.text import CASE_METHODS, PADDING_METHODS, PREDICATES
-from udfx.semantics.translation import translate_text
+from udfx.semantics.text.characters import CASE_METHODS, PADDING_METHODS, PREDICATES
+from udfx.semantics.text.translation import translate_text
 from udfx.types import BOOL, INT, STR, list_of
 
 STRINGS = list_of(STR)

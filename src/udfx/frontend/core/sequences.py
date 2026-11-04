@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from udfx.frontend.core.regex import first_match
 from udfx.ir import Call, Guarded, If, Lit, Node, lit
 from udfx.ops.registry import apply
-from udfx.semantics.text import (
+from udfx.semantics.text.characters import (
     has_prefix_suffix_overlap,
     non_whitespace_pattern,
     whitespace_pattern,

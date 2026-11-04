@@ -12,7 +12,7 @@ from pyspark.sql import SparkSession
 
 from udfx.backends import installed
 from udfx.backends.base import Backend
-from udfx.backends.spark import SparkBackend
+from udfx.backends.engines.spark import SparkBackend
 
 TESTS = str(Path(__file__).resolve().parent)
 FULL = os.environ.get("UDFX_TESTS") == "full"
