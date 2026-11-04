@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 from types import BuiltinMethodType
 from typing import cast
 
@@ -32,7 +32,7 @@ def call_datetime(
         and function.__self__ is date
         and function.__name__ in {"fromisoformat", "fromordinal"}
     )
-    if function is not timedelta and not calendar:
+    if function is not timedelta and function is not timezone and not calendar:
         return None
     values = [constant_value(argument) for argument in arguments]
     named = {name: constant_value(value) for name, value in keywords.items()}

@@ -7,6 +7,7 @@ from udfx.frontend.core.json import dynamic
 from udfx.frontend.core.logic import fold, negate
 from udfx.frontend.core.tracing import EFFECTS
 from udfx.frontend.core.values import (
+    Aware,
     Item,
     Json,
     Match,
@@ -25,6 +26,8 @@ from udfx.types import BOOL, Kind, type_of
 def node_of(item: Item) -> Node:
     if isinstance(item, Json):
         return dynamic(item.node)
+    if isinstance(item, Aware):
+        raise Unsupported("timezone-aware datetime values; call .replace(tzinfo=None)")
     if not isinstance(item, Value):
         raise Unsupported(f"expected a value, got {describe(item)}")
     if item.container in (tuple, set, frozenset):
@@ -129,6 +132,8 @@ def truth(item: Item) -> tuple[Node, list[Fault]]:
     match item:
         case Tuple(items=items):
             return lit(bool(items)), []
+        case Aware():
+            return TRUE, []
         case Match():
             return negate(none_test(item)), []
         case Set(node=node):
@@ -155,7 +160,7 @@ def none_test(item: Item) -> Node:
             return lit(value is None)
         case Value(node=node) if node.type.nullable:
             return apply("is_none", node)
-        case Value():
+        case Value() | Aware():
             return FALSE
         case Opaque(value=value):
             return lit(value is None)

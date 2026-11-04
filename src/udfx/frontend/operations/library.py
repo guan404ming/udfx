@@ -14,6 +14,7 @@ from udfx.frontend.operations.paths import call_path
 from udfx.frontend.operations.regex import call_regex
 from udfx.frontend.operations.series import series_call
 from udfx.frontend.operations.series_methods import series_method
+from udfx.frontend.operations.zones import call_zone
 from udfx.frontend.resolve.constants import (
     constant,
     constant_value,
@@ -52,7 +53,8 @@ def ordinary_call(
     if vectorized is not None:
         return vectorized
     special = (
-        call_datetime(callee, arguments, keywords)
+        call_zone(callee, arguments, keywords)
+        or call_datetime(callee, arguments, keywords)
         or call_counter(callee, arguments, keywords)
         or call_json(callee, arguments, keywords)
         or call_path(callee, arguments, keywords)

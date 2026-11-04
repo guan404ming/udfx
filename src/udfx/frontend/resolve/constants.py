@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from functools import reduce
 from types import FunctionType, GenericAlias, UnionType
 from typing import cast
@@ -10,6 +10,7 @@ from udfx.errors import Unsupported
 from udfx.frontend.core.expressions import invoke, node_of, none_test
 from udfx.frontend.core.logic import choose, conjunction, negate
 from udfx.frontend.core.values import (
+    Aware,
     Function,
     Item,
     Iterator,
@@ -94,6 +95,8 @@ def constant(value: object) -> Item:
         return Function(value.__code__, (), value)
     if is_scalar(value):
         return Value(lit(value))
+    if type(value) is datetime and isinstance(value.tzinfo, timezone):
+        return Aware(lit(value.replace(tzinfo=None)), value.tzinfo)
     if isinstance(value, tuple | list | set | frozenset):
         if not value and isinstance(value, list | tuple):
             return Value(Lit((), list_of(STR)), type(value))

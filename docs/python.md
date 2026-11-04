@@ -8,6 +8,7 @@ udfx supports a subset of Python. Always check `translation.ok` before using its
 | --- | --- |
 | Numbers | Arithmetic, comparisons, conversions, and selected `math` and NumPy scalar functions |
 | Values | String operations, literal regex patterns, lists, string sets, dates, and naive datetimes |
+| Time zones | Fixed-offset `datetime.timezone` values from constants or `.replace(tzinfo=...)`, with comparisons, arithmetic, `astimezone`, `strftime`, and `timestamp` |
 | JSON encoding | `json.dumps` for strings, nulls, and nested string lists, with default formatting |
 | JSON decoding | `json.loads`, nested JSON indexing, dictionary `get`, type checks, and scalar conversions |
 | Control flow | Branches, exception handlers, helpers, and constant container lookups |
@@ -21,7 +22,7 @@ udfx supports a subset of Python. Always check `translation.ok` before using its
 These reject compilation. Read `translation.unsupported` for the reason.
 
 - Unbounded loops, mutation, and I/O
-- Timezone-aware datetimes
+- Named time zones such as `zoneinfo`, and timezone-aware columns or results
 - Unsupported calls
 
 Large helper pipelines compile as shared expression graphs:

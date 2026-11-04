@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timezone
 from types import ModuleType
 
 from udfx.errors import Unsupported
@@ -9,6 +9,7 @@ from udfx.frontend.core.evaluation import Evaluation, single
 from udfx.frontend.core.expressions import invoke
 from udfx.frontend.core.values import (
     NULL,
+    Aware,
     Counter,
     CounterKey,
     Duration,
@@ -33,6 +34,7 @@ from udfx.types import Kind
 CLASS_ATTRIBUTES = {
     (datetime, "strptime"): datetime.strptime,
     (datetime, "date"): datetime.date,
+    (timezone, "utc"): UTC,
     (date, "fromisoformat"): date.fromisoformat,
     (date, "fromordinal"): date.fromordinal,
     (date, "min"): date.min,
@@ -58,20 +60,28 @@ def load_attribute(
             return Evaluation((Method(name), owner))
         case Opaque(value=re.Pattern() as pattern):
             attribute = Opaque(getattr(pattern, name, None))
-        case Value(node=node) if (node.type.kind is Kind.DATETIME and name in ATTRIBUTES) or (
-            node.type.kind is Kind.DATE and name in DATE_ATTRIBUTES
-        ):
+        case Value(node=node) | Aware(node=node) if (
+            node.type.kind is Kind.DATETIME and name in ATTRIBUTES
+        ) or (node.type.kind is Kind.DATE and name in DATE_ATTRIBUTES):
             if method:
                 raise Unsupported(f"{node.type.kind} attribute {name} is not callable", where)
             result, faults = invoke(f".{name}", [node], AttributeError)
             return single(Value(result), faults)
-        case Duration(node=node) if name in {"days", "seconds"} and not method:
-            result, faults = duration_attribute(node, name)
-            return single(Value(result), faults)
-        case Value() | Match() | Duration() | Set() | Json() | Series() if method:
+        case Duration() | Aware() if not method:
+            return temporal_attribute(owner, name, where)
+        case Value() | Match() | Duration() | Aware() | Set() | Json() | Series() if method:
             return Evaluation((Method(name), owner))
         case Value():
             raise Unsupported(f"attribute access on a column value (attribute load {name})", where)
         case _:
             return series_attribute(owner, name, where)
     return Evaluation((attribute, NULL)) if method else single(attribute)
+
+
+def temporal_attribute(owner: Duration | Aware, name: str, where: str) -> Evaluation:
+    if isinstance(owner, Aware) and name == "tzinfo":
+        return single(Opaque(owner.zone))
+    if isinstance(owner, Duration) and name in {"days", "seconds"}:
+        result, faults = duration_attribute(owner.node, name)
+        return single(Value(result), faults)
+    return series_attribute(owner, name, where)

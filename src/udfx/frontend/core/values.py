@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import timezone
 from types import CodeType, ModuleType
 
 from udfx.errors import Unsupported
@@ -46,6 +47,12 @@ def wrapped(node: Node) -> Value | Json:
 @dataclass(frozen=True)
 class Duration:
     node: Node
+
+
+@dataclass(frozen=True)
+class Aware:
+    node: Node
+    zone: timezone
 
 
 @dataclass(frozen=True)
@@ -161,6 +168,7 @@ Item = (
     | JsonType
     | Match
     | Duration
+    | Aware
     | Row
     | Method
     | Opaque
@@ -217,6 +225,7 @@ def describe(item: Item) -> str:
             | Set()
             | Slice()
             | Duration()
+            | Aware()
             | Json()
             | JsonType()
             | Counter()

@@ -12,6 +12,7 @@ from udfx.frontend.operations.datetimes import datetime_binary, datetime_compari
 from udfx.frontend.operations.formatting import format_percent
 from udfx.frontend.operations.series import series_binary, series_comparison, series_negation
 from udfx.frontend.operations.sets import set_operator
+from udfx.frontend.operations.zones import aware_binary, aware_comparison
 from udfx.frontend.resolve.constants import (
     annotation,
     constant,
@@ -57,7 +58,11 @@ def binary_operation(symbol: str, left: Item, right: Item, where: str) -> Evalua
     vectorized = series_binary(base, left, right)
     if vectorized is not None:
         return vectorized
-    special = set_operator(base, left, right) or datetime_binary(base, left, right)
+    special = (
+        set_operator(base, left, right)
+        or aware_binary(base, left, right)
+        or datetime_binary(base, left, right)
+    )
     if special is not None:
         item, faults = special
         return single(item, faults)
@@ -101,7 +106,7 @@ def comparison(symbol: str, left: Item, right: Item, where: str) -> Evaluation:
     name = COMPARE_OPS.get(symbol)
     if name is None:
         raise Unsupported(f"comparison {symbol}", where)
-    temporal = datetime_comparison(symbol, left, right)
+    temporal = aware_comparison(name, left, right) or datetime_comparison(symbol, left, right)
     if temporal is not None:
         return single(Value(temporal[0]), temporal[1])
     if name in ("__eq__", "__ne__"):

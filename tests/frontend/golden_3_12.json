@@ -162,7 +162,7 @@
 "tests/frontend/test_datetimes.py:95:<lambda>:4fee4e85|value:datetime": "u:datetime attribute second is not callable at <lambda>+N",
 "tests/frontend/test_datetimes.py:96:<lambda>:4fee4e85|value:datetime": "u:datetime attribute microsecond is not callable at <lambda>+N",
 "tests/frontend/test_datetimes.py:97:<lambda>:fd7c3e0e|value:datetime": "u:attribute access on a column value (attribute load tzinfo) at <lambda>+N",
-"tests/frontend/test_datetimes.py:98:<lambda>:64e18588|value:datetime": "u:keyword arguments for a NoneType object: no signature",
+"tests/frontend/test_datetimes.py:98:<lambda>:64e18588|value:datetime": "u:datetime replace supports only tzinfo",
 "tests/frontend/test_datetimes.py:99:<lambda>:9b53bbf6|value:datetime,format:str": "u:datetime format must be a string literal",
 "tests/frontend/test_decode_operands.py:17:conditional_call:61ad23fa|text:str,flag:bool": "p:96797dbb9dd3efd2",
 "tests/frontend/test_exceptions.py:105:with_finally:e3b248c4|s:str?": "p:7973e43205e8404b",

@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file. The format foll
 
 - Report execution status, native guards, fallback reasons, fault handling, and compilation time in `udfx.explain`.
 - Verify built wheels with isolated backend extras before publication.
+- Support fixed-offset `datetime.timezone` values inside functions: comparisons, arithmetic, `astimezone`, `strftime` with `%z` and `%Z`, and `timestamp`.
 
 - Compile Python UDF bytecode into Polars, DuckDB, DataFusion, and Spark expressions.
 - Keep Python semantics: truthiness, exceptions as faults, int64 overflow, Unicode case drift, literal parsing.
