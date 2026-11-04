@@ -3,6 +3,7 @@
 ## Install
 
 Install `udfx[polars]`.
+It supports Polars 2.0 or later. CI tests 2.0.0.
 
 ## Run a query
 

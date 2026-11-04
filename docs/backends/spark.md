@@ -3,6 +3,7 @@
 ## Install
 
 Install `udfx[spark]` and Java 21.
+It supports Apache Spark 4.1 or later. CI tests 4.2.0.
 Install the same udfx version and the UDF's modules on every executor.
 
 ## Run a query

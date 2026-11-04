@@ -3,6 +3,7 @@
 ## Install
 
 Install `udfx[datafusion]`.
+It supports Apache DataFusion 55 or later. CI tests 55.0.0.
 
 ## Run a query
 

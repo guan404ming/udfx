@@ -3,6 +3,7 @@
 ## Install
 
 Install `udfx[duckdb]`.
+It supports DuckDB 1.4.1 or later. CI tests 1.5.6.
 
 ## Run a query
 
