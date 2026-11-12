@@ -7,6 +7,7 @@ import duckdb
 import pyarrow as pa
 from duckdb import Expression
 
+from udfx.backends.engines.duckdb.bindings import concatenate_strings
 from udfx.backends.engines.duckdb.conversions import TEXT as TRANSLATION
 from udfx.backends.engines.duckdb.rules import (
     ASCII,
@@ -163,9 +164,7 @@ def join_characters(separator: Expression, text: Expression) -> Expression:
 RULES("coalesce", Kind.STR, Kind.STR)(duckdb.CoalesceOperator)
 
 
-@RULES("__add__", Kind.STR, Kind.STR, linear=True)
-def str_add(left: Expression, right: Expression) -> Expression:
-    return function("concat", left, right)
+RULES("__add__", Kind.STR, Kind.STR, linear=True)(concatenate_strings)
 
 
 @RULES("__eq__", Kind.STR, Kind.STR, facts={"nullable": nullable_arguments})

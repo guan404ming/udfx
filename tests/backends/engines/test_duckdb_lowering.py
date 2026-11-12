@@ -105,3 +105,39 @@ def test_relational_expression_composes_in_queries(
     expr = backend.build(trace(lambda value: value.title(), {"value": STR}))
     source = "WITH source(value) AS (VALUES ('a'), ('b'), ('a')) "
     assert sorted(duckdb.sql(source + query.format(expr=expr)).fetchall()) == expected
+
+
+def summary(value: str) -> str:
+    cleaned = value.lower().strip()
+    words = len(cleaned.split())
+    return cleaned + " " + str(words) + (" long" if words > 3 else " short") + cleaned[:3]
+
+
+def scaled(value: float, text: str) -> str:
+    return summary(text) + str(value)
+
+
+def test_relational_sequence_projects_records() -> None:
+    backend = DuckDBBackend()
+    schema = {"value": STR}
+    expr = backend.build(trace(summary, schema))
+    assert "list_transform" not in str(expr)
+    assert str(expr).count("SELECT") > 1
+    rows = [(value,) for value in ("", " A b c D ", "Σ x", "one two three four")]
+    assert check_function(summary, schema, backend, rows) == []
+
+
+def test_relational_sequence_keeps_distinct_float_inputs() -> None:
+    backend = DuckDBBackend()
+    schema = {"value": FLOAT, "text": STR}
+    expr = backend.build(trace(scaled, schema))
+    assert "SELECT" not in str(expr)
+    rows = [(0.0, "a b"), (-0.0, "a b"), (float("nan"), "c"), (-float("nan"), "c")]
+    assert check_function(scaled, schema, backend, rows) == []
+
+
+def test_string_concatenation_is_one_call() -> None:
+    backend = DuckDBBackend()
+    schema = {"value": STR}
+    expr = backend.build(trace(lambda value: value + "-" + value.upper() + "!", schema))
+    assert str(expr).count("concat(") == 1

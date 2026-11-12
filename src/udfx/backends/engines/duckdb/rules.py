@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextvars import ContextVar
 from typing import Any, cast
 
 import duckdb
@@ -15,6 +16,7 @@ RULES: RuleSet[Expression] = RuleSet()
 ITEM = "udfx item"
 
 NAN = duckdb.SQLExpression("'nan'::DOUBLE")
+NESTED: ContextVar[bool] = ContextVar("udfx_duckdb_nested", default=False)
 
 
 def function(name: str, *arguments: Expression) -> Expression:
@@ -36,15 +38,21 @@ def constant(value: object) -> Expression:
     return duckdb.ConstantExpression(cast("Any", value))
 
 
+def lambda_expression(name: str, transform: Callable[[Expression], Expression]) -> Expression:
+    token = NESTED.set(True)
+    try:
+        return duckdb.LambdaExpression(name, transform(column(name)))
+    finally:
+        NESTED.reset(token)
+
+
 def bind(
     value: Expression, transform: Callable[[Expression], Expression], name: str = ITEM
 ) -> Expression:
     return function(
         "list_extract",
         function(
-            "list_transform",
-            function("list_value", value),
-            duckdb.LambdaExpression(name, transform(column(name))),
+            "list_transform", function("list_value", value), lambda_expression(name, transform)
         ),
         constant(1),
     )

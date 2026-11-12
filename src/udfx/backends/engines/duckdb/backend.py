@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import itertools
 import string
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
@@ -13,9 +12,24 @@ from duckdb.func import ARROW, SPECIAL
 
 from udfx.backends import arrow
 from udfx.backends.base import RESERVED, Backend, Row, output_names, transpose_rows
+from udfx.backends.engines.duckdb.bindings import (
+    bind_sequence,
+    bind_value,
+    element,
+    registry,
+    struct_field,
+    struct_record,
+)
 from udfx.backends.engines.duckdb.connections import CONNECTION, fallback_name
 from udfx.backends.engines.duckdb.dtypes import dtype
-from udfx.backends.engines.duckdb.rules import RULES, bind, column, constant, function, when
+from udfx.backends.engines.duckdb.rules import (
+    RULES,
+    column,
+    constant,
+    function,
+    lambda_expression,
+    when,
+)
 from udfx.backends.faults import NativeFaults, faults_for
 from udfx.backends.lowering.context import lowering_context
 from udfx.backends.lowering.programs import lower_program
@@ -29,7 +43,6 @@ EXACT = f"{RESERVED}exact"
 NATIVE = f"{RESERVED}native"
 ROW = f"{RESERVED}row"
 ASCII_LOWER = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
-ELEMENTS = itertools.count()
 DEFAULT_FAULTS = NativeFaults()
 
 
@@ -59,13 +72,12 @@ class DuckDBBackend(Backend[Expression]):
         return super().compose(value, program)
 
     def build_candidate(self, program: Program) -> Expression:
-        with lowering_context(binds=self.binds) as context:
+        wrapped = bool(program.schema) and all(
+            type.kind not in {Kind.FLOAT, Kind.LIST} for type in program.schema.values()
+        )
+        with lowering_context(binds=self.binds) as context, registry(wrapped):
             expr = super().build_candidate(program)
-        if (
-            context.has_bindings
-            and program.schema
-            and all(type.kind not in {Kind.FLOAT, Kind.LIST} for type in program.schema.values())
-        ):
+        if context.has_bindings and wrapped:
             arguments = ", ".join(
                 str(self.column(Col(name, type))) for name, type in program.schema.items()
             )
@@ -99,15 +111,12 @@ class DuckDBBackend(Backend[Expression]):
         return selected.otherwise(orelse)
 
     def bind(self, value: Expression, body: Callable[[Expression], Expression]) -> Expression:
-        return bind(value, body, f"{RESERVED}element {next(ELEMENTS)}")
+        return bind_value(value, body)
 
     def bind_sequence(
         self, value: Expression, steps: Sequence[Callable[[Expression], Expression]]
     ) -> Expression:
-        items = function("list_value", value)
-        for step in steps:
-            items = self.list_transform(items, step)
-        return function("list_extract", items, constant(1))
+        return bind_sequence(value, steps)
 
     def select_value(
         self,
@@ -121,12 +130,10 @@ class DuckDBBackend(Backend[Expression]):
         return duckdb.CoalesceOperator(selected, orelse)
 
     def record(self, values: Sequence[Expression]) -> Expression:
-        return function(
-            "struct_pack", *(value.alias(str(index)) for index, value in enumerate(values))
-        )
+        return struct_record(values)
 
     def field(self, value: Expression, index: int) -> Expression:
-        return function("struct_extract", value, constant(str(index)))
+        return struct_field(value, index)
 
     def list_value(self, items: Sequence[Expression], type: Type) -> Expression:
         return function("list_value", *items).cast(dtype(type))
@@ -134,10 +141,7 @@ class DuckDBBackend(Backend[Expression]):
     def list_transform(
         self, source: Expression, transform: Callable[[Expression], Expression]
     ) -> Expression:
-        name = f"{RESERVED}element {next(ELEMENTS)}"
-        return function(
-            "list_transform", source, duckdb.LambdaExpression(name, transform(column(name)))
-        )
+        return function("list_transform", source, lambda_expression(element(), transform))
 
     def list_distinct(
         self, source: Expression, transform: Callable[[Expression], Expression]
@@ -158,10 +162,7 @@ class DuckDBBackend(Backend[Expression]):
     def list_filter(
         self, source: Expression, predicate: Callable[[Expression], Expression]
     ) -> Expression:
-        name = f"{RESERVED}element {next(ELEMENTS)}"
-        return function(
-            "list_filter", source, duckdb.LambdaExpression(name, predicate(column(name)))
-        )
+        return function("list_filter", source, lambda_expression(element(), predicate))
 
     @property
     def native_faults(self) -> NativeFaults:
