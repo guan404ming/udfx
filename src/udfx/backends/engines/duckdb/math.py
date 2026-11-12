@@ -42,6 +42,7 @@ ROUND = RoundPrimitives(
     cast_float64,
     lambda value: function("round", value),
     when,
+    lambda value: value - function("trunc", value),
 )
 
 

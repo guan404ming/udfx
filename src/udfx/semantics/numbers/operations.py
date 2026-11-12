@@ -105,6 +105,7 @@ class RoundPrimitives:
     to_float: Callable[[Any], Any]
     round: Callable[[Any], Any]
     when: Callable[[Any, Any, Any], Any]
+    fraction: Callable[[Any], Any]
 
 
 def numpy_root(primitives: RoundPrimitives, root: Callable[[Any], Any], value: Any) -> Any:
@@ -122,7 +123,7 @@ def signed_round(primitives: RoundPrimitives, value: Any) -> Any:
 
 def round_half_even(primitives: RoundPrimitives, value: Any) -> Any:
     literal = primitives.literal
-    tie = primitives.abs(value) % literal(1.0) == literal(0.5)
+    tie = primitives.fraction(primitives.abs(value)) == literal(0.5)
     return primitives.when(
         tie,
         primitives.round(value / literal(2.0)) * literal(2.0),
@@ -148,7 +149,7 @@ def scaled_round(primitives: RoundPrimitives, value: Any, digits: Any) -> Scaled
         )
     )
     scaled = value * scale
-    tie = primitives.abs(scaled) % literal(1.0) == literal(0.5)
+    tie = primitives.fraction(primitives.abs(scaled)) == literal(0.5)
     bounded = primitives.abs(scaled) < literal(HALF_INTEGER_LIMIT)
     if constant:
         return ScaledRound(scale, scaled, bounded if digits == 0 else bounded & ~tie)

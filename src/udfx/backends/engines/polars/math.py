@@ -28,7 +28,14 @@ def identity(value: pl.Expr) -> pl.Expr:
 
 
 ROUND = RoundPrimitives(
-    pl.lit, pl.Expr.pow, pl.Expr.is_between, pl.Expr.abs, cast_float64, half_even, when
+    pl.lit,
+    pl.Expr.pow,
+    pl.Expr.is_between,
+    pl.Expr.abs,
+    cast_float64,
+    half_even,
+    when,
+    lambda value: value % pl.lit(1.0),
 )
 
 

@@ -34,6 +34,7 @@ ROUND = RoundPrimitives(
     cast_float64,
     functions.rint,
     when,
+    lambda value: value % functions.lit(1.0),
 )
 
 
