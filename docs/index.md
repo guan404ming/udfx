@@ -17,8 +17,8 @@ Each engine's Python UDF is the 1x baseline.
 
 Geometric mean speedups across 36 selected QURE functions.
 
-![QURE speedups, memory / query: Polars 4.49× / 3.34×. DuckDB 1.66× / 1.15×. Apache DataFusion 1.76× / 1.42×. Apache Spark 1.57× / 1.16×. Python UDF baseline is 1×.](assets/qure.svg#only-light)
-![QURE speedups, memory / query: Polars 4.49× / 3.34×. DuckDB 1.66× / 1.15×. Apache DataFusion 1.76× / 1.42×. Apache Spark 1.57× / 1.16×. Python UDF baseline is 1×.](assets/qure-dark.svg#only-dark)
+![QURE speedups, memory / query: Polars 3.76× / 2.84×. DuckDB 1.65× / 1.20×. Apache DataFusion 1.69× / 1.42×. Apache Spark 1.33× / 1.11×. Python UDF baseline is 1×.](assets/qure.svg#only-light)
+![QURE speedups, memory / query: Polars 3.76× / 2.84×. DuckDB 1.65× / 1.20×. Apache DataFusion 1.69× / 1.42×. Apache Spark 1.33× / 1.11×. Python UDF baseline is 1×.](assets/qure-dark.svg#only-dark)
 
 - **Memory:** prepared input.
 - **Query:** Apache Parquet, with filtering and grouping where defined.
