@@ -47,3 +47,35 @@ Functions with very large expressions, or with lambdas that need Python fallback
 Runtime UDFs execute in Apache Spark's JVM. They do not imply native execution in Apache DataFusion Comet.
 
 See [Apache DataFusion Comet](../comet.md) for native execution with Apache DataFusion Comet.
+
+## Python UDF transpiler
+
+Apache Spark builds that include `pyspark.sql.transpile` can replace a Python UDF with Apache Spark expressions.
+`transpiler.install()` registers udfx as a transpiler and puts it before the transpilers that the session already uses.
+It also sets `spark.sql.experimental.optimizer.transpilePyUDFs` to `true`.
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf
+from udfx.backends.engines.spark import transpiler
+
+session = SparkSession.builder.getOrCreate()
+transpiler.install(session)
+
+
+@udf("bigint", useArrow=False)
+def score(value: int) -> int:
+    return value * 3 + 7 if value > 0 else -value
+
+
+session.range(-2, 3).select(score("id")).show()
+```
+
+Apache Spark transpiles only regular Python UDFs in ANSI mode.
+Set `useArrow=False` on the UDF, or set `spark.sql.execution.pythonUDF.arrow.enabled` to `false`.
+
+udfx returns an expression only when the function runs natively and gives the Python result for every row.
+For other functions, Apache Spark tries the next transpiler or runs the UDF in Python.
+When Python raises an exception for a row, the query fails with an error that names the function.
+When an integer result does not fit in `bigint`, the query fails with `ARITHMETIC_OVERFLOW`.
+The Python UDF returns NULL for that row.

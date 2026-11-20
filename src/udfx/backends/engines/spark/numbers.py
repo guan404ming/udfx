@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from pyspark.sql import Column, functions
 
-from udfx.backends.engines.spark.rules import INTEGER_FITS, RULES, when
+from udfx.backends.engines.spark.rules import ANSI_ARITHMETIC, INTEGER_FITS, RULES, when
 from udfx.backends.registration.shared import (
     Lowered,
     register_comparison,
@@ -37,13 +37,25 @@ CHECKED: dict[str, Callable[[Column, Column], Column]] = {
     "__sub__": functions.try_subtract,
     "__mul__": functions.try_multiply,
 }
+
+
+def checked(name: str) -> Callable[[Column, Column], Column]:
+    def operation(left: Column, right: Column) -> Column:
+        if ANSI_ARITHMETIC.get():
+            return ARITHMETIC[name](left, right)
+        return CHECKED[name](left, right)
+
+    return operation
+
+
+INTEGER_OPERATIONS = {name: checked(name) for name in CHECKED}
 WIDE_INTEGERS = IntegerRegionPrimitives(
     maximum=10**38 - 1,
     size_limit=2**31 - 1,
     widen=lambda value: value.cast("decimal(38,0)"),
     narrow=lambda value: value.try_cast("long"),
     not_null=Column.isNotNull,
-    operations=CHECKED,
+    operations=INTEGER_OPERATIONS,
 )
 
 INFINITY = float("inf")
@@ -113,7 +125,7 @@ ORDER = OrderPrimitives(either_nan, Column.isNull, within_exact_float_range)
 
 for _name, _operation in ARITHMETIC.items():
     RULES(_name, Kind.INT, Kind.INT, facts={"bounded": INTEGER_FITS})(
-        overflow_checked(CHECKED[_name])
+        overflow_checked(INTEGER_OPERATIONS[_name])
     )
     register_float_variants(RULES, _name, _operation, cast_float64)
 
@@ -143,7 +155,7 @@ def int_floordiv(left: Column, right: Column, bounded: bool = False) -> Lowered[
 
 @RULES("__neg__", Kind.INT)
 def int_neg(value: Column) -> Lowered[Column]:
-    return Lowered(functions.try_subtract(functions.lit(0), value), overflow=value == INT64_MIN)
+    return overflow_checked(INTEGER_OPERATIONS["__sub__"])(functions.lit(0), value)
 
 
 @RULES("abs", Kind.INT)

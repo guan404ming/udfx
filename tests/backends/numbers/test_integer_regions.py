@@ -67,6 +67,27 @@ def test_integer_regions_keep_boundary_fallback(
 
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize(
+    ("function", "narrow"),
+    [
+        (lambda value: (value + 1) * 2, True),
+        (lambda value: value * 3 + 7 if value > 0 else -value, True),
+        (lambda value: value * 3 + 7, False),
+    ],
+)
+def test_integer_regions_stay_narrow_when_overflow_escapes(
+    backend: Backend[Any], function: Callable[[int], int], narrow: bool
+) -> None:
+    schema = {"value": INT}
+    translation = compile(function, schema, backend)
+    assert translation.ok, translation.unsupported
+    if isinstance(backend, SparkBackend):
+        assert ("decimal" in str(translation.expr).lower()) is not narrow
+    values = (INT64_MIN, -3074457345618258603, -1, 0, 1, 3074457345618258600, INT64_MAX)
+    assert check_function(function, schema, backend, [(value,) for value in values]) == []
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
     "function",
     [
         lambda value: (value // 100) * 60 + value % 100,

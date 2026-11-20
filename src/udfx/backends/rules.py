@@ -13,7 +13,13 @@ from udfx.frontend.core.comprehensions import cardinality
 from udfx.frontend.core.logic import conjunction, disjunction, fold, negate
 from udfx.frontend.core.membership import comparison_membership, initial_lowercase_membership
 from udfx.frontend.core.sequences import literal_string_item
-from udfx.frontend.core.text import combined_search, joined_split, lowercase_contains, split_count
+from udfx.frontend.core.text import (
+    case_affix,
+    combined_search,
+    joined_split,
+    lowercase_contains,
+    split_count,
+)
 from udfx.graphs import parent_names
 from udfx.ir import FALSE, TRUE, Call, Guarded, If, Node
 from udfx.ops.registry import OpKey
@@ -80,6 +86,12 @@ def unshared_lowercase_contains(node: Call) -> Node | None:
     if parents(node.arguments[0]) - {"__contains__"}:
         return None
     return lowercase_contains(node)
+
+
+def unshared_case_affix(node: Call) -> Node | None:
+    if parents(node.arguments[0]) - {".startswith", ".endswith"}:
+        return None
+    return case_affix(node)
 
 
 def unshared_split_count(node: Call) -> Node | None:
@@ -149,6 +161,8 @@ class RuleSet[E]:
             OpKey("and", (Kind.BOOL, Kind.BOOL)): comparison_membership,
             OpKey("__add__", (Kind.STR, Kind.STR)): joined_split,
             OpKey("__contains__", (Kind.STR, Kind.STR)): unshared_lowercase_contains,
+            OpKey(".startswith", (Kind.STR, Kind.STR)): unshared_case_affix,
+            OpKey(".endswith", (Kind.STR, Kind.STR)): unshared_case_affix,
             OpKey("__contains__", (Kind.LIST, Kind.STR)): initial_lowercase_membership,
             OpKey("len", (Kind.LIST,)): lambda node: (
                 unshared_split_count(node) or cardinality(node)

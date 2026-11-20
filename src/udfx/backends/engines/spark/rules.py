@@ -13,6 +13,7 @@ RULES: RuleSet[Column] = RuleSet()
 INT32_MAX = 2**31 - 1
 INTEGER_FITS = partial(integer_fits, size_limit=INT32_MAX)
 PYTHON_UDFS: ContextVar[dict[str, Column] | None] = ContextVar("udfx spark python", default=None)
+ANSI_ARITHMETIC: ContextVar[bool] = ContextVar("udfx spark ansi arithmetic", default=False)
 
 
 def when(condition: Column, then: Column, orelse: Column) -> Column:

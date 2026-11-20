@@ -29,7 +29,6 @@ from udfx.semantics.text.characters import (
     CasePrimitives,
     case_expression,
     case_guard,
-    whitespace,
 )
 from udfx.semantics.text.predicates import ascii_free
 from udfx.semantics.text.sequences import (
@@ -80,39 +79,6 @@ def characters(text: Column) -> Column:
 
 def array_join(words: Column, separator: Column) -> Column:
     return functions.call_function("array_join", words, separator)
-
-
-@RULES(".strip", Kind.STR)
-@RULES(".strip", Kind.STR, Kind.STR)
-def strip(text: Column, characters: Column | None = None) -> Column:
-    characters = (
-        functions.coalesce(characters, functions.lit(whitespace()))
-        if characters is not None
-        else functions.lit(whitespace())
-    )
-    return functions.btrim(text, characters)
-
-
-@RULES(".lstrip", Kind.STR)
-@RULES(".lstrip", Kind.STR, Kind.STR)
-def lstrip(text: Column, characters: Column | None = None) -> Column:
-    characters = (
-        functions.coalesce(characters, functions.lit(whitespace()))
-        if characters is not None
-        else functions.lit(whitespace())
-    )
-    return functions.ltrim(text, characters)
-
-
-@RULES(".rstrip", Kind.STR)
-@RULES(".rstrip", Kind.STR, Kind.STR)
-def rstrip(text: Column, characters: Column | None = None) -> Column:
-    characters = (
-        functions.coalesce(characters, functions.lit(whitespace()))
-        if characters is not None
-        else functions.lit(whitespace())
-    )
-    return functions.rtrim(text, characters)
 
 
 def find(text: Column, pattern: Column) -> Column:

@@ -194,6 +194,26 @@ def test_title_moves_before_whitespace_trim(
     assert check_function(function, schema, backend, [(value,) for value in values]) == []
 
 
+@pytest.mark.parametrize(
+    ("function", "trimmed"),
+    [
+        (lambda value: value.strip(), "trim(value)"),
+        (lambda value: value.lstrip(), "ltrim(value)"),
+        (lambda value: value.rstrip(), "rtrim(value)"),
+        (lambda value: value.strip().lower(), "trim(value)"),
+    ],
+)
+def test_spark_whitespace_strip_trims_spaces_first(
+    function: Callable[[str], str], trimmed: str
+) -> None:
+    schema = {"value": STR.or_none()}
+    backend = SparkBackend()
+    assert trimmed in str(backend.lower(trace(function, schema).value).expr)
+    pads = ("", "  ", " \t ", whitespace())
+    rows = [(f"{pad}{value}{pad}",) for value in STRING_TRAPS for pad in pads]
+    assert check_function(function, schema, backend, [*rows, (None,)]) == []
+
+
 @pytest.mark.parametrize("backend", backend_params())
 @pytest.mark.parametrize("needle", ["noise", "k", "s", "i", "xi", "ix", "[a]", "", "ABC"])
 def test_lowercase_search_preserves_unicode(backend: Backend[Any], needle: str) -> None:
@@ -210,6 +230,25 @@ def test_lowercase_search_preserves_unicode(backend: Backend[Any], needle: str) 
         expr = backend.build(trace(contains, {"text": STR}))
         assert not fallback_in_plan(expr, backend.name)
         assert "lower(" not in str(expr).lower()
+
+
+@pytest.mark.parametrize("backend", backend_params())
+@pytest.mark.parametrize(
+    "function",
+    [
+        lambda text: text.lower().startswith("ab"),
+        lambda text: text.upper().endswith("SS"),
+        lambda text: text.casefold().startswith("ss"),
+    ],
+)
+def test_case_affix_recases_only_the_affix(
+    backend: Backend[Any], function: Callable[[str], bool]
+) -> None:
+    schema = {"text": STR.or_none()}
+    values = (*STRING_TRAPS, None, "ABc", "ßa", "aß", "İb", "ﬃss", "ΣΑ")
+    assert check_function(function, schema, backend, [(value,) for value in values]) == []
+    if isinstance(backend, SparkBackend):
+        assert "substring(text" in str(backend.build(trace(function, {"text": STR})))
 
 
 @pytest.mark.parametrize("pattern", ["(a)", "(?i)a", "(?P<letter>a)", "["])

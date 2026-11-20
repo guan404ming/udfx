@@ -8,7 +8,8 @@ from pyspark.sql import Column, functions
 from udfx.backends.engines.spark.regex_categories import category
 from udfx.backends.engines.spark.rules import INT32_MAX, RULES, split_literal
 from udfx.backends.engines.spark.slicing import SEQUENCE, bounded_native_index
-from udfx.backends.engines.spark.strings import array_join, join, length, lstrip
+from udfx.backends.engines.spark.strings import array_join, join, length
+from udfx.backends.engines.spark.trimming import lstrip
 from udfx.frontend.core import splitting
 from udfx.frontend.core.json import nonempty_array
 from udfx.semantics.facts import (
@@ -59,9 +60,23 @@ def last_split(text: Column, separator: Column, *, non_overlapping: bool = False
     return functions.split_part(text, separator, functions.lit(-1))
 
 
-@RULES("split_item", Kind.STR, Kind.STR, Kind.INT)
-def split_item(text: Column, separator: Column, index: Column) -> Column:
-    return functions.split_part(text, separator, bounded_native_index(index))
+@RULES(
+    "split_item",
+    Kind.STR,
+    Kind.STR,
+    Kind.INT,
+    literals=(2,),
+    facts={"non_overlapping": split_non_overlapping},
+)
+def split_item(
+    text: Column, separator: Column, index: Column | int, *, non_overlapping: bool = False
+) -> Column:
+    if isinstance(index, Column):
+        return functions.split_part(text, separator, bounded_native_index(index))
+    if index == 0 or (index == -1 and non_overlapping):
+        count = functions.lit(1 if index == 0 else -1)
+        return functions.call_function("substring_index", text, separator, count)
+    return functions.split_part(text, separator, bounded_native_index(functions.lit(index)))
 
 
 RULES.rewrite("__getitem__", Kind.LIST, Kind.INT)(splitting.split_item)

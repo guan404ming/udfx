@@ -40,12 +40,9 @@ def case_mapping(method: str) -> tuple[str, str, tuple[tuple[str, str], ...]]:
     return "".join(singles), "".join(singles.values()), expansions
 
 
-def simple_expansion(
-    replacement: str, expansions: tuple[tuple[str, str], ...]
-) -> tuple[str, str] | None:
-    if len(expansions) == 1 and expansions[0][0] not in replacement:
-        return expansions[0]
-    return None
+def independent_expansions(replacement: str, expansions: tuple[tuple[str, str], ...]) -> bool:
+    produced = replacement + "".join(target for _, target in expansions)
+    return all(source not in produced for source, _ in expansions)
 
 
 @cache

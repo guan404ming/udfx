@@ -10,6 +10,10 @@ from udfx.semantics.text.casing import folded_case, lowercase_pattern
 from udfx.semantics.text.characters import CASE_METHODS
 from udfx.types import INT, INT64_MAX, STR, Kind
 
+CASED = frozenset({".lower", ".upper", ".title"})
+CHARACTER_CASES = frozenset({".lower", ".upper", ".casefold"})
+STRIPPED = frozenset({".strip", ".lstrip", ".rstrip"})
+
 
 def case_chain(node: Call) -> tuple[Node, list[str]]:
     source = node.arguments[0]
@@ -56,15 +60,18 @@ def simplify_text(node: Call) -> Node:
         guarded = guarded_case_chain(node)
         if guarded != node:
             return guarded
-    if node.op.name in {".lower", ".upper", ".title"}:
-        argument = node.arguments[0]
-        if (
-            isinstance(argument, Call)
-            and argument.op.name in {".strip", ".lstrip", ".rstrip"}
-            and len(argument.arguments) == 1
-        ):
-            return apply(argument.op.name, apply(node.op.name, argument.arguments[0]))
+    if node.op.name in CASED:
+        moved = swapped(node, STRIPPED)
+        if moved is not None:
+            return moved
     return searched_slice(node)
+
+
+def swapped(node: Call, names: frozenset[str]) -> Node | None:
+    argument = node.arguments[0]
+    if isinstance(argument, Call) and argument.op.name in names and len(argument.arguments) == 1:
+        return apply(argument.op.name, apply(node.op.name, argument.arguments[0]))
+    return None
 
 
 def searched_slice(node: Call) -> Node:
@@ -178,19 +185,33 @@ def removed_suffix(node: Call) -> Node | None:
     return None if separator is None else apply("split_item", text, lit(separator), lit(0))
 
 
-def lowercase_contains(node: Call) -> Node | None:
+def cased_literal(node: Call, methods: frozenset[str]) -> tuple[Call, str] | None:
     source, needle = node.arguments
-    if (
-        not isinstance(source, Call)
-        or source.op.name != ".lower"
-        or not isinstance(needle, Lit)
-        or not isinstance(needle.value, str)
-    ):
+    if isinstance(source, Call) and source.op.name in methods and isinstance(needle, Lit):
+        return (source, needle.value) if isinstance(needle.value, str) else None
+    return None
+
+
+def lowercase_contains(node: Call) -> Node | None:
+    found = cased_literal(node, frozenset({".lower"}))
+    pattern = None if found is None else lowercase_pattern(found[1])
+    if found is None or pattern is None:
         return None
-    pattern = lowercase_pattern(needle.value)
-    if pattern is None:
+    return apply("re.contains", found[0].arguments[0], lit(pattern), lit(0))
+
+
+def case_affix(node: Call) -> Node | None:
+    found = cased_literal(node, CHARACTER_CASES)
+    if found is None or not found[1].isascii():
         return None
-    return apply("re.contains", source.arguments[0], lit(pattern), lit(0))
+    source, affix = found
+    text = source.arguments[0]
+    if isinstance(text, Call) and text.op.name == "slice":
+        return None
+    size, missing = len(affix), lit(None, INT.or_none())
+    bounds = (missing, lit(size)) if node.op.name == ".startswith" else (lit(-size), missing)
+    cased = apply(source.op.name, apply("slice", text, *bounds))
+    return apply(node.op.name, cased, node.arguments[1])
 
 
 def split_count(node: Call) -> Node | None:

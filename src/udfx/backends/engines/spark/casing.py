@@ -7,7 +7,7 @@ from udfx.backends.engines.spark.rules import ASCII
 from udfx.semantics.text.casing import (
     case_mapping,
     final_sigma_pattern,
-    simple_expansion,
+    independent_expansions,
     title_words,
 )
 from udfx.semantics.text.characters import SIGMA, CasePrimitives, char_class
@@ -46,15 +46,13 @@ def mapped_case(
 ) -> Column:
     original, replacement, expansions = case_mapping(method)
     plain = functions.translate(value, original, replacement)
-    expansion = simple_expansion(replacement, expansions)
-    if expansion is not None:
-        source, target = expansion
-        plain = functions.replace(plain, functions.lit(source), functions.lit(target))
-    elif expansions:
+    if not independent_expansions(replacement, expansions):
         expanded = characters(value, lambda point: mapped_point(point, method))
-        plain = functions.when(
+        return functions.when(
             value.rlike(char_class(source for source, _ in expansions)), expanded
         ).otherwise(plain)
+    for source, target in expansions:
+        plain = functions.replace(plain, functions.lit(source), functions.lit(target))
     return plain
 
 

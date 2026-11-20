@@ -33,6 +33,7 @@ PREDICATES = (
 CASE_METHODS = ("lower", "upper", "title", "capitalize", "swapcase", "casefold")
 PADDING_METHODS = ("zfill", "center", "ljust", "rjust")
 NATIVE_PADDING_LIMIT = 2**20
+NONSPACE_ASCII = (0x21, 0x7F)
 
 
 @cache

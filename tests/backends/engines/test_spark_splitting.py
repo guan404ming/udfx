@@ -84,6 +84,22 @@ def test_spark_last_part_skips_array_materialization() -> None:
     assert check_function(tail, schema, backend, rows) == []
 
 
+@pytest.mark.parametrize(
+    ("separator", "index", "edge"),
+    [("@", 0, True), ("@", -1, True), ("aa", 0, True), ("aa", -1, False)],
+)
+def test_spark_split_edge_item_skips_split_part(separator: str, index: int, edge: bool) -> None:
+    def item(text: str) -> str:
+        return text.split(separator)[index]
+
+    backend = SparkBackend()
+    schema = {"text": STR}
+    expression = str(backend.lower(trace(item, schema).value).expr)
+    assert ("split_part" not in expression) is edge
+    rows = [(text,) for text in ("", "aaa", "@a@", "x@aaa@y", "😀@ß")]
+    assert check_function(item, schema, backend, rows) == []
+
+
 @pytest.mark.parametrize("separator", ["|", "😀", "]", "||"])
 @pytest.mark.parametrize("step", [-3, -2, 2, 3, 65])
 def test_split_stride_preserves_empty_tokens(separator: str, step: int) -> None:

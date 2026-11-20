@@ -37,3 +37,17 @@ def test_ascii_case_keeps_ascii_drift_guard(monkeypatch: pytest.MonkeyPatch) -> 
     expression = strings.recase(value, "lower")
     assert isinstance(expression, Column)
     assert backend.evaluate([expression], {"value": STR}, [("A",)])[0] == ["a"]
+
+
+@pytest.mark.parametrize("method", ["upper", "casefold"])
+def test_case_expansions_skip_lambdas(monkeypatch: pytest.MonkeyPatch, method: str) -> None:
+    backend = SparkBackend()
+    value = backend.column(Col("value", STR))
+    monkeypatch.setattr(strings, "case_guard", lambda *args: functions.lit(False))
+    rows = [("ß",), ("ŉ x",), ("ﬃ İ",), ("ΑΣ ",), ("aZ",)]
+    expression = strings.recase(value, method)
+    assert isinstance(expression, Column)
+    assert " -> " not in str(expression)
+    assert backend.evaluate([expression], {"value": STR}, rows)[0] == [
+        getattr(text, method)() for (text,) in rows
+    ]

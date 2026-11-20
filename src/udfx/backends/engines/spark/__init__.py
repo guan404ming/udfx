@@ -13,6 +13,7 @@ from udfx.backends.engines.spark import (  # noqa: F401
     slicing,
     splitting,
     strings,
+    trimming,
 )
 from udfx.backends.engines.spark.backend import SparkBackend
 
